@@ -5,3 +5,4 @@ backend/src/piper/** filter=lfs diff=lfs merge=lfs -text
 backend/src/services/voices/** filter=lfs diff=lfs merge=lfs -text
 
 backend/mkcert.exe/** filter=lfs diff=lfs merge=lfs -text
+backend/mkcert.exe filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,8 @@
+src/ffmpeg-8.1-essentials_build/
+node_modules
+dist
+.git
+.github
+*.log
+.env
+.env*

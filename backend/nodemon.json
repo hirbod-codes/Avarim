@@ -1,0 +1,7 @@
+{
+    "watch": [
+        "src"
+    ],
+    "ext": "ts",
+    "exec": "ts-node --files --project tsconfig.json --require ./src/observability/tracing.ts src/index.ts"
+}
