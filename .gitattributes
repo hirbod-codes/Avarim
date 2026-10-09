@@ -1,0 +1,7 @@
+backend/src/ffmpeg-7.0.2-amd64-static/** filter=lfs diff=lfs merge=lfs -text
+backend/src/ffmpeg-8.1-essentials_build/** filter=lfs diff=lfs merge=lfs -text
+
+backend/src/piper/** filter=lfs diff=lfs merge=lfs -text
+backend/src/services/voices/** filter=lfs diff=lfs merge=lfs -text
+
+backend/mkcert.exe/** filter=lfs diff=lfs merge=lfs -text
