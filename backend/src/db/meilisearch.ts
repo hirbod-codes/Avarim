@@ -202,7 +202,7 @@ export class MeiliCrud<T extends Record<string, any>> {
         return this.read('list', () => this.index.getDocuments(query));
     }
 
-    search(q: string, params?: SearchParams): Promise<SearchResponse<T>> {
+    search(q: string, params?: SearchParams): Promise<SearchResponse<T & { _id: any }>> {
         return this.read('search', () => this.index.search(q, params));
     }
 

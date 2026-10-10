@@ -12,6 +12,7 @@ export const postApproveSchema = audioPatchSchema.shape({
 }).required().strict().stripUnknown()
 
 export const listQuerySchema = object().required().shape({
+    search: string().max(5000).optional(),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
     pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
 })

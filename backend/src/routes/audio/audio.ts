@@ -19,7 +19,7 @@ import UsageRepository from '../../db/MongoDB/UsageRepository';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import { randomUUID } from 'crypto';
 import { meiliAlbum, meiliArtist, meiliAudio } from '../../db/meilisearch';
-import { Audio, audioPatchSchema, AudioUpdate } from '../../db/models/Audio';
+import { Audio, audioPatchSchema } from '../../db/models/Audio';
 import { Readable } from 'stream';
 import ArtistRepository from '../../db/MongoDB/ArtistRepository';
 import AlbumRepository from '../../db/MongoDB/AlbumRepository';
@@ -526,23 +526,37 @@ router.get('/', auth, async (req, res) => {
         log.info('Audio list request received');
 
         log.debug({ query: req.query });
-        const { page, pageSize } = await runWithLogger(log, () => validate(listQuerySchema, req.query));
+        const { page, pageSize, search } = await runWithLogger(log, () => validate(listQuerySchema, req.query));
         log.info('Input validated');
-        log.debug({ page, pageSize });
+        log.debug({ page, pageSize, search });
 
         const userId = req.user!.userId;
         log = log.child({ userId, page, pageSize });
 
         const audioRepository = new AudioRepository();
 
-        const skip = (page - 1) * pageSize;
-        const items = await runWithLogger(log, () => audioRepository.getPage(skip, pageSize))
+        let items: Audio[]
+        if (search) {
+            log.info('search in meilisearch')
+
+            const searchResult = await meiliAudio.search(search, { page, hitsPerPage: pageSize })
+            const { totalHits, totalPages, hits } = searchResult
+            log.debug({ totalHits, totalPages, hits })
+
+            const ids = hits.map(m => m._id)
+
+            log.info('fetch from audioRepository')
+            items = await runWithLogger(log, () => audioRepository.getMany(ids))
+        } else {
+            log.info('fetch from audioRepository')
+
+            const skip = (page - 1) * pageSize;
+            items = await runWithLogger(log, () => audioRepository.getPage(skip, pageSize))
+        }
         log.debug({ count: items.length });
-        log.info('Fetched audio page');
 
         log.info('Listed audios');
-
-        res.status(200).json({ status: 'success', data: { items, page, pageSize } });
+        res.status(200).json({ status: 'success', data: items });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
