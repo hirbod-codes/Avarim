@@ -1,16 +1,17 @@
-import { array } from 'yup';
 import { boolean, InferType, number, object, string } from 'yup';
 
 export const collectionName = 'album'
 
 export const schemaVersion = 'v1.0.0'
 
+export const getAvatarKey = (albumId: string) => `avarim/album/avatar/${albumId}`
+
 const shape = {
     schemaVersion: string().optional().min(6).max(20),
 
     name: string().required(),
 
-    avatarKey: string().optional().url(), // avarim/album/avatar/<albumId>
+    avatarKey: string().optional().url(),
 
     deletionQueued: boolean().optional(),
 

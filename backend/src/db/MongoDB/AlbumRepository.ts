@@ -47,7 +47,7 @@ class AlbumRepository implements IRepository, ISeedable, IDropable {
         await db.dropCollection(collectionName)
     }
 
-    async create(album: Album): Promise<InsertOneResult> {
+    async insert(album: Album): Promise<InsertOneResult> {
         return await AlbumRepository.collection!.insertOne({ ...album, updatedAt: Date.now(), createdAt: Date.now() }, { session: this.session })
     }
 
@@ -57,6 +57,14 @@ class AlbumRepository implements IRepository, ISeedable, IDropable {
 
     async getByName(name: string): Promise<WithId<Album>> {
         return (await AlbumRepository.collection!.find({ name }, { session: this.session }).toArray())[0]
+    }
+
+    async getMany(albumIds: string[]): Promise<WithId<Album>[]> {
+        return await AlbumRepository.collection!.find({ _id: { $in: albumIds.map(m => ObjectId.createFromHexString(m)) } }, { session: this.session }).toArray()
+    }
+
+    async getPage(skip: number, limit: number): Promise<Album[]> {
+        return await AlbumRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false }, { session: this.session }).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray()
     }
 
     async unsafeUpdate(albumId: string, updates: AlbumUpdate) {

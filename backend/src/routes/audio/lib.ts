@@ -87,7 +87,7 @@ export async function prepareAudioInDb(metadata: ExtractionResult) {
 
             const album = await runWithLogger(log, () => albumRepository.getByName(tags.album!));
             if (!album) {
-                const updateResult = await runWithLogger(log, () => albumRepository.create({ name: tags.album! }));
+                const updateResult = await runWithLogger(log, () => albumRepository.insert({ name: tags.album! }));
                 log.debug({ updateResult })
                 if (!updateResult.acknowledged) {
                     log.warn('Failed to create album')
@@ -111,7 +111,7 @@ export async function prepareAudioInDb(metadata: ExtractionResult) {
             const promises = []
             for (const artistName of artistNames)
                 promises.push((async () => {
-                    const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.create({ artistName, albumName: tags.album!, audioTitle: tags.audioTitle! }));
+                    const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistName, albumName: tags.album!, audioTitle: tags.audioTitle! }));
                     if (!createResult.acknowledged) {
                         log.warn('Failed to create artistAlbumAudio')
                         throw new Error('Failed to create artistAlbumAudio')

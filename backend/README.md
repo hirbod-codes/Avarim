@@ -102,3 +102,5 @@ run `npm run dev`
 Ctrl + C DOES NOT work to terminate the app, run `taskkill /IM node.exe /F` on windows.
 
 ## To do
+
+1. add routes to update album name and artist name

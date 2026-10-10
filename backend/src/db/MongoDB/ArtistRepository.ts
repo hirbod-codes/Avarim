@@ -63,6 +63,10 @@ class ArtistRepository implements IRepository, ISeedable, IDropable {
         return await ArtistRepository.collection!.find({ _id: { $in: artistIds.map(m => ObjectId.createFromHexString(m)) } }, { session: this.session }).toArray()
     }
 
+    async getPage(skip: number, limit: number): Promise<Artist[]> {
+        return await ArtistRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false }, { session: this.session }).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray()
+    }
+
     async unsafeUpdate(artistId: string, updates: ArtistUpdate) {
         return await ArtistRepository.collection!.updateOne({ _id: ObjectId.createFromHexString(artistId) }, { $set: { ...updates, updatedAt: Date.now() } }, { session: this.session })
     }

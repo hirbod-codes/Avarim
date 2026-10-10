@@ -1,4 +1,4 @@
-import express, { } from 'express';
+import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { audioUploadTmpDir } from '../../configs';
 import AudioRepository from '../../db/MongoDB/AudioRepository';
@@ -15,7 +15,6 @@ import { UploadTooLargeError } from '../../errors/UploadTooLargeError';
 import { mkdir, unlink, rm } from 'fs/promises';
 import { createWriteStream, createReadStream } from 'fs';
 import { ExtractedCover, extractMetadata, prepareAudioInDb, streamAudioFile } from './lib';
-import UsageRepository from '../../db/MongoDB/UsageRepository';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import { randomUUID } from 'crypto';
 import { meiliAlbum, meiliArtist, meiliAudio } from '../../db/meilisearch';
@@ -407,7 +406,7 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
             const albumExistenceCheck = await runWithLogger(log, () => albumRepository.getByName(newAudio.tags!.album!));
             log.debug({ albumExistenceCheck })
             if (!albumExistenceCheck) {
-                const createResult = await runWithLogger(log, () => albumRepository.create({ name: newAudio.tags!.album! }));
+                const createResult = await runWithLogger(log, () => albumRepository.insert({ name: newAudio.tags!.album! }));
                 log.debug({ createResult })
                 if (!createResult.acknowledged) {
                     log.warn('failed to create new album');
@@ -494,7 +493,7 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
             const promises = []
             for (const an of artistNames) {
                 promises.push((async () => {
-                    const createNewResult = await runWithLogger(log, () => artistAlbumAudioRepository.create({ artistName: an, albumName: newAudio.tags!.album!, audioTitle: newAudio.title }));
+                    const createNewResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistName: an, albumName: newAudio.tags!.album!, audioTitle: newAudio.title }));
                     log.debug({ createNewResult })
                     if (!createNewResult.acknowledged) {
                         log.warn('Failed to delete old ArtistAlbumAudio records')
@@ -531,7 +530,7 @@ router.get('/', auth, async (req, res) => {
         log.debug({ page, pageSize, search });
 
         const userId = req.user!.userId;
-        log = log.child({ userId, page, pageSize });
+        log = log.child({ userId });
 
         const audioRepository = new AudioRepository();
 
@@ -701,7 +700,7 @@ router.get('/coverArt/:audioId', auth, async (req, res) => {
             return res.status(404).json({ status: 'error', message: 'Audio not found' });
         }
 
-        const result = await getS3ObjectStream(audio.coverArtKey, { range: 'bytes=0-1023' });
+        const result = await getS3ObjectStream(audio.coverArtKey);
         log.debug({ result });
         if (!result) {
             log.warn('Cover art object has no body');
@@ -819,9 +818,6 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const audioRepository = new AudioRepository();
         audioRepository.setTransactionSession(session)
-
-        const usageRepository = new UsageRepository();
-        usageRepository.setTransactionSession(session)
 
         const audio = await runWithLogger(log, () => audioRepository.get(audioId));
         log.debug({ audio });

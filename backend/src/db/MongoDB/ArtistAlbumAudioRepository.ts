@@ -47,7 +47,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         await db.dropCollection(collectionName)
     }
 
-    async create(artistAlbumAudio: ArtistAlbumAudio): Promise<InsertOneResult> {
+    async insert(artistAlbumAudio: ArtistAlbumAudio): Promise<InsertOneResult> {
         return await ArtistAlbumAudioRepository.collection!.insertOne({ ...artistAlbumAudio, updatedAt: Date.now(), createdAt: Date.now() }, { session: this.session })
     }
 

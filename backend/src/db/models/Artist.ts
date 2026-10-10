@@ -4,12 +4,16 @@ export const collectionName = 'artist'
 
 export const schemaVersion = 'v1.0.0'
 
+export const getAvatarKey = (artistId: string) => `avarim/artist/avatar/${artistId}`
+export const getBannerKey = (artistId: string) => `avarim/artist/banner/${artistId}`
+
 const shape = {
     schemaVersion: string().optional().min(6).max(20),
 
     name: string().required(),
 
-    avatarKey: string().optional().url(), // avarim/artist/avatar/<artistId>
+    avatarKey: string().optional().url(),
+    bannerKey: string().optional().url(),
 
     deletionQueued: boolean().optional(),
 

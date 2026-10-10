@@ -15,7 +15,7 @@ export const listQuerySchema = object().required().shape({
     search: string().max(5000).optional(),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
     pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-})
+}).required().strict().stripUnknown()
 
 export const infoQuerySchema = object().required().shape({
     audioId: string().objectIdString().optional().label('Audio id').when('title', {
@@ -36,33 +36,33 @@ export const infoQuerySchema = object().required().shape({
             return schema.notRequired()
         },
     }),
-}, [['audioId', 'title']])
+}, [['audioId', 'title']]).required().strict().stripUnknown()
 
 export const signedTokenQuerySchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id')
-})
+}).required().strict().stripUnknown()
 
 export const ttsQuerySchema = object().required().shape({
     text: string().max(500).required().label('Text'),
     authToken: string().max(500).required().label('Text'),
     userTtsApiKey: string().max(500).optional().label('Token'),
-})
+}).required().strict().stripUnknown()
 
 export const fileParamsSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
     download: string().optional().label('Download'),
-})
+}).required().strict().stripUnknown()
 
 export const webFileParamsSchema = object().required().shape({
     token: string().required().label('Token'),
     audioId: string().objectIdString().required().label('Audio id'),
     download: string().optional().label('Download'),
-})
+}).required().strict().stripUnknown()
 
 export const coverArtParamsSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
-})
+}).required().strict().stripUnknown()
 
 export const deleteParamsSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
-})
+}).required().strict().stripUnknown()
