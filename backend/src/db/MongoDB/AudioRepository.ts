@@ -4,9 +4,8 @@ import { IRepository } from '../IRepository';
 import { ISeedable } from '../ISeedable';
 import { MongoDB } from '../MongoDB/mongodb';
 import { collectionName, Audio, AudioUpdate } from '../models/Audio';
-import { IAudioRepository } from '../repositories/IAudioRepository';
 
-class AudioRepository implements IAudioRepository, IRepository, ISeedable, IDropable {
+class AudioRepository implements IRepository, ISeedable, IDropable {
     IRepository: 'IRepository' = 'IRepository';
     ISeedable: 'ISeedable' = 'ISeedable';
     IDropable: 'IDropable' = 'IDropable';
@@ -57,6 +56,10 @@ class AudioRepository implements IAudioRepository, IRepository, ISeedable, IDrop
 
     async get(id: string): Promise<WithId<Audio>> {
         return (await AudioRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false, _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
+    }
+
+    async getUnsafe(id: string): Promise<WithId<Audio>> {
+        return (await AudioRepository.collection!.find({ _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
     }
 
     async getByTitle(title: string): Promise<WithId<Audio>> {

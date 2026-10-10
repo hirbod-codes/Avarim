@@ -1,32 +1,29 @@
 import express, { } from 'express';
-import { auth, authenticateToken, isAdminIfAuthenticated } from '../../middlewares/auth';
-import { audioUploadTmpDir, BUCKET_NAME, ttsApiKey } from '../../configs';
+import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
+import { audioUploadTmpDir } from '../../configs';
 import AudioRepository from '../../db/MongoDB/AudioRepository';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { generateStreamToken, verifyStreamToken } from '../../lib/signed_urls';
-import { UserRepository } from '../../db/MongoDB/UserRepository';
-import { httpsStreamRequest } from '../../utils';
-import { s3 } from '../..';
 import { pipeline } from 'stream/promises';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
-import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, ttsQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, postApproveSchema } from './schemas';
+import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, postApproveSchema } from './schemas';
 import { handleError, validate } from '../../lib';
-// import { authorizeAllowedContentTypes, authorizeStorageQuota, rollbackStorageQuota } from '../../middlewares/authorization';
-import { deleteFromS3, detectContentType, receiveUpload, uploadToS3 } from '../../lib/file_management';
-import { extractCoverArt, generateWebCompatibleCopy, isWebCompatible, probeFile } from '../../ffmpeg';
+import { deleteFromS3, detectContentType, getS3ObjectStream, receiveUpload, uploadToS3 } from '../../lib/file_management';
+import { generateWebCompatibleCopy, isWebCompatible } from '../../ffmpeg';
 import { InvalidMediaError } from '../../errors/InvalidMediaError';
 import { join, basename } from 'path';
 import { UploadTooLargeError } from '../../errors/UploadTooLargeError';
-import { mkdir, unlink, rm, stat } from 'fs/promises';
+import { mkdir, unlink, rm } from 'fs/promises';
 import { createWriteStream, createReadStream } from 'fs';
-import { ExtractedCover, extractMetadata, streamAudioFile } from './lib';
+import { ExtractedCover, extractMetadata, prepareAudioInDb, streamAudioFile } from './lib';
 import UsageRepository from '../../db/MongoDB/UsageRepository';
 import { MongoDB } from '../../db/MongoDB/mongodb';
-// import { subscriptionGate } from '../../middlewares/planGate';
 import { randomUUID } from 'crypto';
-import { meiliAudio } from '../../db/meilisearch';
-import { Audio, audioUpdateSchema } from '../../db/models/Audio';
+import { meiliAlbum, meiliArtist, meiliAudio } from '../../db/meilisearch';
+import { Audio, audioPatchSchema, AudioUpdate } from '../../db/models/Audio';
 import { Readable } from 'stream';
+import ArtistRepository from '../../db/MongoDB/ArtistRepository';
+import AlbumRepository from '../../db/MongoDB/AlbumRepository';
+import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 
 const router = express.Router();
 
@@ -76,47 +73,15 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
     try {
         log.info('audio upload request received');
 
-        log.debug({ query: req.query });
-        const { title } = await runWithLogger(log, () => validate(postSchema, req.query))
-        log.info('input validated');
-        log.debug({ title });
-
         const userId = req.user!.userId
         log = log.child({ userId });
 
         const audioRepository = new AudioRepository()
 
-        // ------------------------------------------------------------------------- checking whether title already exists
-        log.info('checking whether title already exists')
-
-        const sameTitleCheck = await runWithLogger(log, () => audioRepository.getByTitle(title));
-        log.debug({ sameTitleCheck });
-        log.info('Checked title uniqueness');
-        if (sameTitleCheck) {
-            log.info('Rejected audio upload: title already exists');
-            return res.status(400).json({ status: 'error', error_code: 'TITLE_NOT_UNIQUE' });
-        }
-
-        // ------------------------------------------------------------------------- inserting audio
-        log.info('inserting audio')
-
-        let temporaryAudio: Audio & { _id?: any } = { title: `${randomUUID()}${AUDIO_TITLE_SEPARATOR}${title}`, temporary: true }
-        const audioInsertResult = await runWithLogger(log, () => audioRepository.insert(temporaryAudio))
-        log.debug({ audioInsertResult });
-        if (!audioInsertResult.acknowledged || !audioInsertResult.insertedId) {
-            log.error({ audioInsertResult }, 'temporary audio info creation failed');
-            return res.status(500).json({ status: 'error', message: 'Audio info creation failed' })
-        }
-        temporaryAudio._id = audioInsertResult.insertedId;
-        log.info('Inserted temporary audio info record');
-
-        const audioId = audioInsertResult.insertedId.toString()
-        log.debug({ audioId })
-
         // ------------------------------------------------------------------------- make the temporary directory
         log.info('make the temporary directory')
 
-        const jobDir = join(audioUploadTmpDir, audioId)
+        const jobDir = join(audioUploadTmpDir, randomUUID() + Date.now().toString())
         await mkdir(jobDir, { recursive: true });
         log.debug({ jobDir });
         log.info('Created job scratch directory');
@@ -130,6 +95,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
         };
 
         let rollbackPromises: undefined | Promise<any> = undefined
+        let temporaryAudio: Audio & { _id?: any }
         try {
             // ------------------------------------------------------------------------- store upload stream on disk
             log.info('store upload stream on disk')
@@ -153,9 +119,59 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                 throw new InvalidMediaError('Unsupported or unrecognized audio format')
             }
 
+            // ------------------------------------------------------------------------- resolving cover art
+            log.info('resolving cover art')
+
             let cover: ExtractedCover | undefined = undefined
             if (metadata.covers.length > 0)
                 cover = metadata.covers[metadata.suggestedCoverIndex ?? 0]
+            log.debug({ cover })
+
+            // ------------------------------------------------------------------------- resolving title
+            log.info('resolving title')
+
+            const fileNameSegments = basename(inputPath).split('.')
+            if (fileNameSegments.length > 1) fileNameSegments.pop()
+            const title = metadata.tags.audioTitle ?? fileNameSegments[fileNameSegments.length - 1]
+            log.debug({ title })
+
+            // ------------------------------------------------------------------------- checking whether title already exists
+            log.info('checking whether title already exists')
+
+            const sameTitleCheck = await runWithLogger(log, () => audioRepository.getByTitle(title));
+            log.debug({ sameTitleCheck });
+            log.info('Checked title uniqueness');
+            if (sameTitleCheck) {
+                log.info('Rejected audio upload: title already exists');
+                return res.status(400).json({ status: 'error', error_code: 'TITLE_NOT_UNIQUE' });
+            }
+
+            // ------------------------------------------------------------------------- checking whether same sha256 already exists
+            log.info('checking whether same sha256 already exists')
+
+            const sameSha256Check = await runWithLogger(log, () => audioRepository.getByAudioSha256(metadata.technical.audioSha256));
+            log.debug({ sameSha256Check });
+            log.info('Checked title uniqueness');
+            if (sameSha256Check) {
+                log.info('Rejected audio upload: audio already exists');
+                return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_UNIQUE' });
+            }
+
+            // ------------------------------------------------------------------------- inserting audio
+            log.info('inserting audio')
+
+            temporaryAudio = { title: `${randomUUID()}${AUDIO_TITLE_SEPARATOR}${title}`, temporary: true, isPrepared: false }
+            const audioInsertResult = await runWithLogger(log, () => audioRepository.insert(temporaryAudio))
+            log.debug({ audioInsertResult });
+            if (!audioInsertResult.acknowledged || !audioInsertResult.insertedId) {
+                log.error({ audioInsertResult }, 'temporary audio info creation failed');
+                return res.status(500).json({ status: 'error', message: 'Audio info creation failed' })
+            }
+            temporaryAudio._id = audioInsertResult.insertedId;
+            log.info('Inserted temporary audio info record');
+
+            const audioId = audioInsertResult.insertedId.toString()
+            log.debug({ audioId })
 
             // ------------------------------------------------------------------------- set bucket keys
             log.info('set bucket keys')
@@ -198,17 +214,6 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             log.debug({ isUploadWebCompatible, meiliResult });
             log.info('Generated web compatible file and cover art');
 
-            // ------------------------------------------------------------------------- checking whether same sha256 already exists
-            log.info('checking whether same sha256 already exists')
-
-            const sameSha256Check = await runWithLogger(log, () => audioRepository.getByAudioSha256(metadata.technical.audioSha256));
-            log.debug({ sameSha256Check });
-            log.info('Checked title uniqueness');
-            if (sameSha256Check) {
-                log.info('Rejected audio upload: title already exists');
-                return res.status(400).json({ status: 'error', message: 'Audio title must be unique.' });
-            }
-
             try {
                 // ------------------------------------------------------------------------- upload files to the S3 compatible object storage
                 log.info('upload files to the S3 compatible object storage')
@@ -228,13 +233,13 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                     audioId,
                     {
                         contentType: contentType,
-                        temporary: true, // will be set to false once it's confirm by admin user
+                        title,
+                        temporary: false,
                         bucketKey: audioFileBucketKey,
                         webBucketKey: webCompatibleAudioFileBucketKey,
                         coverArtKey: cover ? coverArtBucketKey : undefined,
-                        audioTags: metadata.tags,
-                        audioTechnical: metadata.technical,
-
+                        tags: metadata.tags,
+                        technical: metadata.technical,
                     }
                 ));
                 log.debug({ updateResult });
@@ -255,6 +260,8 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
                 throw error
             }
+
+            await runWithLogger(log, () => prepareAudioInDb(metadata))
         } catch (err) {
             if (err instanceof UploadTooLargeError) {
                 if (!res.headersSent) res.status(402).json({ status: 'error', error: err.message });
@@ -281,21 +288,36 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
     }
 })
 
-router.post('/approve', auth, isAdminIfAuthenticated, async (req, res) => {
+router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'POST /api/audio/approve' });
 
+    let db
     try {
         log.info('audio approve request received');
 
-        log.debug({ query: req.query });
-        const updates = await runWithLogger(log, () => validate(postApproveSchema, req.query))
+        log.debug({ body: req.body });
+        const updates = await runWithLogger(log, () => validate(postApproveSchema, req.body))
         log.debug({ updates });
         log.info('input validated');
 
         const userId = req.user!.userId
-        log = log.child({ userId });
+        log.debug({ userId });
+
+        db = MongoDB.getDbInstance()
+        const session = await db.startTransaction()
 
         const audioRepository = new AudioRepository()
+        audioRepository.setTransactionSession(session)
+
+        const artistRepository = new ArtistRepository()
+        artistRepository.setTransactionSession(session)
+
+        const albumRepository = new AlbumRepository()
+        albumRepository.setTransactionSession(session)
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
+        artistAlbumAudioRepository.setTransactionSession(session)
+
 
         if (updates.title) {
             // ------------------------------------------------------------------------- check if same title already exists
@@ -304,7 +326,8 @@ router.post('/approve', auth, isAdminIfAuthenticated, async (req, res) => {
             const audio = await runWithLogger(log, () => audioRepository.getByTitle(updates.title!));
             log.debug({ audio });
             if (audio) {
-                log.info('audio not found');
+                log.info('title is not unique');
+                await db.abortTransaction()
                 return res.status(400).json({ status: 'error', error_code: 'TITLE_NOT_UNIQUE' });
             }
         }
@@ -314,37 +337,152 @@ router.post('/approve', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const audio = await runWithLogger(log, () => audioRepository.get(updates.audioId));
         log.debug({ audio });
-        if (!audio || audio.deletionQueued === true) {
+        if (!audio) {
             log.info('audio not found');
+            await db.abortTransaction()
             return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_FOUND' });
         }
 
-        if (!audio.temporary) {
-            log.info('audio already approved');
-            return res.status(400).json({ status: 'error', error_code: 'AUDIO_ALREADY_APPROVED' });
-        }
+        // ------------------------------------------------------------------------- update audio
+        log.info('update audio')
 
-        const title = audio.title.split(AUDIO_TITLE_SEPARATOR)[1]
-        if (!title) {
-            log.warn('caught corrupted title');
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
-        }
-
-        // ------------------------------------------------------------------------- approve requested audio
-        // ------------------------------------------------------------------------- create db album(s)
-        // ------------------------------------------------------------------------- create db artist(s), if no artists found(soundtrack) use composer
-        // ------------------------------------------------------------------------- create meilisearch album(s)
-        // ------------------------------------------------------------------------- create meilisearch artist(s)
-
-        const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(updates.audioId, { ...audioUpdateSchema.cast(updates), temporary: false, title: updates.title ?? title }));
+        const newAudio: Audio = { ...audio, ...audioPatchSchema.cast(updates), tags: { ...audio.tags, ...updates.tags } }
+        const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(updates.audioId, newAudio));
         log.debug({ updateResult })
         if (!updateResult.acknowledged) {
             log.warn('failed to update audio record in db');
+            await db.abortTransaction()
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
         }
 
+        if (updates.title) {
+            // ------------------------------------------------------------------------- update audio title in ArtistAlbumAudio repository
+            log.info('update audio title in ArtistAlbumAudio repository')
+
+            const updateTitlesResult = await runWithLogger(log, () => artistAlbumAudioRepository.updateManyByAudioTitle(audio.title!, { audioTitle: updates.title! }));
+            log.debug({ updateTitlesResult })
+            if (!updateTitlesResult.acknowledged) {
+                log.warn('failed to update audio record in db');
+                await db.abortTransaction()
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+            }
+        }
+
+        if (updates.tags?.album) {
+            // ------------------------------------------------------------------------- create the album if doesn't exist
+            log.info("create the album if doesn't exist")
+
+            const albumExistenceCheck = await runWithLogger(log, () => albumRepository.getByName(newAudio.tags!.album!));
+            log.debug({ albumExistenceCheck })
+            if (!albumExistenceCheck) {
+                const createResult = await runWithLogger(log, () => albumRepository.create({ name: newAudio.tags!.album! }));
+                log.debug({ createResult })
+                if (!createResult.acknowledged) {
+                    log.warn('failed to create new album');
+                    await db.abortTransaction()
+                    return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+                }
+
+                // ------------------------------------------------------------------------- create meilisearch album
+                log.info('create meilisearch album')
+
+                const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ name: newAudio.tags!.album! }))
+                log.debug({ meiliResult })
+                if (meiliResult.status !== 'succeeded') {
+                    log.warn('Failed to create album in meilisearch')
+                    await db.abortTransaction()
+                    return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+                }
+            }
+        }
+
+        if (updates.tags?.artists) {
+            // ------------------------------------------------------------------------- create artists if don't exist
+            log.info("create artists if don't exist")
+
+            const addedArtists = newAudio.tags?.artists?.filter(f => !(audio.tags?.artists ?? []).includes(f)) ?? []
+            const promises = []
+            for (const an of addedArtists) {
+                promises.push((async () => {
+                    const artistExistenceCheck = await runWithLogger(log, () => artistRepository.getByName(an));
+                    log.debug({ artistExistenceCheck })
+                    if (!artistExistenceCheck) {
+                        const createResult = await runWithLogger(log, () => artistRepository.insert({ name: an }));
+                        log.debug({ createResult })
+                        if (!createResult.acknowledged) {
+                            log.warn('failed to create new artist');
+                            await db.abortTransaction()
+                            res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+                            throw new Error('failed to create new artist')
+                        }
+
+                        // ------------------------------------------------------------------------- create meilisearch artist
+                        log.info('create meilisearch artist')
+
+                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name: an }))
+                        log.debug({ meiliResult })
+                        if (meiliResult.status !== 'succeeded') {
+                            log.warn('failed to create artist in meilisearch')
+                            await db.abortTransaction()
+                            res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+                            throw new Error('failed to create artist in meilisearch')
+                        }
+                    }
+                })())
+            }
+
+            const result = await Promise.all(promises)
+            log.debug({ result })
+        }
+
+        if (!updates.tags?.album && !updates.tags?.artists) {
+            await db.commitTransaction()
+
+            return res.status(204).send();
+        }
+
+        if (audio.tags?.album) {
+            // ------------------------------------------------------------------------- delete old ArtistAlbumAudio records
+            log.info("delete old ArtistAlbumAudio records")
+
+            const deleteOldResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteManyByArtistNameByAudioTitle(audio.tags!.album!, audio.title));
+            log.debug({ deleteOldResult })
+            if (!deleteOldResult.acknowledged) {
+                log.warn('Failed to delete old ArtistAlbumAudio records')
+                await db.abortTransaction()
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+            }
+        }
+
+        if (newAudio.tags?.album) {
+            // ------------------------------------------------------------------------- create new ArtistAlbumAudio records
+            log.info("create new ArtistAlbumAudio records")
+
+            const artistNames = newAudio.tags?.artists ?? []
+            const promises = []
+            for (const an of artistNames) {
+                promises.push((async () => {
+                    const createNewResult = await runWithLogger(log, () => artistAlbumAudioRepository.create({ artistName: an, albumName: newAudio.tags!.album!, audioTitle: newAudio.title }));
+                    log.debug({ createNewResult })
+                    if (!createNewResult.acknowledged) {
+                        log.warn('Failed to delete old ArtistAlbumAudio records')
+                        await db.abortTransaction()
+                        res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+                        throw new Error('Failed to delete old ArtistAlbumAudio records')
+                    }
+                })())
+            }
+
+            const result = await Promise.all(promises)
+            log.debug({ result })
+        }
+
+        await db.commitTransaction()
+
         res.status(204).send();
     } catch (err) {
+        try { await db?.abortTransaction() } catch (_) { }
+
         runWithLogger(log, () => handleError(res, err))
     }
 })
@@ -517,26 +655,97 @@ router.get('/coverArt/:audioId', auth, async (req, res) => {
             return res.status(404).json({ status: 'error', message: 'Audio not found' });
         }
 
-        const result = await runWithLogger(log, () => s3.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: audio.coverArtKey,
-        })));
-        log.debug({ contentLength: result.ContentLength, contentType: result.ContentType });
-        log.info('Fetched cover art from storage');
-
-        const stream = result.Body as any;
-        if (stream === undefined || stream === null) {
+        const result = await getS3ObjectStream(audio.coverArtKey, { range: 'bytes=0-1023' });
+        log.debug({ result });
+        if (!result) {
             log.warn('Cover art object has no body');
-            return res.status(404).json({ status: 'error', message: 'Audio not found' });
+            return res.status(404).json({ status: 'error', error_code: 'COVER_ART_NOT_FOUND' });
+        }
+
+        const { stream, contentLength, contentType } = result
+        log.debug({ stream, contentLength, contentType });
+
+        if (!stream) {
+            log.warn('Cover art object has no body');
+            return res.status(404).json({ status: 'error', error_code: 'COVER_ART_NOT_FOUND' });
         }
 
         res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Content-Type', result.ContentType || 'application/octet-stream');
+        res.setHeader('Content-Type', contentType || 'application/octet-stream');
         res.status(200);
-        res.setHeader('Content-Length', result.ContentLength ?? '');
+        res.setHeader('Content-Length', contentLength ?? '');
 
         log.info('Streaming cover art to client');
         stream.pipe(res);
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.put('/coverArt/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/coverArt/:audioId' });
+
+    try {
+        log.info('Cover art request received');
+
+        log.debug({ params: req.params });
+        const { audioId } = await runWithLogger(log, () => validate(coverArtParamsSchema, { ...req.params }));
+        log.info('Input validated');
+        log.debug({ audioId });
+
+        const audioRepository = new AudioRepository();
+
+        const audio = await runWithLogger(log, () => audioRepository.get(audioId));
+        log.debug({ audio });
+        log.info('Checked audio ownership');
+        if (!audio) {
+            log.info('Rejected cover art request: audio not found or has no cover art');
+            return res.status(404).json({ status: 'error', message: 'Audio not found' });
+        }
+
+        const key = `avarim/audio/cover_art/${audioId}`
+
+        // ------------------------------------------------------------------------- make the temporary directory
+        log.info('make the temporary directory')
+
+        const jobDir = join(audioUploadTmpDir, 'coverArts', audioId)
+        await mkdir(jobDir, { recursive: true });
+        log.debug({ jobDir });
+        log.info('Created job scratch directory');
+
+        const cleanupPaths: string[] = [];
+        const cleanup = async () => {
+            log.debug({ cleanupPaths, jobDir });
+            log.info('Cleaning up temp files');
+            await Promise.all(cleanupPaths.map((p) => unlink(p).catch(() => { })));
+            await rm(jobDir, { recursive: true, force: true }).catch(() => { });
+        };
+
+        try {
+
+            // ------------------------------------------------------------------------- store upload stream on disk
+            log.info('store upload stream on disk')
+
+            const { path: inputPath, size: inputSize } = await runWithLogger(log, () => receiveUpload(req, undefined, jobDir))
+            cleanupPaths.push(inputPath)
+            log.debug({ inputSize, inputPath })
+            log.info('Upload received and stored to disk')
+
+            const contentType = await runWithLogger(log, () => detectContentType(inputPath))
+            log.debug({ contentType })
+
+            if (audio.coverArtKey) {
+                log.info('deleting old cover art')
+                try { await runWithLogger(log, () => deleteFromS3(audio.coverArtKey!)) } catch (err) { log.warn({ err }, 'failed to delete old cover art') }
+            }
+
+            await runWithLogger(log, () => uploadToS3(createReadStream(inputPath), key, contentType.mimeType, true))
+        } catch (err) {
+            log.error({ err }, 'caught an error while trying to upload files')
+            cleanup()
+        }
+
+        res.status(201).json({ status: 'success' })
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

@@ -1,15 +1,15 @@
 import { object, string } from "yup";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from '../schemas';
 import { number } from "yup";
-import { audioUpdateSchema } from "../../db/models/Audio";
+import { audioPatchSchema } from "../../db/models/Audio";
 
 export const postSchema = object().required().shape({
     title: string().required().label('Title'),
 })
 
-export const postApproveSchema = audioUpdateSchema.omit(['audioTechnical']).required().shape({
+export const postApproveSchema = audioPatchSchema.shape({
     audioId: string().required().label('Audio Id'),
-})
+}).required().strict().stripUnknown()
 
 export const listQuerySchema = object().required().shape({
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),

@@ -13,7 +13,7 @@ const audioTags = {
     audioTitle: str.optional(), // extracted from audio file, might be different
     artists: strList.optional(),
     albumArtists: strList.optional(),
-    albums: strList.optional(),
+    album: str.optional(),
     trackNumber: posInt.optional(),
     trackTotal: posInt.optional(),
     discNumber: posInt.optional(),
@@ -82,12 +82,13 @@ const shape = {
 
     deletionQueued: boolean().optional(),
     temporary: boolean().optional(),
+    isPrepared: boolean().optional(),
 
     createdAt: number().optional(),
     updatedAt: number().optional(),
 
-    audioTags: audioTagsSchema.optional(),
-    audioTechnical: audioTechnicalSchema.optional(),
+    tags: audioTagsSchema.optional(),
+    technical: audioTechnicalSchema.optional(),
 };
 
 const search = {
@@ -97,7 +98,10 @@ const search = {
 export const audioSearchSchema = object(search).strict();
 export type AudioSearch = InferType<typeof audioSearchSchema>
 
-export const audioUpdateSchema = object(shape).partial().strict();
+export const audioPatchSchema = object(shape).pick(['title', 'tags']).partial().strict();
+export type AudioPatch = InferType<typeof audioPatchSchema>
+
+export const audioUpdateSchema = object(shape).omit(['createdAt', 'updatedAt']).partial().strict();
 export type AudioUpdate = InferType<typeof audioUpdateSchema>
 
 export const audioSchema = object(shape).strict();

@@ -14,6 +14,122 @@ import { parseFile, selectCover, TimestampFormat, type ICommonTagsResult, type I
 import { probeFile, FFMPEG_PATH } from '../../ffmpeg';
 import { AudioTags, TechnicalInfo } from "../../db/models/Audio";
 import { basename } from "node:path";
+import { getS3ObjectStream } from "../../lib/file_management";
+import { MongoDB } from "../../db/MongoDB/mongodb";
+import ArtistRepository from "../../db/MongoDB/ArtistRepository";
+import AlbumRepository from "../../db/MongoDB/AlbumRepository";
+import ArtistAlbumAudioRepository from "../../db/MongoDB/ArtistAlbumAudioRepository";
+import { meiliAlbum, meiliArtist } from "../../db/meilisearch";
+
+export async function prepareAudioInDb(metadata: ExtractionResult) {
+    let log = getLogger().child({ step: 'prepareAudioInDb' });
+
+    let db;
+    try {
+        db = MongoDB.getDbInstance()
+        const session = await db.startTransaction()
+
+        const artistRepository = new ArtistRepository()
+        artistRepository.setTransactionSession(session)
+
+        const albumRepository = new AlbumRepository()
+        albumRepository.setTransactionSession(session)
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
+        artistAlbumAudioRepository.setTransactionSession(session)
+
+        const tags = metadata.tags
+        if (!tags) return
+
+        let artistNames: string[] = []
+
+        if (tags.artists && tags.artists.length > 0)
+            artistNames = tags.artists
+        else
+            artistNames = tags.composers ?? tags.producers ?? []
+
+        if (artistNames && artistNames.length > 0) {
+            // ------------------------------------------------------------------------- create the artist(s), if no artists found(soundtrack) use composers or producers
+            log.info('create the artist(s), if no artists found(soundtrack) use composers or producers')
+
+            const promises = []
+            for (const name of artistNames)
+                promises.push((async () => {
+                    const artist = await runWithLogger(log, () => artistRepository.getByName(name))
+                    log.debug({ artist })
+                    if (!artist) {
+                        const createResult = await runWithLogger(log, () => artistRepository.insert({ name }))
+                        log.debug({ createResult })
+                        if (!createResult.acknowledged) {
+                            log.warn('Failed to create artist')
+                            throw new Error('Failed to create artist')
+                        }
+
+                        // ------------------------------------------------------------------------- create meilisearch artist(s)
+                        log.info('create meilisearch artist(s)')
+
+                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
+                        log.debug({ meiliResult })
+                        if (meiliResult.status !== 'succeeded') {
+                            log.warn('Failed to create artist')
+                            throw new Error('Failed to create artist')
+                        }
+                    }
+                })())
+
+            const result = await Promise.all(promises)
+            log.debug({ result })
+        }
+
+        if (tags && tags.album) {
+            // ------------------------------------------------------------------------- create the album
+            log.info('create the album')
+
+            const album = await runWithLogger(log, () => albumRepository.getByName(tags.album!));
+            if (!album) {
+                const updateResult = await runWithLogger(log, () => albumRepository.create({ name: tags.album! }));
+                log.debug({ updateResult })
+                if (!updateResult.acknowledged) {
+                    log.warn('Failed to create album')
+                    throw new Error('Failed to create album')
+                }
+
+                // ------------------------------------------------------------------------- create meilisearch album
+                log.info('create meilisearch album')
+
+                const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ name: tags.album! }))
+                log.debug({ meiliResult })
+                if (meiliResult.status !== 'succeeded') {
+                    log.warn('Failed to create album')
+                    throw new Error('Failed to create album')
+                }
+            }
+
+            // ------------------------------------------------------------------------- create ArtistAlbumAudio records
+            log.info('create ArtistAlbumAudio records')
+
+            const promises = []
+            for (const artistName of artistNames)
+                promises.push((async () => {
+                    const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.create({ artistName, albumName: tags.album!, audioTitle: tags.audioTitle! }));
+                    if (!createResult.acknowledged) {
+                        log.warn('Failed to create artistAlbumAudio')
+                        throw new Error('Failed to create artistAlbumAudio')
+                    }
+                })())
+
+            const result = await Promise.all(promises)
+            log.debug({ result })
+        }
+
+        await db.commitTransaction()
+    } catch (err) {
+        log.error({ err })
+        await db?.abortTransaction()
+
+        throw err
+    }
+}
 
 export async function streamAudioFile(audioId: string, userId: string, req: Request, res: Response, isWeb: boolean, download: boolean) {
     const log = getLogger().child({ step: 'streamAudioFile' })
@@ -29,24 +145,19 @@ export async function streamAudioFile(audioId: string, userId: string, req: Requ
     }
 
     const range = req.headers.range;
-    const key = isWeb ? audio.webBucketKey : audio.bucketKey;
+    const key = isWeb ? audio.webBucketKey! : audio.bucketKey!;
     log.debug({ key, range, download });
 
-    const result = await runWithLogger(log, () => s3.send(new GetObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: key,
-        Range: range,
-        ResponseContentDisposition: download ? `attachment; filename="${audio._id!.toString()}.${audio.contentType!.extension}"` : undefined,
-    })));
-    log.debug({ contentLength: result.ContentLength, contentRange: result.ContentRange });
+    const result = await getS3ObjectStream(key, { range })
+    log.debug({ result });
     log.info('Fetched object from storage');
 
-    if (result.Body === undefined || result.Body === null) {
+    if (!result || !result.stream) {
         log.warn('Storage object has no body');
         return res.status(404).json({ status: 'error', message: 'Audio not found' });
     }
 
-    const body = result.Body as Readable;
+    const body = result.stream
     body.on('error', (err) => {
         log.error({ err, key }, 'S3 stream error while serving audio file');
         if (!res.headersSent) return runWithLogger(log, () => handleError(res, err));
@@ -56,8 +167,8 @@ export async function streamAudioFile(audioId: string, userId: string, req: Requ
     res.status(range ? 206 : 200);
     res.setHeader('Content-Type', isWeb ? 'audio/m4a' : (audio.contentType?.mimeType ?? 'audio/m4a'));
     res.setHeader('Accept-Ranges', 'bytes');
-    if (result.ContentRange) res.setHeader('Content-Range', result.ContentRange);
-    if (result.ContentLength) res.setHeader('Content-Length', result.ContentLength);
+    if (result.contentRange) res.setHeader('Content-Range', result.contentRange);
+    if (result.contentLength) res.setHeader('Content-Length', result.contentLength);
 
     log.info('Streaming audio file to client');
     body.pipe(res);
@@ -166,7 +277,7 @@ function logProcessError(log: Log, err: unknown, what: string) {
 
 export function emptyTags(audioTitle: string): AudioTags {
     return {
-        audioTitle, artists: [], albums: undefined,
+        audioTitle, artists: [], album: undefined,
         trackNumber: undefined, trackTotal: undefined, discNumber: undefined, discTotal: undefined,
         year: undefined, releaseDate: undefined, genres: [], composers: [], lyricists: [], producers: [],
         label: undefined, catalogNumber: undefined, isrc: [], bpm: undefined, key: undefined, compilation: false,
@@ -200,7 +311,7 @@ function tagsFromParser(c: ICommonTagsResult): Partial<AudioTags> {
         audioTitle: clean(c.title) ?? undefined,
         artists: c.artists?.length ? splitList(c.artists) : splitList(c.artist),
         albumArtists: c.albumartists?.length ? splitList(c.albumartists) : splitList(c.albumartist),
-        albums: [clean(c.album)],
+        album: clean(c.album),
         trackNumber: c.track.no ?? undefined,
         trackTotal: c.track.of ?? undefined,
         discNumber: c.disk.no ?? undefined,
@@ -257,7 +368,7 @@ function tagsFromFfprobe(probe: FfprobeResult): Partial<AudioTags> {
     return {
         audioTitle: clean(t.title) ?? undefined,
         artists: splitList(t.artist),
-        albums: [clean(t.album)],
+        album: clean(t.album),
         trackNumber: trk.no ?? undefined,
         trackTotal: trk.of ?? undefined,
         discNumber: dsk.no ?? undefined,
@@ -551,10 +662,7 @@ export async function extractMetadata(filePath: string, originalName: string, op
 
     if (!tags.artists?.length) warnings.push('No artist found');
 
-    if ([tags.audioTitle, ...(tags.artists ?? [])].some((s) => s && /[ÃÂ][\u0080-\u00BF]/.test(s)))
-        warnings.push('Some text looks like mojibake (legacy tag encoding); please review spelling');
-
-    if (tags.albums?.some((s) => s && /[ÃÂ][\u0080-\u00BF]/.test(s)))
+    if ([tags.audioTitle, tags.album, ...(tags.artists ?? [])].some((s) => s && /[ÃÂ][\u0080-\u00BF]/.test(s)))
         warnings.push('Some text looks like mojibake (legacy tag encoding); please review spelling');
 
     if (md?.common.date && !normDate(md.common.date)) warnings.push(`Unrecognised date format "${md.common.date}"`);

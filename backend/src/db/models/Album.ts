@@ -1,0 +1,32 @@
+import { array } from 'yup';
+import { boolean, InferType, number, object, string } from 'yup';
+
+export const collectionName = 'album'
+
+export const schemaVersion = 'v1.0.0'
+
+const shape = {
+    schemaVersion: string().optional().min(6).max(20),
+
+    name: string().required(),
+
+    avatarKey: string().optional().url(), // avarim/album/avatar/<albumId>
+
+    deletionQueued: boolean().optional(),
+
+    createdAt: number().optional(),
+    updatedAt: number().optional(),
+};
+
+const search = {
+    name: string().required(),
+}
+
+export const albumSearchSchema = object(search).strict();
+export type AlbumSearch = InferType<typeof albumSearchSchema>
+
+export const albumUpdateSchema = object(shape).partial().strict();
+export type AlbumUpdate = InferType<typeof albumUpdateSchema>
+
+export const albumSchema = object(shape).strict();
+export type Album = InferType<typeof albumSchema>

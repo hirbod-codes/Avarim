@@ -1,7 +1,8 @@
-import { meili } from ".."
-
-import type { Meilisearch, Index, Task, Settings, SearchParams, SearchResponse, DocumentsQuery, Filter } from 'meilisearch';
+import { type Index, type Task, type Settings, type SearchParams, type SearchResponse, type DocumentsQuery, type Filter, Meilisearch } from 'meilisearch';
 import { collectionName as audioCollection, AudioSearch } from "./models/Audio";
+import { meilisearchHost, meilisearchKey, meilisearchPort } from '../configs';
+import { ArtistSearch } from './models/Artist';
+import { AlbumSearch } from './models/Album';
 
 /* ------------------------------------------------------------------ */
 /* Errors                                                             */
@@ -75,6 +76,11 @@ export interface MeiliCrudOptions {
 
 export interface WriteResult { taskUid: number; status: Task['status'] }
 
+export const meili = new Meilisearch({
+    host: meilisearchHost + ':' + meilisearchPort.toString(),
+    apiKey: meilisearchKey
+})
+
 /**
  * usage:
  * 
@@ -102,6 +108,12 @@ export class MeiliCrud<T extends Record<string, any>> {
 
         console.log('prepare audio index...')
         await meiliAudio.ensureIndex();
+
+        console.log('prepare artist index...')
+        await meiliArtist.ensureIndex();
+
+        console.log('prepare album index...')
+        await meiliAlbum.ensureIndex();
     }
 
     private readonly index: Index<T>;
@@ -227,4 +239,14 @@ export class MeiliCrud<T extends Record<string, any>> {
 export const meiliAudio = new MeiliCrud<AudioSearch>(meili, audioCollection, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'title'], sortableAttributes: ['_id', 'title'], searchableAttributes: ['title'] },
+});
+
+export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, audioCollection, {
+    primaryKey: '_id',
+    settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
+});
+
+export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, audioCollection, {
+    primaryKey: '_id',
+    settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
 });

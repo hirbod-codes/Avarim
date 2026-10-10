@@ -6,7 +6,7 @@ import express from 'express';
 import https from 'https';
 import fs from 'fs';
 
-import { dbConfig, isProduction, allowedOrigins, hostPort, hostName, meilisearchPort, meilisearchHost, meilisearchKey, s3Endpoint, s3AccessKey, s3SecretKey } from './configs';
+import { dbConfig, isProduction, allowedOrigins, hostPort, hostName, s3Endpoint, s3AccessKey, s3SecretKey } from './configs';
 
 import { metricsMiddleware } from './observability/metrics';
 import { metricsRouter } from './observability/metricsRoute';
@@ -18,7 +18,6 @@ import { setRequestLogger } from './observability/requestLoggerContext';
 
 import { tryAndWait } from './utils';
 
-import { Meilisearch } from 'meilisearch'
 import { MeiliCrud } from './db/meilisearch';
 
 import { MongoDB } from './db/MongoDB/mongodb';
@@ -67,11 +66,6 @@ import { registerProcessErrorHandlers } from './middlewares/processErrorHandlers
 import { OtpFactory } from './services/OTP/OtpFactory';
 import { PaymentFactory } from './services/Payments/factory';
 import { SmtpFactory } from './services/SMTP/SmtpFactory';
-
-export const meili = new Meilisearch({
-    host: meilisearchHost + ':' + meilisearchPort.toString(),
-    apiKey: meilisearchKey
-})
 
 export const s3 = new S3Client({
     region: 'us-east-1',
