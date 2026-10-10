@@ -93,6 +93,7 @@ const shape = {
 
 const search = {
     title: str.required(),
+    lyrics: str.optional(),
 }
 
 export const audioSearchSchema = object(search).strict();

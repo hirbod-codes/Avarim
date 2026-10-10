@@ -34,8 +34,14 @@ class AudioRepository implements IRepository, ISeedable, IDropable {
         if (indexes.find(i => i.name === 'title') === undefined)
             await db.createIndex(collectionName, { title: 1 }, { unique: true, name: 'title' })
 
-        if (indexes.find(i => i.name === 'userId') === undefined)
-            await db.createIndex(collectionName, { userId: 1 }, { name: 'userId' })
+        if (indexes.find(i => i.name === 'audioSha256') === undefined)
+            await db.createIndex(collectionName, { 'technical.audioSha256': 1 }, { unique: true, name: 'audioSha256' })
+
+        if (indexes.find(i => i.name === 'artists') === undefined)
+            await db.createIndex(collectionName, { 'tags.artists': 1 }, { name: 'artists' })
+
+        if (indexes.find(i => i.name === 'album') === undefined)
+            await db.createIndex(collectionName, { 'tags.album': 1 }, { name: 'album' })
 
         if (indexes.find(i => i.name === 'createdAt') === undefined)
             await db.createIndex(collectionName, { createdAt: -1 }, { name: 'createdAt' })

@@ -31,11 +31,8 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
 
         const indexes = await db.collection(collectionName).indexes()
 
-        if (indexes.find(i => i.name === 'title') === undefined)
-            await db.createIndex(collectionName, { title: 1 }, { unique: true, name: 'title' })
-
-        if (indexes.find(i => i.name === 'userId') === undefined)
-            await db.createIndex(collectionName, { userId: 1 }, { name: 'userId' })
+        if (indexes.find(i => i.name === 'uniqueNames') === undefined)
+            await db.createIndex(collectionName, { artistName: 1, albumName: 1, audioTitle: 1 }, { unique: true, name: 'uniqueNames' })
 
         if (indexes.find(i => i.name === 'createdAt') === undefined)
             await db.createIndex(collectionName, { createdAt: -1 }, { name: 'createdAt' })

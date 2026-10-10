@@ -198,7 +198,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             // ------------------------------------------------------------------------- generate web copy, extract cover art, detect content type
             log.info('wait for web compatible file and cover art to be generated and content type to be collected')
 
-            const [contentType, , meiliResult] = await Promise.all([
+            const [contentType] = await Promise.all([
                 runWithLogger(log, () => detectContentType(inputPath)
                     .then((ct) => {
                         log.debug({ contentType: ct }, 'Detected content type');
@@ -209,9 +209,8 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                     : runWithLogger(log, () => generateWebCompatibleCopy(inputPath, jobDir, webCopyGenName, undefined, audioStream)
                         .then((result) => pipeline(result.outputStream, createWriteStream(webCopyPath!)))
                         .then(() => log.debug('Web-compatible copy written to disk'))),
-                runWithLogger(log, () => meiliAudio.create({ title }, { wait: true })),
             ]);
-            log.debug({ isUploadWebCompatible, meiliResult });
+            log.debug({ isUploadWebCompatible });
             log.info('Generated web compatible file and cover art');
 
             try {
@@ -226,7 +225,17 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                 log.debug({ audioFileBucketKey, webCompatibleAudioFileBucketKey, hasCoverArt: !!cover });
                 log.info('Uploaded files to object storage');
 
-                // ------------------------------------------------------------------------- update audio info in DB
+                // ------------------------------------------------------------------------- create audio in meilisearch
+                log.info('create audio in meilisearch')
+
+                const meiliCreateResult = await runWithLogger(log, () => meiliAudio.create({ title, lyrics: metadata.tags.lyrics }, { wait: true }))
+                log.debug({ meiliCreateResult })
+                if (meiliCreateResult.status !== 'succeeded') {
+                    log.error('failed to audio in meilisearch')
+                    throw new Error('failed to upload audio')
+                }
+
+                // ------------------------------------------------------------------------- update audio info in DB, make it permanent and set content type
                 log.info('update audio info in DB, make it permanent and set content type')
 
                 const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(
@@ -245,7 +254,6 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                 log.debug({ updateResult });
                 if (!updateResult.acknowledged || updateResult.matchedCount !== 1) {
                     log.info('updating audio record failed');
-                    throw new Error('failed to upload audio')
                 }
                 log.info('Updated audio record');
             } catch (error) {
@@ -255,7 +263,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                     ...(webCompatibleAudioFileBucketKey ? [runWithLogger(log, () => deleteFromS3(webCompatibleAudioFileBucketKey).catch((err) => { log.error({ err }, 'deleting web compatible audio files from cloud storage failed') }))] : []),
                     ...(cover ? [runWithLogger(log, () => deleteFromS3(coverArtBucketKey).catch((err) => { log.error({ err }, 'deleting cover art files from cloud storage failed') }))] : []),
                     runWithLogger(log, () => audioRepository.delete(audioId).catch((err) => { log.error({ err }, 'deleting audio info from db failed') })),
-                    runWithLogger(log, () => meiliAudio.delete(audioId, { wait: true })),
+                    runWithLogger(log, () => meiliAudio.deleteBy({ title }, { wait: true })),
                 ])
 
                 throw error
@@ -359,12 +367,36 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
             // ------------------------------------------------------------------------- update audio title in ArtistAlbumAudio repository
             log.info('update audio title in ArtistAlbumAudio repository')
 
-            const updateTitlesResult = await runWithLogger(log, () => artistAlbumAudioRepository.updateManyByAudioTitle(audio.title!, { audioTitle: updates.title! }));
+            const updateTitlesResult = await runWithLogger(log, () => artistAlbumAudioRepository.updateManyByAudioTitle(audio.title!, { audioTitle: newAudio.title! }));
             log.debug({ updateTitlesResult })
             if (!updateTitlesResult.acknowledged) {
                 log.warn('failed to update audio record in db');
                 await db.abortTransaction()
                 return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+            }
+
+        }
+
+        if (updates.title || updates.tags?.lyrics) {
+            // ------------------------------------------------------------------------- update audio title or lyrics in meilisearch
+            log.info('update audio title or lyrics in meilisearch')
+
+            const meiliDeleteResult = await meiliAudio.deleteBy({ title: audio.title }, { wait: true })
+            log.debug({ meiliDeleteResult })
+            if (meiliDeleteResult.status !== 'succeeded') {
+                log.warn('failed to delete audio title or lyrics in meilisearch')
+                await db.abortTransaction()
+                res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+                throw new Error('failed to create artist in meilisearch')
+            }
+
+            const meiliCreateResult = await meiliAudio.create({ title: newAudio.title, lyrics: newAudio.tags?.lyrics }, { wait: true })
+            log.debug({ meiliCreateResult })
+            if (meiliCreateResult.status !== 'succeeded') {
+                log.warn('failed to create audio title or lyrics in meilisearch')
+                await db.abortTransaction()
+                res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+                throw new Error('failed to create artist in meilisearch')
             }
         }
 

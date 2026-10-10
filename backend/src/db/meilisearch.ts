@@ -67,6 +67,10 @@ export interface WriteOptions {
     wait?: boolean;
 }
 
+export type Where<T> = { [K in Extract<keyof T, string>]?: string | number | boolean };
+
+export interface WriteResult { taskUid: number; status: Task['status'] }
+
 export interface MeiliCrudOptions {
     primaryKey?: string;              // default '_id'
     settings?: Settings;              // applied by ensureIndex(): filterableAttributes, sortableAttributes, ...
@@ -202,6 +206,50 @@ export class MeiliCrud<T extends Record<string, any>> {
         return this.read('search', () => this.index.search(q, params));
     }
 
+    /**
+     * Exact-match lookup without knowing the id: `findBy({ audioTitle: 'Midnight Run' })`.
+     * Several conditions are ANDed. Always returns an array (empty when nothing matches),
+     * because fields like a title aren't unique.
+     *
+     * Every field you use here MUST be listed in `filterableAttributes`, otherwise
+     * Meilisearch rejects it (SearchError kind 'invalid').
+     * Matching is exact on the whole value (case-insensitive); for "contains" / typo-tolerant
+     * matching use `search()` instead.
+     */
+    async findBy(where: { [K in Extract<keyof T, string>]?: string | number | boolean }, opts: { limit?: number } = {}): Promise<(T & { _id: any })[]> {
+        const filter = Object.entries(where)
+            .filter(([, v]) => v !== undefined)
+            .map(([field, value]) => `${field} = ${JSON.stringify(value)}`)       // JSON quoting escapes " and \ inside values
+            .join(' AND ');
+        if (!filter) throw new SearchError('invalid', 'Meilisearch findBy needs at least one condition');
+        return (await this.list({ filter, limit: opts.limit ?? 100 })).results as (T & { _id: any })[];
+    }
+
+    /** `{ title: 'x', userId: 'u' }` -> `title = "x" AND userId = "u"` (values are quoted/escaped). */
+    private filterFrom(where: Where<T>): string {
+        const filter = Object.entries(where)
+            .filter(([, v]) => v !== undefined)
+            .map(([field, value]) => `${field} = ${JSON.stringify(value)}`)       // JSON quoting escapes " and \ inside values
+            .join(' AND ');
+        if (!filter) throw new SearchError('invalid', 'Meilisearch lookup needs at least one condition');
+        return filter;
+    }
+
+    /** All primary keys matching a filter, paging through every result (no silent 20/100 cap). */
+    private async idsMatching(filter: string): Promise<string[]> {
+        const ids: string[] = [];
+        for (let offset = 0; ; offset += 1000) {
+            const page = await this.read('lookup', () => this.index.getDocuments({ filter, limit: 1000, offset, fields: [this.primaryKey as Extract<keyof T, string>] }));
+            ids.push(...page.results.map((d) => String(d[this.primaryKey])));
+            if (offset + page.results.length >= page.total || page.results.length === 0) return ids;
+        }
+    }
+
+    /** The document's primary key value, whatever the primary key field is called. */
+    idOf(doc: T): string {
+        return String(doc[this.primaryKey]);
+    }
+
     /* ---------- update ---------- */
 
     /**
@@ -224,13 +272,21 @@ export class MeiliCrud<T extends Record<string, any>> {
     delete(id: string, o?: WriteOptions) {
         return this.write('delete', () => this.index.deleteDocument(id), o);
     }
+
     deleteMany(ids: string[], o?: WriteOptions) {
         return this.write('deleteMany', () => this.index.deleteDocuments(ids), o);
     }
     /** Requires the attributes used in the filter to be in `filterableAttributes`. */
+
     deleteByFilter(filter: Filter, o?: WriteOptions) {
         return this.write('deleteByFilter', () => this.index.deleteDocuments({ filter }), o);
     }
+
+    /** Deletes EVERY document matching `where`: `deleteBy({ audioTitle: 'x', userId })`. Fields must be filterable. */
+    deleteBy(where: Where<T>, o?: WriteOptions) {
+        return this.write('deleteBy', () => this.index.deleteDocuments({ filter: this.filterFrom(where) }), o);
+    }
+
     clear(o?: WriteOptions) {
         return this.write('clear', () => this.index.deleteAllDocuments(), o);
     }
@@ -238,7 +294,7 @@ export class MeiliCrud<T extends Record<string, any>> {
 
 export const meiliAudio = new MeiliCrud<AudioSearch>(meili, audioCollection, {
     primaryKey: '_id',
-    settings: { filterableAttributes: ['_id', 'title'], sortableAttributes: ['_id', 'title'], searchableAttributes: ['title'] },
+    settings: { filterableAttributes: ['_id', 'title', 'lyrics'], sortableAttributes: ['_id', 'title', 'lyrics'], searchableAttributes: ['title', 'lyrics'] },
 });
 
 export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, audioCollection, {

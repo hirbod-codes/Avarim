@@ -31,11 +31,8 @@ class ArtistRepository implements IRepository, ISeedable, IDropable {
 
         const indexes = await db.collection(collectionName).indexes()
 
-        if (indexes.find(i => i.name === 'title') === undefined)
-            await db.createIndex(collectionName, { title: 1 }, { unique: true, name: 'title' })
-
-        if (indexes.find(i => i.name === 'userId') === undefined)
-            await db.createIndex(collectionName, { userId: 1 }, { name: 'userId' })
+        if (indexes.find(i => i.name === 'name') === undefined)
+            await db.createIndex(collectionName, { name: 1 }, { unique: true, name: 'name' })
 
         if (indexes.find(i => i.name === 'createdAt') === undefined)
             await db.createIndex(collectionName, { createdAt: -1 }, { name: 'createdAt' })
