@@ -295,14 +295,17 @@ export class MeiliCrud<T extends Record<string, any>> {
 export const meiliAudio = new MeiliCrud<AudioSearch>(meili, audioCollection, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'title', 'lyrics'], sortableAttributes: ['_id', 'title', 'lyrics'], searchableAttributes: ['title', 'lyrics'] },
+    waitByDefault: true
 });
 
 export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, audioCollection, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
+    waitByDefault: true
 });
 
 export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, audioCollection, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
+    waitByDefault: true
 });

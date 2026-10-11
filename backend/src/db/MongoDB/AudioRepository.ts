@@ -72,8 +72,16 @@ class AudioRepository implements IRepository, ISeedable, IDropable {
         return (await AudioRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false, title }, { session: this.session }).toArray())[0]
     }
 
+    async getByTitleUnsafe(title: string): Promise<WithId<Audio>> {
+        return (await AudioRepository.collection!.find({ title }, { session: this.session }).toArray())[0]
+    }
+
+    async getByTitleByAudioSha256(title: string, audioSha256: string): Promise<WithId<Audio>> {
+        return (await AudioRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false, title, 'technical.audioSha256': audioSha256 }, { session: this.session }).toArray())[0]
+    }
+
     async getByAudioSha256(audioSha256: string) {
-        return (await AudioRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false, 'audioTechnical.audioSha256': audioSha256 }, { session: this.session }).toArray())[0]
+        return (await AudioRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false, 'technical.audioSha256': audioSha256 }, { session: this.session }).toArray())[0]
     }
 
     async getMany(audioIds: string[]): Promise<WithId<Audio>[]> {

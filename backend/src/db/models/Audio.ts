@@ -92,6 +92,7 @@ const shape = {
 };
 
 const search = {
+    _id: string().required(),
     title: str.required(),
     lyrics: str.optional(),
 }

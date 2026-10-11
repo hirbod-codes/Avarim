@@ -6,8 +6,7 @@ import { collectionName, User, UserUpdate } from '../models/User';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import { Redis } from '../redis';
 
-export class UserRepository implements IRepository, ISeedable, IDropable {
-    IDropable: 'IDropable' = 'IDropable';
+export class UserRepository implements IRepository, ISeedable {
     IRepository: 'IRepository' = 'IRepository';
     ISeedable: 'ISeedable' = 'ISeedable';
 
@@ -52,10 +51,6 @@ export class UserRepository implements IRepository, ISeedable, IDropable {
         UserRepository.collection = (await MongoDB.getDb()).collection<User>(collectionName)
     }
 
-    async dropCollection(db: Db): Promise<void> {
-        await db.dropCollection(collectionName)
-    }
-
     async create(user: User): Promise<InsertOneResult | false> {
         try {
             return await UserRepository.collection!.insertOne(user, { session: this.session })
@@ -76,17 +71,17 @@ export class UserRepository implements IRepository, ISeedable, IDropable {
 
     async get(id: string): Promise<WithId<User> | false | undefined> {
         try {
-            const redis = await Redis.getClient()
+            // const redis = await Redis.getClient()
 
-            const userJson = await redis.get(`${collectionName}:${id}`)
-            if (userJson)
-                return JSON.parse(userJson)
+            // const userJson = await redis.get(`${collectionName}:${id}`)
+            // if (userJson)
+            //     return JSON.parse(userJson)
 
             const user = (await UserRepository.collection!.find({ _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
             if (!user)
                 return undefined
 
-            await redis.set(`${collectionName}:${id}`, JSON.stringify(user), 'EX', UserRepository.USER_DATA_CACHE_TTL_SECONDS)
+            // await redis.set(`${collectionName}:${id}`, JSON.stringify(user), 'EX', UserRepository.USER_DATA_CACHE_TTL_SECONDS)
 
             return user
         } catch (err) {

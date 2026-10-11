@@ -33,11 +33,11 @@ const ALLOWED_AUDIO_CODECS = new Set([
 
 const AUDIO_TITLE_SEPARATOR = '__AUDIO_TITLE_SEPARATOR__'
 
-router.post('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'POST /api/audio/' });
+router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'Get /api/audio/is_title_unique' });
 
     try {
-        log.info('audio upload request received');
+        log.info('audio title uniqueness check request received');
 
         log.debug({ query: req.query });
         const { title } = await runWithLogger(log, () => validate(postSchema, req.query))
@@ -54,13 +54,40 @@ router.post('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) =
 
         const audio = await runWithLogger(log, () => audioRepository.getByTitle(title));
         log.debug({ audio });
-        log.info('Checked title uniqueness');
         if (audio) {
             log.info('Rejected audio upload: title already exists');
             return res.status(400).json({ status: 'error', error_code: 'TITLE_NOT_UNIQUE' });
         }
 
-        res.status(204).send()
+        res.status(204).json({ status: 'success' })
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err))
+    }
+})
+
+router.get('/is_upload_finished', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/is_upload_finished' });
+
+    try {
+        log.info('audio upload finish check request received');
+
+        log.debug({ query: req.query });
+        const { title } = await runWithLogger(log, () => validate(postSchema, req.query))
+        log.info('input validated');
+        log.debug({ title });
+
+        const userId = req.user!.userId
+        log = log.child({ userId });
+
+        const audioRepository = new AudioRepository()
+
+        // ------------------------------------------------------------------------- checking whether title already exists
+        log.info('checking whether title already exists')
+
+        const audio = await runWithLogger(log, () => audioRepository.getByTitleUnsafe(title));
+        log.debug({ audio });
+
+        audio?.temporary !== true ? res.status(201).json({ status: 'success' }) : res.status(400).json({ status: 'error', error_code: 'UNFINISHED_UPLOAD' })
     } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
@@ -108,7 +135,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             log.info('extract metadata from received file')
 
             const metadata = await runWithLogger(log, () => extractMetadata(inputPath, basename(inputPath)))
-            log.debug({ metadata })
+            log.debug({ metadata: { ...metadata, covers: metadata.covers.map(m => ({ ...m, data: [] })) } }) // removing cover arts bytes from logs
             const audioStream = metadata.probe.streams.find((s) => s.codec_type === 'audio');
             log.debug({ audioStream })
             log.info('extracted metadata from uploaded file')
@@ -124,7 +151,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             let cover: ExtractedCover | undefined = undefined
             if (metadata.covers.length > 0)
                 cover = metadata.covers[metadata.suggestedCoverIndex ?? 0]
-            log.debug({ cover })
+            log.debug({ cover: { ...cover, data: [] } })
 
             // ------------------------------------------------------------------------- resolving title
             log.info('resolving title')
@@ -134,24 +161,12 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             const title = metadata.tags.audioTitle ?? fileNameSegments[fileNameSegments.length - 1]
             log.debug({ title })
 
-            // ------------------------------------------------------------------------- checking whether title already exists
-            log.info('checking whether title already exists')
+            // ------------------------------------------------------------------------- checking whether title or sha256 already exists
+            log.info('checking whether title or sha256 already exists')
 
-            const sameTitleCheck = await runWithLogger(log, () => audioRepository.getByTitle(title));
+            const sameTitleCheck = await runWithLogger(log, () => audioRepository.getByTitleByAudioSha256(title, metadata.technical.audioSha256));
             log.debug({ sameTitleCheck });
-            log.info('Checked title uniqueness');
             if (sameTitleCheck) {
-                log.info('Rejected audio upload: title already exists');
-                return res.status(400).json({ status: 'error', error_code: 'TITLE_NOT_UNIQUE' });
-            }
-
-            // ------------------------------------------------------------------------- checking whether same sha256 already exists
-            log.info('checking whether same sha256 already exists')
-
-            const sameSha256Check = await runWithLogger(log, () => audioRepository.getByAudioSha256(metadata.technical.audioSha256));
-            log.debug({ sameSha256Check });
-            log.info('Checked title uniqueness');
-            if (sameSha256Check) {
                 log.info('Rejected audio upload: audio already exists');
                 return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_UNIQUE' });
             }
@@ -159,7 +174,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             // ------------------------------------------------------------------------- inserting audio
             log.info('inserting audio')
 
-            temporaryAudio = { title: `${randomUUID()}${AUDIO_TITLE_SEPARATOR}${title}`, temporary: true, isPrepared: false }
+            temporaryAudio = { title: `${randomUUID()}${AUDIO_TITLE_SEPARATOR}${title}`, temporary: true, isPrepared: false, tags: metadata.tags, technical: metadata.technical }
             const audioInsertResult = await runWithLogger(log, () => audioRepository.insert(temporaryAudio))
             log.debug({ audioInsertResult });
             if (!audioInsertResult.acknowledged || !audioInsertResult.insertedId) {
@@ -171,6 +186,8 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
             const audioId = audioInsertResult.insertedId.toString()
             log.debug({ audioId })
+
+            res.status(200).json({ status: 'queued', data: { title: temporaryAudio.title } })
 
             // ------------------------------------------------------------------------- set bucket keys
             log.info('set bucket keys')
@@ -227,12 +244,17 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                 // ------------------------------------------------------------------------- create audio in meilisearch
                 log.info('create audio in meilisearch')
 
-                const meiliCreateResult = await runWithLogger(log, () => meiliAudio.create({ title, lyrics: metadata.tags.lyrics }, { wait: true }))
+                const meiliCreateResult = await runWithLogger(log, () => meiliAudio.create({ _id: temporaryAudio._id.toString(), title, lyrics: metadata.tags.lyrics }))
                 log.debug({ meiliCreateResult })
                 if (meiliCreateResult.status !== 'succeeded') {
                     log.error('failed to audio in meilisearch')
                     throw new Error('failed to upload audio')
                 }
+
+                // ------------------------------------------------------------------------- prepare audio in db
+                log.info('prepare audio in db')
+
+                await runWithLogger(log, () => prepareAudioInDb(metadata))
 
                 // ------------------------------------------------------------------------- update audio info in DB, make it permanent and set content type
                 log.info('update audio info in DB, make it permanent and set content type')
@@ -267,18 +289,16 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
                 throw error
             }
-
-            await runWithLogger(log, () => prepareAudioInDb(metadata))
         } catch (err) {
             if (err instanceof UploadTooLargeError) {
-                if (!res.headersSent) res.status(402).json({ status: 'error', error: err.message });
+                // if (!res.headersSent) res.status(402).json({ status: 'error', error: err.message });
                 return;
             } else if (err instanceof InvalidMediaError) {
-                if (!res.headersSent) res.status(400).json({ status: 'error', error: err.message });
+                // if (!res.headersSent) res.status(400).json({ status: 'error', error: err.message });
                 return;
             } else {
                 log.error({ err }, 'Audio upload failed');
-                if (!res.headersSent) res.status(500).json({ status: 'error', error: 'Upload failed' });
+                // if (!res.headersSent) res.status(500).json({ status: 'error', error: 'Upload failed' });
                 return;
             }
         } finally {
@@ -289,7 +309,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             }
         }
 
-        res.status(201).json({ status: 'success', data: temporaryAudio });
+        // res.status(201).json({ status: 'success', data: temporaryAudio });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
@@ -389,7 +409,7 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
                 throw new Error('failed to create artist in meilisearch')
             }
 
-            const meiliCreateResult = await meiliAudio.create({ title: newAudio.title, lyrics: newAudio.tags?.lyrics }, { wait: true })
+            const meiliCreateResult = await meiliAudio.create({ _id: updates.audioId, title: newAudio.title, lyrics: newAudio.tags?.lyrics }, { wait: true })
             log.debug({ meiliCreateResult })
             if (meiliCreateResult.status !== 'succeeded') {
                 log.warn('failed to create audio title or lyrics in meilisearch')
@@ -417,7 +437,7 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
                 // ------------------------------------------------------------------------- create meilisearch album
                 log.info('create meilisearch album')
 
-                const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ name: newAudio.tags!.album! }))
+                const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ _id: createResult.insertedId.toString(), name: newAudio.tags!.album! }))
                 log.debug({ meiliResult })
                 if (meiliResult.status !== 'succeeded') {
                     log.warn('Failed to create album in meilisearch')
@@ -450,7 +470,7 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
                         // ------------------------------------------------------------------------- create meilisearch artist
                         log.info('create meilisearch artist')
 
-                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name: an }))
+                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ _id: createResult.insertedId.toString(), name: an }))
                         log.debug({ meiliResult })
                         if (meiliResult.status !== 'succeeded') {
                             log.warn('failed to create artist in meilisearch')

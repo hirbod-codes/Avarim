@@ -68,7 +68,7 @@ export async function prepareAudioInDb(metadata: ExtractionResult) {
                         // ------------------------------------------------------------------------- create meilisearch artist(s)
                         log.info('create meilisearch artist(s)')
 
-                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
+                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ _id: createResult.insertedId.toString(), name }))
                         log.debug({ meiliResult })
                         if (meiliResult.status !== 'succeeded') {
                             log.warn('Failed to create artist')
@@ -86,10 +86,11 @@ export async function prepareAudioInDb(metadata: ExtractionResult) {
             log.info('create the album')
 
             const album = await runWithLogger(log, () => albumRepository.getByName(tags.album!));
+            log.debug({ album })
             if (!album) {
-                const updateResult = await runWithLogger(log, () => albumRepository.insert({ name: tags.album! }));
-                log.debug({ updateResult })
-                if (!updateResult.acknowledged) {
+                const createResult = await runWithLogger(log, () => albumRepository.insert({ name: tags.album! }));
+                log.debug({ createResult })
+                if (!createResult.acknowledged) {
                     log.warn('Failed to create album')
                     throw new Error('Failed to create album')
                 }
@@ -97,7 +98,7 @@ export async function prepareAudioInDb(metadata: ExtractionResult) {
                 // ------------------------------------------------------------------------- create meilisearch album
                 log.info('create meilisearch album')
 
-                const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ name: tags.album! }))
+                const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ _id: createResult.insertedId.toString(), name: tags.album! }))
                 log.debug({ meiliResult })
                 if (meiliResult.status !== 'succeeded') {
                     log.warn('Failed to create album')

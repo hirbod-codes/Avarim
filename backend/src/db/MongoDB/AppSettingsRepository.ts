@@ -6,8 +6,7 @@ import { collectionName, AppSettings, AppSettingsUpdate, AppSettingsKey } from '
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import { Redis } from '../redis';
 
-export default class AppSettingsRepository implements IRepository, ISeedable, IDropable {
-    IDropable: 'IDropable' = 'IDropable';
+export default class AppSettingsRepository implements IRepository, ISeedable {
     IRepository: 'IRepository' = 'IRepository';
     ISeedable: 'ISeedable' = 'ISeedable';
 
@@ -40,10 +39,6 @@ export default class AppSettingsRepository implements IRepository, ISeedable, ID
             await db.createIndex(collectionName, { key: 1 }, { unique: true, name: 'unique-key' })
 
         AppSettingsRepository.collection = (await MongoDB.getDb()).collection<AppSettings>(collectionName)
-    }
-
-    async dropCollection(db: Db): Promise<void> {
-        await db.dropCollection(collectionName)
     }
 
     async getByKey(key: AppSettings['key']): Promise<false | undefined | WithId<AppSettings>> {

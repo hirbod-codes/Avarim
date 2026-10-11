@@ -66,6 +66,9 @@ import { registerProcessErrorHandlers } from './middlewares/processErrorHandlers
 import { OtpFactory } from './services/OTP/OtpFactory';
 import { PaymentFactory } from './services/Payments/factory';
 import { SmtpFactory } from './services/SMTP/SmtpFactory';
+import AlbumRepository from './db/MongoDB/AlbumRepository';
+import ArtistRepository from './db/MongoDB/ArtistRepository';
+import ArtistAlbumAudioRepository from './db/MongoDB/ArtistAlbumAudioRepository';
 
 export const s3 = new S3Client({
     region: 'us-east-1',
@@ -115,7 +118,10 @@ export const payments = {
             // db.addRepository(new UsageRepository())
             db.addRepository(new UserRepository())
             db.addRepository(new InvalidTokensRepository())
+            db.addRepository(new ArtistRepository())
+            db.addRepository(new AlbumRepository())
             db.addRepository(new AudioRepository())
+            db.addRepository(new ArtistAlbumAudioRepository())
 
             // if (!isProduction)
             //     await MongoDB.getDbInstance().dropSeedableCollections()

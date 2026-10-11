@@ -1,10 +1,10 @@
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
-import { accessTokenSecret } from '../../configs';
+import { accessTokenSecret, isProduction } from '../../configs';
 import { Redis } from '../../db/redis';
 import { getLogger } from '../../observability/requestLoggerContext';
 
-const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+const ACCESS_TOKEN_TTL_SECONDS = isProduction ? 15 * 60 : 60 * 60;
 
 export interface AccessTokenPayload extends jwt.JwtPayload {
     userId: string;

@@ -20,6 +20,7 @@ const shape = {
 };
 
 const search = {
+    _id: string().required(),
     name: string().required(),
 }
 
