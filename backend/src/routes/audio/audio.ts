@@ -5,7 +5,7 @@ import AudioRepository from '../../db/MongoDB/AudioRepository';
 import { generateStreamToken, verifyStreamToken } from '../../lib/signed_urls';
 import { pipeline } from 'stream/promises';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
-import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, postApproveSchema } from './schemas';
+import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, postApproveSchema, isUploadFinished } from './schemas';
 import { handleError, validate } from '../../lib';
 import { deleteFromS3, detectContentType, getS3ObjectStream, receiveUpload, uploadToS3 } from '../../lib/file_management';
 import { generateWebCompatibleCopy, isWebCompatible } from '../../ffmpeg';
@@ -59,7 +59,7 @@ router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) =>
             return res.status(400).json({ status: 'error', error_code: 'TITLE_NOT_UNIQUE' });
         }
 
-        res.status(204).json({ status: 'success' })
+        res.status(204).json({ status: 'success', data: true })
     } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
@@ -72,9 +72,9 @@ router.get('/is_upload_finished', auth, isAdminIfAuthenticated, async (req, res)
         log.info('audio upload finish check request received');
 
         log.debug({ query: req.query });
-        const { title } = await runWithLogger(log, () => validate(postSchema, req.query))
+        const { audioId } = await runWithLogger(log, () => validate(isUploadFinished, req.query))
         log.info('input validated');
-        log.debug({ title });
+        log.debug({ audioId });
 
         const userId = req.user!.userId
         log = log.child({ userId });
@@ -84,10 +84,12 @@ router.get('/is_upload_finished', auth, isAdminIfAuthenticated, async (req, res)
         // ------------------------------------------------------------------------- checking whether title already exists
         log.info('checking whether title already exists')
 
-        const audio = await runWithLogger(log, () => audioRepository.getByTitleUnsafe(title));
+        const audio = await runWithLogger(log, () => audioRepository.getUnsafe(audioId));
         log.debug({ audio });
 
-        audio?.temporary !== true ? res.status(201).json({ status: 'success' }) : res.status(400).json({ status: 'error', error_code: 'UNFINISHED_UPLOAD' })
+        if (!audio) return res.status(500).json({ status: 'error', error_code: 'JOB_FAILED' });
+
+        audio.temporary !== true ? res.status(201).json({ status: 'success', data: true }) : res.status(400).json({ status: 'queued', error_code: 'UNFINISHED_UPLOAD' })
     } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
@@ -98,6 +100,11 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
     try {
         log.info('audio upload request received');
+
+        log.debug({ query: req.query });
+        const { title: userTitle } = await runWithLogger(log, () => validate(postSchema, req.query));
+        log.info('Input validated');
+        log.debug({ userTitle });
 
         const userId = req.user!.userId
         log = log.child({ userId });
@@ -158,7 +165,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
             const fileNameSegments = basename(inputPath).split('.')
             if (fileNameSegments.length > 1) fileNameSegments.pop()
-            const title = metadata.tags.audioTitle ?? fileNameSegments[fileNameSegments.length - 1]
+            const title = userTitle ?? metadata.tags.audioTitle ?? fileNameSegments[fileNameSegments.length - 1]
             log.debug({ title })
 
             // ------------------------------------------------------------------------- checking whether title or sha256 already exists
@@ -187,7 +194,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             const audioId = audioInsertResult.insertedId.toString()
             log.debug({ audioId })
 
-            res.status(200).json({ status: 'queued', data: { title: temporaryAudio.title } })
+            res.status(200).json({ status: 'queued', data: { id: temporaryAudio._id.toString() } })
 
             // ------------------------------------------------------------------------- set bucket keys
             log.info('set bucket keys')
@@ -253,7 +260,6 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
                 // ------------------------------------------------------------------------- prepare audio in db
                 log.info('prepare audio in db')
-
                 await runWithLogger(log, () => prepareAudioInDb(metadata))
 
                 // ------------------------------------------------------------------------- update audio info in DB, make it permanent and set content type
@@ -316,7 +322,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 })
 
 router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'POST /api/audio/approve' });
+    let log = getLogger().child({ module: 'audio', route: 'POST /api/audio/' });
 
     let db
     try {
@@ -671,7 +677,7 @@ router.get('/file/:audioId', auth, async (req, res) => {
 
 // For web applications
 router.get('/file/web/:audioId/:token', async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/file/:audioId/:token' });
+    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/file/web/:audioId/:token' });
 
     try {
         log.info('Web audio file request received');

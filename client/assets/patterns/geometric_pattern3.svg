@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Persian ornamental seamless pattern</title>
+  <desc>Seamless Persian-inspired floral and arabesque pattern suitable for app backgrounds.</desc>
+
+  <defs>
+    <!-- Colors -->
+    <g id="palette">
+      <rect x="0" y="0" width="512" height="512" fill="#0B1930"/>
+    </g>
+
+    <!-- 8-point star -->
+    <g id="star8">
+      <path d="M0,-39 L9,-15 L28,-28 L15,-9 L39,0 L15,9 L28,28 L9,15 L0,39 L-9,15 L-28,28 L-15,9 L-39,0 L-15,-9 L-28,-28 L-9,-15 Z" fill="#C9A45C"/>
+      <path d="M0,-25 L6,-8 L19,-19 L8,-6 L25,0 L8,6 L19,19 L6,8 L0,25 L-6,8 L-19,19 L-8,6 L-25,0 L-8,-6 L-19,-19 L-6,-8 Z" fill="#123B52"/>
+      <circle r="6" fill="#E8D4AA"/>
+    </g>
+
+    <!-- Small Shah Abbasi rosette -->
+    <g id="rosette">
+      <g fill="#D9B46C" stroke="#6F8F6B" stroke-width="1.2">
+        <path d="M0,-28 C-13,-22 -16,-10 0,0 C16,-10 13,-22 0,-28 Z"/>
+        <path d="M28,0 C22,-13 10,-16 0,0 C10,16 22,13 28,0 Z"/>
+        <path d="M0,28 C13,22 16,10 0,0 C-16,10 -13,22 0,28 Z"/>
+        <path d="M-28,0 C-22,13 -10,16 0,0 C-10,-16 -22,-13 -28,0 Z"/>
+      </g>
+      <g fill="#2F8194">
+        <path d="M0,-18 C-9,-14 -10,-7 0,0 C10,-7 9,-14 0,-18 Z"/>
+        <path d="M18,0 C14,-9 7,-10 0,0 C7,10 14,9 18,0 Z"/>
+        <path d="M0,18 C9,14 10,7 0,0 C-10,7 -9,14 0,18 Z"/>
+        <path d="M-18,0 C-14,9 -7,10 0,0 C-7,-10 -14,-9 -18,0 Z"/>
+      </g>
+      <circle r="7" fill="#C4563A" stroke="#F0DFC0" stroke-width="2"/>
+      <circle r="2.5" fill="#F0DFC0"/>
+    </g>
+
+    <!-- Persian leaf -->
+    <g id="leaf">
+      <path d="M0,0 C-18,-8 -25,-25 -18,-38 C-5,-35 5,-23 0,0 Z" fill="#2C7A72"/>
+      <path d="M0,0 C-6,-13 -10,-24 -11,-35" fill="none" stroke="#C9A45C" stroke-width="2" stroke-linecap="round"/>
+    </g>
+
+    <!-- Tulip / cypress-flower form -->
+    <g id="tulip">
+      <path d="M0,28 C-11,18 -17,5 -15,-11 C-14,-22 -7,-33 0,-40
+               C7,-33 14,-22 15,-11 C17,5 11,18 0,28 Z" fill="#C4563A" stroke="#D7B56B" stroke-width="2"/>
+      <path d="M0,22 C-5,11 -5,0 0,-16 C5,0 5,11 0,22 Z" fill="#2F8194"/>
+      <path d="M-7,24 C-17,19 -24,11 -25,2 C-18,2 -10,5 -4,11 Z" fill="#6F8F6B"/>
+      <path d="M7,24 C17,19 24,11 25,2 C18,2 10,5 4,11 Z" fill="#6F8F6B"/>
+    </g>
+
+    <!-- Arabesque corner vine -->
+    <g id="vine">
+      <path d="M0,0 C26,8 42,26 55,55 C70,89 89,105 126,114" fill="none" stroke="#C9A45C" stroke-width="4" stroke-linecap="round"/>
+      <path d="M20,14 C48,20 73,42 86,67" fill="none" stroke="#C9A45C" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M48,44 C66,67 72,84 76,108" fill="none" stroke="#C9A45C" stroke-width="2" stroke-linecap="round"/>
+      <g transform="translate(31 25) rotate(38) scale(.75)">
+        <use href="#leaf"/>
+      </g>
+      <g transform="translate(57 50) rotate(80) scale(.63)">
+        <use href="#leaf"/>
+      </g>
+      <g transform="translate(79 79) rotate(118) scale(.7)">
+        <use href="#leaf"/>
+      </g>
+      <g transform="translate(100 100) rotate(158) scale(.55)">
+        <use href="#leaf"/>
+      </g>
+      <g transform="translate(16 6) rotate(125) scale(.58)">
+        <use href="#leaf"/>
+      </g>
+    </g>
+
+    <!-- Boteh-inspired paisley -->
+    <g id="boteh">
+      <path d="M0,78
+               C-37,55 -56,24 -49,-9
+               C-42,-39 -21,-63 8,-80
+               C23,-64 35,-46 36,-27
+               C37,-8 28,7 13,15
+               C30,10 42,16 49,28
+               C63,53 39,73 0,78 Z" fill="#173A4D" stroke="#C9A45C" stroke-width="3"/>
+      <path d="M0,57
+               C-22,38 -33,17 -30,-4
+               C-27,-25 -11,-43 6,-53
+               C15,-41 20,-30 19,-18
+               C18,-8 12,0 4,5" fill="none" stroke="#2F8194" stroke-width="5" stroke-linecap="round"/>
+      <path d="M-2,45 C12,35 20,22 18,9" fill="none" stroke="#D9B46C" stroke-width="3" stroke-linecap="round"/>
+      <g transform="translate(-14 15) rotate(-20) scale(.52)">
+        <use href="#leaf"/>
+      </g>
+      <g transform="translate(13 31) rotate(35) scale(.46)">
+        <use href="#leaf"/>
+      </g>
+    </g>
+
+    <!-- Central medallion -->
+    <g id="medallion">
+      <path d="M0,-77
+               C13,-63 25,-62 39,-73
+               C36,-54 44,-45 63,-39
+               C47,-30 43,-18 50,0
+               C43,18 47,30 63,39
+               C44,45 36,54 39,73
+               C25,62 13,63 0,77
+               C-13,63 -25,62 -39,73
+               C-36,54 -44,45 -63,39
+               C-47,30 -43,18 -50,0
+               C-43,-18 -47,-30 -63,-39
+               C-44,-45 -36,-54 -39,-73
+               C-25,-62 -13,-63 0,-77 Z" fill="#DAB56A" stroke="#F0DFC0" stroke-width="2.5"/>
+      <path d="M0,-56
+               C12,-45 23,-44 34,-55
+               C31,-40 38,-31 53,-27
+               C39,-19 37,-9 43,0
+               C37,9 39,19 53,27
+               C38,31 31,40 34,55
+               C23,44 12,45 0,56
+               C-12,45 -23,44 -34,55
+               C-31,40 -38,31 -53,27
+               C-39,19 -37,9 -43,0
+               C-37,-9 -39,-19 -53,-27
+               C-38,-31 -31,-40 -34,-55
+               C-23,-44 -12,-45 0,-56 Z" fill="#0D2C43" stroke="#C9A45C" stroke-width="2"/>
+      <g transform="scale(.72)">
+        <use href="#star8"/>
+      </g>
+      <g transform="scale(.43)">
+        <use href="#rosette"/>
+      </g>
+    </g>
+  </defs>
+
+  <!-- Base -->
+  <use href="#palette"/>
+
+  <!-- Quiet geometric under-grid -->
+  <g fill="none" stroke="#214B5D" stroke-width="1.2" opacity=".62">
+    <path d="M0,128 L128,0 M0,384 L384,0 M128,512 L512,128
+             M0,384 L384,0 M128,512 L512,128 M0,128 L128,0
+             M0,0 L512,512 M0,512 L512,0"/>
+    <path d="M128,0 Q256,128 384,0 M0,128 Q128,256 0,384
+             M512,128 Q384,256 512,384 M128,512 Q256,384 384,512"/>
+  </g>
+
+  <!-- Main interlocking medallions -->
+  <g>
+    <g transform="translate(128 128)">
+      <use href="#medallion"/>
+    </g>
+    <g transform="translate(384 128)">
+      <use href="#medallion"/>
+    </g>
+    <g transform="translate(128 384)">
+      <use href="#medallion"/>
+    </g>
+    <g transform="translate(384 384)">
+      <use href="#medallion"/>
+    </g>
+  </g>
+
+  <!-- Boteh motifs between medallions -->
+  <g transform="translate(256 82) rotate(180) scale(.52)">
+    <use href="#boteh"/>
+  </g>
+  <g transform="translate(82 256) rotate(90) scale(.52)">
+    <use href="#boteh"/>
+  </g>
+  <g transform="translate(430 256) rotate(-90) scale(.52)">
+    <use href="#boteh"/>
+  </g>
+  <g transform="translate(256 430) scale(.52)">
+    <use href="#boteh"/>
+  </g>
+
+  <!-- Tulips -->
+  <g transform="translate(256 20) scale(.46)">
+    <use href="#tulip"/>
+  </g>
+  <g transform="translate(256 492) rotate(180) scale(.46)">
+    <use href="#tulip"/>
+  </g>
+  <g transform="translate(20 256) rotate(-90) scale(.46)">
+    <use href="#tulip"/>
+  </g>
+  <g transform="translate(492 256) rotate(90) scale(.46)">
+    <use href="#tulip"/>
+  </g>
+
+  <!-- Small rosettes -->
+  <g opacity=".98">
+    <g transform="translate(256 154) scale(.34)">
+      <use href="#rosette"/>
+    </g>
+    <g transform="translate(358 256) scale(.34)">
+      <use href="#rosette"/>
+    </g>
+    <g transform="translate(256 358) scale(.34)">
+      <use href="#rosette"/>
+    </g>
+    <g transform="translate(154 256) scale(.34)">
+      <use href="#rosette"/>
+    </g>
+
+    <g transform="translate(38 38) scale(.27)">
+      <use href="#rosette"/>
+    </g>
+    <g transform="translate(474 38) scale(.27)">
+      <use href="#rosette"/>
+    </g>
+    <g transform="translate(38 474) scale(.27)">
+      <use href="#rosette"/>
+    </g>
+    <g transform="translate(474 474) scale(.27)">
+      <use href="#rosette"/>
+    </g>
+  </g>
+
+  <!-- Flowing corner arabesques -->
+  <g opacity=".9">
+    <g transform="translate(0 0)">
+      <use href="#vine"/>
+    </g>
+    <g transform="translate(512 0) scale(-1 1)">
+      <use href="#vine"/>
+    </g>
+    <g transform="translate(0 512) scale(1 -1)">
+      <use href="#vine"/>
+    </g>
+    <g transform="translate(512 512) scale(-1 -1)">
+      <use href="#vine"/>
+    </g>
+
+    <g transform="translate(128 0) rotate(90) scale(.75)">
+      <use href="#vine"/>
+    </g>
+    <g transform="translate(384 0) rotate(90) scale(.75)">
+      <use href="#vine"/>
+    </g>
+  </g>
+
+  <!-- Fine ornamental dots -->
+  <g fill="#F0DFC0">
+    <circle cx="256" cy="256" r="2.2"/>
+    <circle cx="256" cy="0" r="2"/>
+    <circle cx="256" cy="512" r="2"/>
+    <circle cx="0" cy="256" r="2"/>
+    <circle cx="512" cy="256" r="2"/>
+  </g>
+</svg>

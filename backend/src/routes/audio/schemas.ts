@@ -3,19 +3,23 @@ import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from '../schemas';
 import { number } from "yup";
 import { audioPatchSchema } from "../../db/models/Audio";
 
+export const isUploadFinished = object().required().shape({
+    audioId: string().required().label('Audio Id'),
+})
+
 export const postSchema = object().required().shape({
-    title: string().required().label('Title'),
+    title: string().optional().label('Title'),
 })
 
 export const postApproveSchema = audioPatchSchema.shape({
     audioId: string().required().label('Audio Id'),
-}).required().strict().stripUnknown()
+}).required().stripUnknown()
 
 export const listQuerySchema = object().required().shape({
     search: string().max(5000).optional(),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
     pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-}).required().strict().stripUnknown()
+}).required().stripUnknown()
 
 export const infoQuerySchema = object().required().shape({
     audioId: string().objectIdString().optional().label('Audio id').when('title', {
@@ -36,33 +40,33 @@ export const infoQuerySchema = object().required().shape({
             return schema.notRequired()
         },
     }),
-}, [['audioId', 'title']]).required().strict().stripUnknown()
+}, [['audioId', 'title']]).required().stripUnknown()
 
 export const signedTokenQuerySchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id')
-}).required().strict().stripUnknown()
+}).required().stripUnknown()
 
 export const ttsQuerySchema = object().required().shape({
     text: string().max(500).required().label('Text'),
     authToken: string().max(500).required().label('Text'),
     userTtsApiKey: string().max(500).optional().label('Token'),
-}).required().strict().stripUnknown()
+}).required().stripUnknown()
 
 export const fileParamsSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
     download: string().optional().label('Download'),
-}).required().strict().stripUnknown()
+}).required().stripUnknown()
 
 export const webFileParamsSchema = object().required().shape({
     token: string().required().label('Token'),
     audioId: string().objectIdString().required().label('Audio id'),
     download: string().optional().label('Download'),
-}).required().strict().stripUnknown()
+}).required().stripUnknown()
 
 export const coverArtParamsSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
-}).required().strict().stripUnknown()
+}).required().stripUnknown()
 
 export const deleteParamsSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
-}).required().strict().stripUnknown()
+}).required().stripUnknown()

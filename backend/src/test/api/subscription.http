@@ -1,11 +1,41 @@
+@accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YWNhNDMxY2Y4Yzg3MGI2OTc4ODAzZjgiLCJqdGkiOiI1ZDg3MjI5OTMwYTQ3MjRlMDFiNGEwZjQ5OTQ3MGFiNiIsImV4cCI6MTc5MTczNzQ4NywiaWF0IjoxNzkxNzMzODg3fQ.EwfzyDnonlTl0KO-7JLYqeJDgEkdyWqhFLwLLJG-olU
+@refreshToken=XmPrxdwTdf0Fs7UPxn0n3CJwhH4MvYhxEEvAOkhrkJQ
+
+### /auth/otp/request
+# @name otp_request
+POST https://localhost:3000/api/auth/otp/request HTTP/1.1
+Content-Type: application/json
+
+{
+    "phoneNumber": "{{$dotenv testUserPoneNumber}}"
+}
+
+### /auth/otp/verify
+# @name otp_verify
+# @prompt code
+POST https://localhost:3000/api/auth/otp/verify HTTP/1.1
+Content-Type: application/json
+
+{
+    "phoneNumber": "{{$dotenv testUserPoneNumber}}",
+    "code": "{{code}}",
+    "client": "mobile"
+}
 
 ### name=audio upload
-POST https://localhost:3000/api/audio?title=test01
+# @name upload_audio
+POST https://localhost:3000/api/audio HTTP/1.1
 Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+Authorization: bearer {{accessToken}}
 
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
 Content-Disposition: form-data; name="audio"; filename="1.png"
 Content-Type: audio/flac
 
-< ./test01.flac
+< ./test02.flac
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### name=audio upload
+# @name is_upload_finished
+GET https://localhost:3000/api/audio/is_upload_finished?title=d44a6804-8590-45fb-9014-0985815a5785__AUDIO_TITLE_SEPARATOR__5f2a5bf8-7871-43b4-8b70-21b539837855-input HTTP/1.1
+Authorization: bearer {{accessToken}}
