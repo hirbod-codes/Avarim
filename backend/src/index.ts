@@ -71,6 +71,7 @@ import ArtistRepository from './db/MongoDB/ArtistRepository';
 import ArtistAlbumAudioRepository from './db/MongoDB/ArtistAlbumAudioRepository';
 import { artistRoutes } from './routes/artist/artist';
 import { albumRoutes } from './routes/album/album';
+import { playlistRoutes } from './routes/playlist/playlist';
 
 export const s3 = new S3Client({
     region: 'us-east-1',
@@ -194,6 +195,7 @@ export const payments = {
     app.use('/api/artist', artistRoutes);
     app.use('/api/album', albumRoutes);
     app.use('/api/audio', audioRoutes);
+    app.use('/api/playlist', playlistRoutes);
     // app.use('/api/subscription', subscriptionRoutes);
     // app.use('/api/plan', planRoutes);
 

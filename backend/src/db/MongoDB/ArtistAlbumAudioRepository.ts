@@ -55,8 +55,12 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return (await ArtistAlbumAudioRepository.collection!.find({ _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
     }
 
-    async getByArtistName(artistName: string): Promise<WithId<ArtistAlbumAudio>> {
-        return (await ArtistAlbumAudioRepository.collection!.find({ artistName }, { session: this.session }).toArray())[0]
+    async getManyByAlbumName(albumName: string): Promise<WithId<ArtistAlbumAudio>[]> {
+        return await ArtistAlbumAudioRepository.collection!.find({ albumName }, { session: this.session }).toArray()
+    }
+
+    async getManyByArtistName(artistName: string): Promise<WithId<ArtistAlbumAudio>[]> {
+        return await ArtistAlbumAudioRepository.collection!.find({ artistName }, { session: this.session }).toArray()
     }
 
     async getManyByAlbumNameByAudioTitle(albumName: string, audioTitle: string): Promise<WithId<ArtistAlbumAudio>[]> {

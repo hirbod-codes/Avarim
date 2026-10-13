@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { avatarParamsSchema, deleteParamsSchema, listQuerySchema, postSchema } from './schemas';
+import { artistListQuerySchema, audioListQuerySchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
 import AlbumRepository from '../../db/MongoDB/AlbumRepository';
 import { meiliAlbum } from '../../db/meilisearch';
 import { Album, getAvatarKey } from '../../db/models/Album';
@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { mkdir, rm, unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { MongoDB } from '../../db/MongoDB/mongodb';
+import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 
 const ALBUM_NAME_SEPARATOR = '__ALBUM_NAME_SEPARATOR__'
 
@@ -89,6 +90,105 @@ router.get('/', auth, async (req, res) => {
 
         log.info('Listed albums');
         res.status(200).json({ status: 'success', data: items });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.get('/info', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'album', route: 'GET /api/album/info' });
+
+    try {
+        log.info('album info request received');
+
+        log.debug({ query: req.query });
+        const { albumId, name } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
+        log.info('Input validated');
+        log.debug({ albumId, name });
+
+        const userId = req.user!.userId;
+        log = log.child({ userId });
+
+        const albumRepository = new AlbumRepository();
+
+        log.info('fetch from albumRepository')
+
+        let album
+        if (albumId)
+            album = await runWithLogger(log, () => albumRepository.get(albumId))
+        else
+            album = await runWithLogger(log, () => albumRepository.getByName(name!))
+
+        log.debug({ album });
+
+        if (!album) {
+            log.info('album not found')
+            return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' });
+        }
+
+        res.status(200).json({ status: 'success', data: album });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.get('/artist', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'GET /api/album/artist' });
+
+    try {
+        log.info('album artist list request received');
+
+        log.debug({ query: req.query });
+        const { albumName } = await runWithLogger(log, () => validate(artistListQuerySchema, req.query));
+        log.info('Input validated');
+        log.debug({ albumName });
+
+        const userId = req.user!.userId;
+        log = log.child({ userId });
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        let artistAlbumAudios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyByAlbumName(albumName))
+        log.debug({ artistAlbumAudios });
+
+        const artistNames: string[] = []
+        artistAlbumAudios.forEach(f => {
+            if (!artistNames.includes(f.artistName))
+                artistNames.push(f.artistName)
+        });
+
+        res.status(200).json({ status: 'success', data: artistNames });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.get('/audio', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'GET /api/album/audio' });
+
+    try {
+        log.info('album audio list request received');
+
+        log.debug({ query: req.query });
+        const { albumName } = await runWithLogger(log, () => validate(audioListQuerySchema, req.query));
+        log.info('Input validated');
+        log.debug({ albumName });
+
+        const userId = req.user!.userId;
+        log = log.child({ userId });
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        let artistAlbumAudios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyByAlbumName(albumName))
+        log.debug({ artistAlbumAudios });
+
+        const audioTitles: string[] = []
+        artistAlbumAudios.forEach(f => {
+            if (!audioTitles.includes(f.audioTitle))
+                audioTitles.push(f.audioTitle)
+        });
+
+        res.status(200).json({ status: 'success', data: audioTitles });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

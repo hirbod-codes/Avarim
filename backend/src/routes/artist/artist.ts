@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { avatarParamsSchema, deleteParamsSchema, listQuerySchema, postSchema } from './schemas';
+import { albumListQuerySchema, avatarParamsSchema, deleteParamsSchema, listQuerySchema, postSchema } from './schemas';
 import ArtistRepository from '../../db/MongoDB/ArtistRepository';
 import { meiliArtist } from '../../db/meilisearch';
 import { Artist, getAvatarKey, getBannerKey } from '../../db/models/Artist';
@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { mkdir, rm, unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { MongoDB } from '../../db/MongoDB/mongodb';
+import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 
 const ARTIST_NAME_SEPARATOR = '__ARTIST_NAME_SEPARATOR__'
 
@@ -141,6 +142,37 @@ router.get('/avatar/:artistId', auth, async (req, res) => {
 
         log.info('Streaming avatar to client');
         stream.pipe(res);
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.get('/album', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/album' });
+
+    try {
+        log.info('artist album list request received');
+
+        log.debug({ query: req.query });
+        const { artistName } = await runWithLogger(log, () => validate(albumListQuerySchema, req.query));
+        log.info('Input validated');
+        log.debug({ artistName });
+
+        const userId = req.user!.userId;
+        log = log.child({ userId });
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        let artistAlbumAudios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyByArtistName(artistName))
+        log.debug({ artistAlbumAudios });
+
+        const albums: string[] = []
+        artistAlbumAudios.forEach(f => {
+            if (!albums.includes(f.albumName))
+                albums.push(f.albumName)
+        });
+
+        res.status(200).json({ status: 'success', data: albums });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

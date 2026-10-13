@@ -2,7 +2,6 @@ import 'package:avarim/account/avatar/avatar_bytes_notifier.dart';
 import 'package:avarim/auth/auth_controller.dart';
 import 'package:avarim/auth/auth_state.dart';
 import 'package:avarim/components/button.dart';
-import 'package:avarim/components/theme_swtich_button.dart';
 import 'package:avarim/l10n/app_localizations.dart';
 import 'package:avarim/theme/app_colors.dart';
 import 'package:avarim/theme/app_theme.dart';

@@ -16,6 +16,7 @@
 
 import 'dart:async';
 
+import 'package:avarim/account/user_info_notifier.dart';
 import 'package:avarim/api/api_call.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/api/models/album.dart';
@@ -23,12 +24,15 @@ import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:avarim/auth/token_storage.dart';
+import 'package:avarim/components/button.dart';
 import 'package:avarim/components/contents/now_playing_dock.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/lib/talker.dart';
+import 'package:avarim/theme/app_colors.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config (assumptions - customize)
@@ -325,6 +329,8 @@ class _MusicSearchPageState extends ConsumerState<SearchPage> with SingleTickerP
   late final TabController _tabs = TabController(length: SearchTab.values.length, vsync: this);
   final _text = TextEditingController();
 
+  bool _editing = false;
+
   @override
   void initState() {
     super.initState();
@@ -344,33 +350,51 @@ class _MusicSearchPageState extends ConsumerState<SearchPage> with SingleTickerP
   Widget build(BuildContext context) {
     final tab = ref.watch(musicSearchProvider.select((s) => s.tab));
     final notifier = ref.read(musicSearchProvider.notifier);
+    final ui = ref.read(userInfoProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: TextField(
-          controller: _text,
-          textInputAction: TextInputAction.search,
-          onChanged: notifier.onQueryChanged,
-          onSubmitted: notifier.submit,
-          decoration: InputDecoration(
-            hintText: 'Search ${tab.label.toLowerCase()}',
-            isDense: true,
-            filled: true,
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _text,
-              builder: (context, value, child) => value.text.isEmpty
-                  ? const SizedBox.shrink()
-                  : IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _text.clear();
-                        notifier.submit('');
-                      },
-                    ),
+        title: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _text,
+                textInputAction: TextInputAction.search,
+                onChanged: notifier.onQueryChanged,
+                onSubmitted: notifier.submit,
+                decoration: InputDecoration(
+                  hintText: 'Search ${tab.label.toLowerCase()}',
+                  isDense: true,
+                  filled: true,
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _text,
+                    builder: (context, value, child) => value.text.isEmpty
+                        ? const SizedBox.shrink()
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _text.clear();
+                              notifier.submit('');
+                            },
+                          ),
+                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+                ),
+              ),
             ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
-          ),
+            if (ui.info?.role == 'admin')
+              Button(
+                type: ButtonType.text,
+                iconSize: 24,
+                icon: _editing ? Icons.remove_red_eye_outlined : Icons.edit_square,
+                onPressed: () {
+                  setState(() {
+                    _editing = !_editing;
+                  });
+                },
+              ),
+          ],
         ),
         bottom: TabBar(
           controller: _tabs,
@@ -381,7 +405,7 @@ class _MusicSearchPageState extends ConsumerState<SearchPage> with SingleTickerP
         children: [
           TabBarView(
             controller: _tabs,
-            children: [for (final t in SearchTab.values) _ResultsList(tab: t, mode: widget.loadMoreMode, onItemTap: widget.onItemTap)],
+            children: [for (final t in SearchTab.values) _ResultsList(tab: t, mode: widget.loadMoreMode, onItemTap: widget.onItemTap, editing: _editing)],
           ),
           // Floating, minimizable player. Taps outside the panel fall through to the list.
           const Align(alignment: Alignment.bottomCenter, child: NowPlayingDock()),
@@ -396,11 +420,12 @@ class _MusicSearchPageState extends ConsumerState<SearchPage> with SingleTickerP
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ResultsList extends ConsumerStatefulWidget {
-  const _ResultsList({required this.tab, required this.mode, this.onItemTap});
+  const _ResultsList({required this.tab, required this.mode, this.onItemTap, this.editing = false});
 
   final SearchTab tab;
   final LoadMoreMode mode;
   final ValueChanged<WithId>? onItemTap;
+  final bool editing;
 
   @override
   ConsumerState<_ResultsList> createState() => _ResultsListState();
@@ -486,10 +511,11 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
         itemBuilder: (context, i) {
           if (i < r.items.length) {
             final item = r.items[i];
-            return _ResultTile(
+            return ResultTile(
               item: item,
               isPlaying: item is Audio && item.id == playingId,
               onTap: (item is Audio || widget.onItemTap != null) ? () => _onTap(item) : null,
+              editing: widget.editing,
             );
           }
           return _Footer(isLoadingMore: r.isLoadingMore, hasError: r.error != null, onLoadMore: _loadMore, onRetry: () => _loadMore(retry: true));
@@ -560,8 +586,10 @@ class _Message extends StatelessWidget {
 
 String _joinParts(List<String?> parts) => parts.whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 
-class _ResultTile extends StatelessWidget {
-  const _ResultTile({required this.item, this.onTap, this.isPlaying = false});
+class ResultTile extends ConsumerStatefulWidget {
+  const ResultTile({super.key, required this.item, this.onTap, this.isPlaying = false, this.editing = false});
+
+  final bool editing;
 
   final WithId item;
   final VoidCallback? onTap;
@@ -570,26 +598,73 @@ class _ResultTile extends StatelessWidget {
   final bool isPlaying;
 
   @override
+  ConsumerState<ConsumerStatefulWidget> createState() => _ResultTile();
+}
+
+class _ResultTile extends ConsumerState<ResultTile> {
+  bool _isDeleting = false;
+
+  @override
   Widget build(BuildContext context) {
-    return switch (item) {
+    final theme = Theme.of(context);
+
+    return switch (widget.item) {
       Artist a => ListTile(
-        onTap: onTap,
+        onTap: widget.onTap,
         leading: Thumb(url: '/api/artist/avatar/${a.id}', icon: Icons.person, circular: true),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       Album a => ListTile(
-        onTap: onTap,
+        onTap: widget.onTap,
         leading: Thumb(url: '/api/album/avatar/${a.id}', icon: Icons.album),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: _subtitle([a.name]),
       ),
       Audio a => ListTile(
-        onTap: onTap,
-        selected: isPlaying,
+        onTap: widget.onTap,
+        selected: widget.isPlaying,
         leading: Thumb(url: '/api/audio/coverArt/${a.id}', icon: Icons.music_note),
         title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: _subtitle([a.tags?.artists.join(', '), a.tags?.album]),
-        trailing: a.technical?.durationSec == null ? null : Text(_formatDuration(a.technical!.durationSec!.round())),
+        trailing: !widget.editing
+            ? a.technical?.durationSec == null
+                  ? null
+                  : Text(_formatDuration(a.technical!.durationSec!.round()))
+            : Row(
+                children: [
+                  Button(
+                    type: ButtonType.text,
+                    color: theme.extension<AppColors>()!.success,
+                    icon: Icons.add_circle_outline,
+                    iconSize: 24,
+                    onPressed: () => context.go('/upload_audio?audioId=${a.id}'),
+                  ),
+                  Button(
+                    type: ButtonType.text,
+                    color: theme.colorScheme.error,
+                    icon: Icons.highlight_remove,
+                    isLoading: _isDeleting,
+                    iconSize: 24,
+                    onPressed: () async {
+                      setState(() {
+                        _isDeleting = true;
+                      });
+  
+                      try {
+                        await apiCall(() => ref.read(authDioProvider).delete('/api/audio/${a.id}'));
+                      } catch (err) {
+                        talker.error('caught error in onPressed callback of a delete button of an audio', err);
+                      } finally {
+                        if (mounted) {
+                          setState(() {
+                            _isDeleting = false;
+                          });
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
       ),
       WithId() => throw UnimplementedError(),
     };

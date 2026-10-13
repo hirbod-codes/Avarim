@@ -1,8 +1,9 @@
 import { type Index, type Task, type Settings, type SearchParams, type SearchResponse, type DocumentsQuery, type Filter, Meilisearch } from 'meilisearch';
 import { collectionName as audioCollection, AudioSearch } from "./models/Audio";
 import { meilisearchHost, meilisearchKey, meilisearchPort } from '../configs';
-import { ArtistSearch } from './models/Artist';
-import { AlbumSearch } from './models/Album';
+import { ArtistSearch, collectionName as artistCollection } from './models/Artist';
+import { AlbumSearch, collectionName as albumCollection } from './models/Album';
+import { collectionName as playlistCollection, PlaylistSearch } from './models/Playlist';
 
 /* ------------------------------------------------------------------ */
 /* Errors                                                             */
@@ -298,13 +299,19 @@ export const meiliAudio = new MeiliCrud<AudioSearch>(meili, audioCollection, {
     waitByDefault: true
 });
 
-export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, audioCollection, {
+export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, artistCollection, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
-export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, audioCollection, {
+export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, albumCollection, {
+    primaryKey: '_id',
+    settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
+    waitByDefault: true
+});
+
+export const meiliPlaylist = new MeiliCrud<PlaylistSearch>(meili, playlistCollection, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
