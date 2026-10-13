@@ -53,7 +53,7 @@ class _NavBar extends ConsumerState<NavBar> {
       navDestinations.add(
         NavDestinationItem(
           path: '/upload_audio',
-          label: (AppLocalizations l10n) => l10n.text,
+          label: (AppLocalizations l10n) => 'Upload Audio',
           icon: Icons.upload_file_outlined,
           selectedIcon: Icons.upload_file_rounded,
         ),

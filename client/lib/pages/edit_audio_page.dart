@@ -147,22 +147,15 @@ class UploadState {
   /// Bumped after each successful save so the form re-initializes from the new values.
   final int revision;
 
-  UploadState copyWith({
-    UploadPhase? phase,
-    String? title,
-    Map<String, dynamic>? audio,
-    String? error,
-    bool clearError = false,
-    bool? isSaving,
-    int? revision,
-  }) => UploadState(
-    phase: phase ?? this.phase,
-    id: title ?? this.id,
-    audio: audio ?? this.audio,
-    error: clearError ? null : (error ?? this.error),
-    isSaving: isSaving ?? this.isSaving,
-    revision: revision ?? this.revision,
-  );
+  UploadState copyWith({UploadPhase? phase, String? id, Map<String, dynamic>? audio, String? error, bool clearError = false, bool? isSaving, int? revision}) =>
+      UploadState(
+        phase: phase ?? this.phase,
+        id: id ?? this.id,
+        audio: audio ?? this.audio,
+        error: clearError ? null : (error ?? this.error),
+        isSaving: isSaving ?? this.isSaving,
+        revision: revision ?? this.revision,
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -177,6 +170,13 @@ class AudioUploadNotifier extends Notifier<UploadState> {
   int _consecutiveErrors = 0;
 
   AudioUploadApi get _api => ref.read(audioUploadApiProvider);
+
+  Future<void> startEditing(String id) async {
+    _stop();
+    final audio = await _api.getInfo(id);
+    if (!ref.mounted) return;
+    state = state.copyWith(phase: UploadPhase.editing, audio: audio);
+  }
 
   @override
   UploadState build() {
@@ -297,11 +297,25 @@ final audioUploadProvider = NotifierProvider.autoDispose<AudioUploadNotifier, Up
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 
-class AudioUploadPage extends ConsumerWidget {
-  const AudioUploadPage({super.key});
+class EditAudioPage extends ConsumerStatefulWidget {
+  final String? audioId;
+
+  const EditAudioPage({super.key, this.audioId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EditAudioPage> createState() => _EditAudioPage();
+}
+
+class _EditAudioPage extends ConsumerState<EditAudioPage> {
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.audioId != null) ref.read(audioUploadProvider.notifier).startEditing(widget.audioId!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(audioUploadProvider);
 
     final Widget body = switch (s.phase) {

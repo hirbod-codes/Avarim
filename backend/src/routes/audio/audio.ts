@@ -5,7 +5,7 @@ import AudioRepository from '../../db/MongoDB/AudioRepository';
 import { generateStreamToken, verifyStreamToken } from '../../lib/signed_urls';
 import { pipeline } from 'stream/promises';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
-import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, postApproveSchema, isUploadFinished } from './schemas';
+import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, postApproveSchema, isUploadFinished, isTitleUnique } from './schemas';
 import { handleError, validate } from '../../lib';
 import { deleteFromS3, detectContentType, getS3ObjectStream, receiveUpload, uploadToS3 } from '../../lib/file_management';
 import { generateWebCompatibleCopy, isWebCompatible } from '../../ffmpeg';
@@ -40,7 +40,7 @@ router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) =>
         log.info('audio title uniqueness check request received');
 
         log.debug({ query: req.query });
-        const { title } = await runWithLogger(log, () => validate(postSchema, req.query))
+        const { title } = await runWithLogger(log, () => validate(isTitleUnique, req.query))
         log.info('input validated');
         log.debug({ title });
 
@@ -754,7 +754,7 @@ router.get('/coverArt/:audioId', auth, async (req, res) => {
 });
 
 router.put('/coverArt/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/coverArt/:audioId' });
+    let log = getLogger().child({ module: 'audio', route: 'PUT /api/audio/coverArt/:audioId' });
 
     try {
         log.info('Cover art request received');

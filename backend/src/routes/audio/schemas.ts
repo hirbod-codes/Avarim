@@ -7,6 +7,10 @@ export const isUploadFinished = object().required().shape({
     audioId: string().required().label('Audio Id'),
 })
 
+export const isTitleUnique = object().required().shape({
+    title: string().required().label('Title'),
+})
+
 export const postSchema = object().required().shape({
     title: string().optional().label('Title'),
 })

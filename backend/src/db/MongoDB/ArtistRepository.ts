@@ -64,7 +64,7 @@ class ArtistRepository implements IRepository, ISeedable, IDropable {
     }
 
     async getPage(skip: number, limit: number): Promise<Artist[]> {
-        return await ArtistRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false }, { session: this.session }).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray()
+        return await ArtistRepository.collection!.find({}, { session: this.session }).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray()
     }
 
     async unsafeUpdate(artistId: string, updates: ArtistUpdate) {
@@ -78,10 +78,6 @@ class ArtistRepository implements IRepository, ISeedable, IDropable {
     async deleteBulk(ids: string[]): Promise<BulkWriteResult> {
         const bulkWrites: AnyBulkWriteOperation<any>[] = ids.map(id => ({ deleteOne: { filter: { _id: ObjectId.createFromHexString(id) } } }))
         return await ArtistRepository.collection!.bulkWrite(bulkWrites, { session: this.session })
-    }
-
-    async deleteTemporaries(): Promise<DeleteResult> {
-        return await ArtistRepository.collection!.deleteMany({ temporary: true }, { session: this.session })
     }
 }
 
