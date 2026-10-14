@@ -30,7 +30,33 @@ class AudioContainer extends ConsumerStatefulWidget {
   /// Called when the track finishes (used by the global player to advance the queue).
   final VoidCallback? onCompleted;
 
-  const AudioContainer({super.key, required this.audioId, this.height = 700, this.borderRadius, this.autoPlay = false, this.onCompleted});
+  /// Safe area for the player's content (the background / gradient still fills everything).
+  final EdgeInsets contentPadding;
+
+  /// Show previous / next buttons in the player. A null callback shows the button disabled.
+  final bool showQueueControls;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  /// When true (default) the container creates its own player (its own Riverpod scope).
+  /// The global dock passes false because it provides the scope itself, so that the mini
+  /// bar can control the same player.
+  final bool ownPlayerScope;
+
+  /// Pass `double.infinity` to fill the space the parent gives (tight constraints required).
+  const AudioContainer({
+    super.key,
+    required this.audioId,
+    this.height = 700,
+    this.borderRadius,
+    this.autoPlay = false,
+    this.onCompleted,
+    this.contentPadding = EdgeInsets.zero,
+    this.showQueueControls = false,
+    this.onPrevious,
+    this.onNext,
+    this.ownPlayerScope = true,
+  });
 
   @override
   ConsumerState<AudioContainer> createState() => _AudioContainerState();
@@ -88,31 +114,56 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
     });
   }
 
+  /// With a fixed height the placeholder states keep their old compact layout;
+  /// when asked to fill the parent (infinite height) they are centered in it.
+  Widget _placeholder(Widget child) => widget.height.isFinite ? child : SizedBox.expand(child: Center(child: child));
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     if (_loading) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [SizedBox(width: 48, height: 48, child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary))],
+      return _placeholder(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [SizedBox(width: 48, height: 48, child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary))],
+        ),
       );
     }
 
     AppLocalizations l10n = AppLocalizations.of(context)!;
 
     if (_audio == null) {
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [Text(l10n.audio_not_found)]),
+      return _placeholder(
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [Text(l10n.audio_not_found)]),
+        ),
       );
     }
     if (_token == null) {
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [Text(l10n.unauthenticated)]),
+      return _placeholder(
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [Text(l10n.unauthenticated)]),
+        ),
       );
     }
+
+    final screen = AudioPlayerScreen(
+      audioId: _audio!.id,
+      url: _url!,
+      headers: {'Authorization': 'Bearer ${_token!}'},
+      accessToken: _token!,
+      title: _audio!.title,
+      audio: _audio,
+      autoPlay: widget.autoPlay,
+      onCompleted: widget.onCompleted,
+      contentPadding: widget.contentPadding,
+      showQueueControls: widget.showQueueControls,
+      onPrevious: widget.onPrevious,
+      onNext: widget.onNext,
+    );
 
     return Container(
       height: widget.height,
@@ -121,19 +172,7 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
       clipBehavior: Clip.antiAlias,
-      child: ProviderScope(
-        overrides: [audioPlayerCommandsProvider],
-        child: AudioPlayerScreen(
-          audioId: _audio!.id,
-          url: _url!,
-          headers: {'Authorization': 'Bearer ${_token!}'},
-          accessToken: _token!,
-          title: _audio!.title,
-          audio: _audio,
-          autoPlay: widget.autoPlay,
-          onCompleted: widget.onCompleted,
-        ),
-      ),
+      child: widget.ownPlayerScope ? ProviderScope(overrides: [audioPlayerCommandsProvider], child: screen) : screen,
     );
   }
 }

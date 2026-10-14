@@ -2,17 +2,24 @@
 //
 // Global audio player + queue, callable from anywhere without a BuildContext:
 //
-//   AudioPlayerService.play(audioId: id);                          // replace queue, start playing
+//   AudioPlayerService.play(audioId: id);                          // replace queue, start playing (mini bar)
+//   AudioPlayerService.play(audioId: id, expand: true);            // ... and open the full-screen player
 //   AudioPlayerService.play(audioIds: ids, startIndex: 2);         // play a whole playlist
 //   AudioPlayerService.add(audioId: id);                           // append to the queue
 //   AudioPlayerService.add(audioIds: ids);                         // append many
 //   AudioPlayerService.remove(id);                                 // remove from the queue
 //   AudioPlayerService.next() / previous() / skipTo(i)
-//   AudioPlayerService.toggleMinimized() / close()
+//   AudioPlayerService.setMinimized(bool) / toggleMinimized() / close()
 //
 // Like NotificationService it inserts ONE persistent OverlayEntry into the root
-// navigator's overlay, so the dock is full-width, pinned to the bottom and stays
-// above every page you navigate to. Playback continues across navigation.
+// navigator's overlay, so the player stays above every page and keeps playing
+// across navigation.
+//
+// Two states:
+//   - minimized: a mini bar at the bottom (title, play/pause, expand, close)
+//   - expanded:  the player fills the whole screen (minimize + close at the top right)
+// Switching slides the player up/down while the mini bar slides the opposite way.
+// The player stays mounted while minimized (it is just off-screen), so playback continues.
 //
 // Requirements:
 //   - ProviderScope above MaterialApp (the player screen uses Riverpod).
@@ -27,21 +34,28 @@ import 'package:avarim/api/controllers/audio_controller.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/root_navigator_key.dart';
 import 'package:avarim/components/contents/audio_container.dart';
+import 'package:avarim/components/contents/players/audio/audio_player_interface.dart';
+import 'package:avarim/components/contents/players/audio/audio_player_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Height the player is laid out at. AudioPlayerScreen isn't scrollable and needs
-/// roughly 730px, so it is always built at this size and scaled DOWN (not cropped)
-/// when the screen can't fit it. Raise it if the player ever grows.
-const kPlayerDesignHeight = 760.0;
-
-/// Height of the always-visible bar.
+/// Height of the mini bar's content row.
 const kDockHeaderHeight = 64.0;
 
-/// Space the dock occupies when minimized (excluding the bottom safe-area inset).
-const kDockCollapsedExtent = kDockHeaderHeight;
+/// Thin progress line on top of the mini bar.
+const kDockProgressHeight = 2.0;
+
+/// Space the minimized dock occupies (excluding the bottom safe-area inset).
+const kDockCollapsedExtent = kDockHeaderHeight + kDockProgressHeight;
+
+/// Height reserved at the top of the full-screen player for the minimize / close buttons
+/// (on top of the status-bar inset).
+const kPlayerTopBarHeight = 56.0;
+
+const _kDockAnimation = Duration(milliseconds: 300);
+const _kDockCurve = Curves.easeInOutCubic;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -55,6 +69,8 @@ class AudioQueueState {
 
   /// Index of the current track in [ids].
   final int index;
+
+  /// true: mini bar only. false: full-screen player.
   final bool minimized;
 
   bool get isEmpty => ids.isEmpty;
@@ -66,7 +82,7 @@ class AudioQueueState {
       AudioQueueState(ids: ids ?? this.ids, index: index ?? this.index, minimized: minimized ?? this.minimized);
 }
 
-/// Title lookup for the dock header (the queue only stores ids).
+/// Title / artists lookup for the mini bar (the queue only stores ids).
 final _audioMetaProvider = FutureProvider.autoDispose.family<Audio?, String>((ref, id) => ref.read(audioControllerProvider).get(audioId: id));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,13 +102,18 @@ class AudioPlayerService {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /// Replaces the queue with [audioId] or [audioIds] and starts playing
-  /// [startIndex]. If the track that would play is already the current one it
-  /// keeps playing (no reload) and the dock is just brought back up.
-  static void play({String? audioId, List<String>? audioIds, int startIndex = 0}) {
+  /// [startIndex]. It starts in the mini bar; pass [expand] to open the
+  /// full-screen player right away. If the track that would play is already the
+  /// current one it keeps playing (no reload).
+  static void play({String? audioId, List<String>? audioIds, int startIndex = 0, bool expand = false}) {
     final ids = _normalize(audioId, audioIds);
     if (ids.isEmpty) return;
 
-    _state.value = AudioQueueState(ids: ids, index: math.min(math.max(startIndex, 0), ids.length - 1));
+    final index = math.min(math.max(startIndex, 0), ids.length - 1);
+    final previous = _state.value;
+    final sameTrack = !previous.isEmpty && previous.currentId == ids[index];
+
+    _state.value = AudioQueueState(ids: ids, index: index, minimized: expand ? false : (sameTrack ? previous.minimized : true));
     _ensureDock();
   }
 
@@ -145,7 +166,7 @@ class AudioPlayerService {
     _state.value = s.copyWith(index: index);
   }
 
-  /// No-op on the last track. Also what the player should call when a track finishes.
+  /// No-op on the last track. Also what the player calls when a track finishes.
   static void next() {
     final s = _state.value;
     if (s.hasNext) _state.value = s.copyWith(index: s.index + 1);
@@ -206,14 +227,9 @@ class _AudioDockOverlay extends StatelessWidget {
     return ValueListenableBuilder<AudioQueueState>(
       valueListenable: AudioPlayerService.queue,
       builder: (context, state, _) {
-        // Positioned.fill + Align: the dock gets bounded (loose) constraints, and
-        // the empty area around it doesn't swallow touches.
-        return Positioned.fill(
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: state.isEmpty ? const SizedBox.shrink() : _Dock(state: state),
-          ),
-        );
+        // Full-screen layer. It is transparent and lets touches through everywhere
+        // except on the mini bar / the expanded player.
+        return Positioned.fill(child: state.isEmpty ? const SizedBox.shrink() : _Dock(state: state));
       },
     );
   }
@@ -226,89 +242,130 @@ class _Dock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // One player (one Riverpod scope) per track, shared by the full-screen player
+    // and the mini bar, so the bar's play/pause controls the very same player.
+    Widget dock = ProviderScope(
+      key: ValueKey(state.currentId),
+      overrides: [audioPlayerCommandsProvider],
+      child: _DockBody(state: state),
+    );
+
+    // Android back button / gesture: minimize the full-screen player instead of popping the page behind it.
+    if (Router.maybeOf(context) != null) {
+      dock = BackButtonListener(
+        onBackButtonPressed: () async {
+          if (AudioPlayerService.queue.value.minimized) return false;
+          AudioPlayerService.setMinimized(true);
+          return true;
+        },
+        child: dock,
+      );
+    }
+
+    return dock;
+  }
+}
+
+class _DockBody extends StatelessWidget {
+  const _DockBody({required this.state});
+
+  final AudioQueueState state;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final insets = MediaQuery.paddingOf(context);
+    final minimized = state.minimized;
     final audioId = state.currentId!;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Never taller than the space we're given (small phones, short windows).
-        final available = constraints.maxHeight - bottomInset - kDockHeaderHeight;
-        final playerHeight = math.min(kPlayerDesignHeight, math.max(0.0, available));
-
-        return SizedBox(
-          width: double.infinity,
-          child: Material(
-            elevation: 12,
-            color: theme.colorScheme.surfaceContainerHigh,
-            clipBehavior: Clip.hardEdge,
-            child: Padding(
-              // The dock's color extends under the system navigation bar.
-              padding: EdgeInsets.only(bottom: bottomInset),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The player is always built; minimizing only animates its
-                  // visible height to 0 so playback isn't interrupted.
-                  ClipRect(
-                    child: AnimatedAlign(
-                      alignment: Alignment.topCenter,
-                      heightFactor: state.minimized ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeInOut,
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: playerHeight,
-                        child: ColoredBox(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: LayoutBuilder(
-                            builder: (context, box) {
-                              // The player is built at kPlayerDesignHeight and scaled DOWN (never up)
-                              // when the screen is shorter. The design width is widened by the same
-                              // factor, so after scaling it still spans the full screen width.
-                              final scale = (box.maxHeight / kPlayerDesignHeight).clamp(0.05, 1.0);
-                              return FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: SizedBox(
-                                  width: box.maxWidth / scale,
-                                  height: kPlayerDesignHeight,
-                                  child: AudioContainer(
-                                    // New key per track -> AudioContainer reloads for the new audio.
-                                    key: ValueKey(audioId),
-                                    audioId: audioId,
-                                    height: kPlayerDesignHeight,
-                                    borderRadius: BorderRadius.zero,
-                                    autoPlay: true,
-                                    onCompleted: AudioPlayerService.next,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Full-screen player: slides down out of view when minimized, up to fill the screen when expanded.
+        // It stays mounted either way, so playback is never interrupted.
+        IgnorePointer(
+          ignoring: minimized,
+          child: ExcludeSemantics(
+            excluding: minimized,
+            child: AnimatedSlide(
+              offset: minimized ? const Offset(0, 1) : Offset.zero,
+              duration: _kDockAnimation,
+              curve: _kDockCurve,
+              child: Material(
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: AudioContainer(
+                        // New key per track -> AudioContainer reloads for the new audio.
+                        key: ValueKey(audioId),
+                        audioId: audioId,
+                        height: double.infinity,
+                        borderRadius: BorderRadius.zero,
+                        ownPlayerScope: false, // the dock's ProviderScope is shared with the mini bar
+                        autoPlay: true,
+                        onCompleted: AudioPlayerService.next,
+                        // Keep the controls clear of the status bar, the top-right buttons and the nav bar.
+                        contentPadding: EdgeInsets.only(top: insets.top + kPlayerTopBarHeight, bottom: insets.bottom),
+                        showQueueControls: state.ids.length > 1,
+                        onPrevious: state.hasPrevious ? AudioPlayerService.previous : null,
+                        onNext: state.hasNext ? AudioPlayerService.next : null,
+                      ),
+                    ),
+                    Positioned(
+                      top: insets.top,
+                      right: 4,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(tooltip: 'Minimize', icon: const Icon(Icons.expand_more), onPressed: AudioPlayerService.toggleMinimized),
+                            IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: AudioPlayerService.close),
+                          ],
                         ),
                       ),
                     ),
-                  ),
-                  _DockHeader(state: state),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-        );
-      },
+        ),
+
+        // Mini bar: slides up when minimized, down out of view when expanded.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            ignoring: !minimized,
+            child: AnimatedSlide(
+              // 1.5 (not 1.0) so its shadow is fully off-screen too.
+              offset: minimized ? Offset.zero : const Offset(0, 1.5),
+              duration: _kDockAnimation,
+              curve: _kDockCurve,
+              child: _MiniBar(state: state),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _DockHeader extends ConsumerWidget {
-  const _DockHeader({required this.state});
+class _MiniBar extends ConsumerWidget {
+  const _MiniBar({required this.state});
 
   final AudioQueueState state;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final commands = ref.watch(audioPlayerCommandsProvider.notifier);
     final meta = ref.watch(_audioMetaProvider(state.currentId!));
+
     final audio = meta.value;
     final title = audio?.title ?? (meta.hasError ? '—' : '…');
     final multiple = state.ids.length > 1;
@@ -320,49 +377,101 @@ class _DockHeader extends ConsumerWidget {
       audio?.tags?.album,
     ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 
-    return InkWell(
-      onTap: AudioPlayerService.toggleMinimized,
-      child: SizedBox(
-        height: kDockHeaderHeight,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 16, right: 4),
-          child: Row(
-            children: [
-              Icon(Icons.music_note, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
-                    if (subtitle.isNotEmpty) Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
-                  ],
+    return Material(
+      elevation: 12,
+      color: theme.colorScheme.surfaceContainerHigh,
+      child: Padding(
+        // The bar's color extends under the system navigation bar.
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: StreamBuilder<AudioPlayerState>(
+          stream: commands.stateStream,
+          initialData: commands.currentState,
+          builder: (context, snapshot) {
+            final player = snapshot.data ?? const AudioPlayerState();
+            final busy = player.isLoading || player.isBuffering;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: kDockProgressHeight,
+                  child: LinearProgressIndicator(value: player.progress, minHeight: kDockProgressHeight, backgroundColor: Colors.transparent),
                 ),
-              ),
-              if (multiple) ...[
-                IconButton(
-                  tooltip: 'Previous',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.skip_previous),
-                  onPressed: state.hasPrevious ? AudioPlayerService.previous : null,
-                ),
-                IconButton(
-                  tooltip: 'Next',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.skip_next),
-                  onPressed: state.hasNext ? AudioPlayerService.next : null,
+                InkWell(
+                  onTap: AudioPlayerService.toggleMinimized,
+                  child: SizedBox(
+                    height: kDockHeaderHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        children: [
+                          // Play / pause first, before the music note.
+                          if (busy)
+                            const SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2.5)),
+                            )
+                          else
+                            IconButton(
+                              tooltip: player.isPlaying ? 'Pause' : 'Play',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(
+                                player.status == AudioPlayerStatus.ended
+                                    ? Icons.replay
+                                    : player.isPlaying
+                                    ? Icons.pause
+                                    : Icons.play_arrow,
+                              ),
+                              onPressed: () => commands.togglePlayPause(),
+                            ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.music_note, color: theme.colorScheme.primary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+                                if (subtitle.isNotEmpty) Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                              ],
+                            ),
+                          ),
+                          if (multiple)
+                            IconButton(
+                              tooltip: 'Previous',
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.skip_previous),
+                              onPressed: state.hasPrevious ? AudioPlayerService.previous : null,
+                            ),
+                          if (multiple)
+                            IconButton(
+                              tooltip: 'Next',
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.skip_next),
+                              onPressed: state.hasNext ? AudioPlayerService.next : null,
+                            ),
+                          IconButton(
+                            tooltip: 'Expand',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.expand_less),
+                            onPressed: AudioPlayerService.toggleMinimized,
+                          ),
+                          IconButton(
+                            tooltip: 'Close',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.close),
+                            onPressed: AudioPlayerService.close,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
-              IconButton(
-                tooltip: state.minimized ? 'Expand' : 'Minimize',
-                visualDensity: VisualDensity.compact,
-                icon: Icon(state.minimized ? Icons.expand_less : Icons.expand_more),
-                onPressed: AudioPlayerService.toggleMinimized,
-              ),
-              IconButton(tooltip: 'Close', visualDensity: VisualDensity.compact, icon: const Icon(Icons.close), onPressed: AudioPlayerService.close),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -370,7 +479,7 @@ class _DockHeader extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Optional: keeps the end of a scrollable from hiding behind the dock
+// Optional: keeps the end of a scrollable from hiding behind the mini bar
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Drop at the end of a list / as a last sliver (`SliverToBoxAdapter(child: AudioDockSpacer())`).
