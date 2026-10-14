@@ -37,10 +37,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// when the screen can't fit it. Raise it if the player ever grows.
 const kPlayerDesignHeight = 760.0;
 
-/// The player is designed for a phone/card width, so on wide screens it stays
-/// centered at this width inside the full-width dock instead of stretching.
-const kPlayerMaxContentWidth = 560.0;
-
 /// Height of the always-visible bar.
 const kDockHeaderHeight = 64.0;
 
@@ -265,30 +261,29 @@ class _Dock extends StatelessWidget {
                         height: playerHeight,
                         child: ColoredBox(
                           color: theme.colorScheme.surfaceContainerHighest,
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: kPlayerMaxContentWidth),
-                              child: LayoutBuilder(
-                                builder: (context, box) => FittedBox(
-                                  // Only ever shrinks: when less than kPlayerDesignHeight is
-                                  // available the whole player scales down instead of overflowing.
-                                  fit: BoxFit.scaleDown,
-                                  child: SizedBox(
-                                    width: box.maxWidth,
+                          child: LayoutBuilder(
+                            builder: (context, box) {
+                              // The player is built at kPlayerDesignHeight and scaled DOWN (never up)
+                              // when the screen is shorter. The design width is widened by the same
+                              // factor, so after scaling it still spans the full screen width.
+                              final scale = (box.maxHeight / kPlayerDesignHeight).clamp(0.05, 1.0);
+                              return FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: SizedBox(
+                                  width: box.maxWidth / scale,
+                                  height: kPlayerDesignHeight,
+                                  child: AudioContainer(
+                                    // New key per track -> AudioContainer reloads for the new audio.
+                                    key: ValueKey(audioId),
+                                    audioId: audioId,
                                     height: kPlayerDesignHeight,
-                                    child: AudioContainer(
-                                      // New key per track -> AudioContainer reloads for the new audio.
-                                      key: ValueKey(audioId),
-                                      audioId: audioId,
-                                      height: kPlayerDesignHeight,
-                                      borderRadius: BorderRadius.zero,
-                                      autoPlay: true,
-                                      onCompleted: AudioPlayerService.next,
-                                    ),
+                                    borderRadius: BorderRadius.zero,
+                                    autoPlay: true,
+                                    onCompleted: AudioPlayerService.next,
                                   ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
                           ),
                         ),
                       ),

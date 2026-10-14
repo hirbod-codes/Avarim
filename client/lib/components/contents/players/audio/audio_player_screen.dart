@@ -9,6 +9,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:avarim/components/contents/players/audio/audio_player_interface.dart';
 
+/// The background / gradient spans the full width, but the player's controls stay
+/// centered at this width on wide screens instead of stretching edge to edge.
+const kAudioPlayerContentMaxWidth = 560.0;
+
+/// How faithful the gradient is to the cover art. `content` keeps the cover's own
+/// saturation; `tonalSpot` (Material You default) is softer / more muted, `vibrant`
+/// is punchier. Any [DynamicSchemeVariant] works.
+const kCoverGradientVariant = DynamicSchemeVariant.content;
+
 class AudioPlayerScreen extends ConsumerStatefulWidget {
   const AudioPlayerScreen({
     super.key,
@@ -49,6 +58,11 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   StreamSubscription<AudioPlayerState>? _completionSub;
   AudioInfoPanel? _panel;
 
+  /// Gradient stops (top -> bottom) derived from the cover art; null until loaded
+  /// or when the audio has no cover art.
+  List<Color>? _gradient;
+  Brightness? _gradientBrightness;
+
   @override
   void initState() {
     super.initState();
@@ -75,84 +89,136 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadGradient(Theme.of(context).brightness);
+  }
+
+  @override
   void dispose() {
     _completionSub?.cancel();
     super.dispose();
+  }
+
+  /// Builds the gradient from the cover art's dominant colour. The colours come from a
+  /// Material colour scheme generated in the CURRENT theme brightness, so they are
+  /// deep / darkened in dark mode and soft / lightened in light mode, and are redone
+  /// when the theme switches.
+  Future<void> _loadGradient(Brightness brightness) async {
+    final token = widget.accessToken;
+    if (token == null || _gradientBrightness == brightness) return;
+    _gradientBrightness = brightness;
+
+    try {
+      final scheme = await ColorScheme.fromImageProvider(
+        provider: NetworkImage('${AppConfig.apiUrl}/api/audio/coverArt/${widget.audioId}', headers: {'Authorization': 'Bearer $token'}),
+        brightness: brightness,
+        dynamicSchemeVariant: kCoverGradientVariant,
+      );
+      if (!mounted || _gradientBrightness != brightness) return;
+      setState(() => _gradient = [scheme.primaryContainer, scheme.tertiaryContainer, scheme.surface]);
+    } catch (_) {
+      // No cover art (or it failed to load): keep the plain background.
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final notifier = ref.watch(audioPlayerCommandsProvider.notifier);
 
-    return StreamBuilder<AudioPlayerState>(
-      stream: notifier.stateStream,
-      initialData: notifier.currentState,
-      builder: (context, snapshot) {
-        final state = snapshot.data ?? const AudioPlayerState();
-        if (state.hasError) {
-          return _ErrorView(message: state.error ?? 'Unknown error');
-        }
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Album art + track info. An open info panel takes over exactly this area
-              // (the original stays laid out underneath so nothing jumps).
-              SizedBox(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOut,
+      width: double.infinity,
+      height: double.infinity,
+      decoration: _gradient == null
+          ? const BoxDecoration()
+          : BoxDecoration(
+              gradient: LinearGradient(begin: Alignment.topRight, end: Alignment.bottomLeft, colors: _gradient!, stops: const [0.0, 0.55, 1.0]),
+            ),
+      child: StreamBuilder<AudioPlayerState>(
+        stream: notifier.stateStream,
+        initialData: notifier.currentState,
+        builder: (context, snapshot) {
+          final state = snapshot.data ?? const AudioPlayerState();
+          if (state.hasError) {
+            return _ErrorView(message: state.error ?? 'Unknown error');
+          }
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kAudioPlayerContentMaxWidth),
+              child: SizedBox(
                 width: double.infinity,
-                child: Stack(
-                  alignment: Alignment.topCenter,
-                  children: [
-                    Visibility(
-                      visible: _panel == null || widget.audio == null,
-                      maintainSize: true,
-                      maintainAnimation: true,
-                      maintainState: true,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 24),
-                          Container(
-                            constraints: BoxConstraints(maxHeight: 300),
-                            child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
-                          ),
-                          const SizedBox(height: 40),
-                          _TrackInfo(title: state.title, artist: state.artist),
-                          const SizedBox(height: 32),
-                        ],
-                      ),
-                    ),
-                    if (_panel != null && widget.audio != null)
-                      Positioned.fill(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: AudioInfoPanelView(key: ValueKey(_panel), audio: widget.audio!, panel: _panel!, onClose: () => setState(() => _panel = null)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Album art + track info. An open info panel takes over exactly this area
+                      // (the original stays laid out underneath so nothing jumps).
+                      SizedBox(
+                        width: double.infinity,
+                        child: Stack(
+                          alignment: Alignment.topCenter,
+                          children: [
+                            Visibility(
+                              visible: _panel == null || widget.audio == null,
+                              maintainSize: true,
+                              maintainAnimation: true,
+                              maintainState: true,
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 24),
+                                  Container(
+                                    constraints: BoxConstraints(maxHeight: 300),
+                                    child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
+                                  ),
+                                  const SizedBox(height: 40),
+                                  _TrackInfo(title: state.title, artist: state.artist),
+                                  const SizedBox(height: 32),
+                                ],
+                              ),
+                            ),
+                            if (_panel != null && widget.audio != null)
+                              Positioned.fill(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: AudioInfoPanelView(
+                                    key: ValueKey(_panel),
+                                    audio: widget.audio!,
+                                    panel: _panel!,
+                                    onClose: () => setState(() => _panel = null),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-              ),
-              Column(
-                children: [
-                  Row(
-                    children: [
-                      if (widget.audio != null) AudioInfoButtons(audio: widget.audio!, selected: _panel, onSelected: (p) => setState(() => _panel = p)),
-                      const Spacer(),
-                      _SpeedControls(state: state),
+                      Column(
+                        children: [
+                          Row(
+                            children: [
+                              if (widget.audio != null) AudioInfoButtons(audio: widget.audio!, selected: _panel, onSelected: (p) => setState(() => _panel = p)),
+                              const Spacer(),
+                              _SpeedControls(state: state),
+                            ],
+                          ),
+                          _SeekBar(state: state),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      _MainControls(state: state),
+                      const SizedBox(height: 24),
+                      _VolumeControls(state: state),
+                      const SizedBox(height: 32),
                     ],
                   ),
-                  _SeekBar(state: state),
-                ],
+                ),
               ),
-              const SizedBox(height: 24),
-              _MainControls(state: state),
-              const SizedBox(height: 24),
-              _VolumeControls(state: state),
-              const SizedBox(height: 32),
-            ],
-          ),
-        );
-      },
+            ),
+          );
+        },
+      ),
     );
   }
 }
