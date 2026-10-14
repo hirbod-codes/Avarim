@@ -24,7 +24,13 @@ class AudioContainer extends ConsumerStatefulWidget {
   /// [BorderRadius.zero] because the panel itself is already rounded.
   final BorderRadius? borderRadius;
 
-  const AudioContainer({super.key, required this.audioId, this.height = 700, this.borderRadius});
+  /// Start playing as soon as the track is loaded (used by the global player).
+  final bool autoPlay;
+
+  /// Called when the track finishes (used by the global player to advance the queue).
+  final VoidCallback? onCompleted;
+
+  const AudioContainer({super.key, required this.audioId, this.height = 700, this.borderRadius, this.autoPlay = false, this.onCompleted});
 
   @override
   ConsumerState<AudioContainer> createState() => _AudioContainerState();
@@ -117,8 +123,15 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
       clipBehavior: Clip.antiAlias,
       child: ProviderScope(
         overrides: [audioPlayerCommandsProvider],
-        // TODO(autoplay): pass an autoPlay flag here once AudioPlayerScreen supports one.
-        child: AudioPlayerScreen(audioId: _audio!.id, url: _url!, headers: {'Authorization': 'Bearer ${_token!}'}, accessToken: _token!, title: _audio!.title),
+        child: AudioPlayerScreen(
+          audioId: _audio!.id,
+          url: _url!,
+          headers: {'Authorization': 'Bearer ${_token!}'},
+          accessToken: _token!,
+          autoPlay: widget.autoPlay,
+          onCompleted: widget.onCompleted,
+          audio: _audio,
+        ),
       ),
     );
   }

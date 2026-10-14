@@ -12,7 +12,6 @@ import 'package:avarim/components/contents/image_container.dart';
 import 'package:avarim/components/contents/text/text_editor.dart';
 import 'package:avarim/components/contents/video_container.dart';
 import 'package:avarim/theme/theme_radius.dart';
-import 'package:avarim/components/contents/tts_button.dart';
 
 class ContentContainer extends ConsumerStatefulWidget {
   final bool editing;
@@ -321,20 +320,7 @@ class _ContentState extends ConsumerState<ContentContainer> {
                 ],
               );
             } else {
-              return SizedBox(
-                width: double.infinity,
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        if (v != '') TTSButton(word: v),
-                        Text(v),
-                      ],
-                    ),
-                  ),
-                ),
-              );
+              return SizedBox.shrink();
             }
           }).toList(),
         );

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/components/contents/players/audio/audio_player_provider.dart';
 import 'package:flutter/material.dart';
@@ -6,30 +9,67 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:avarim/components/contents/players/audio/audio_player_interface.dart';
 
 class AudioPlayerScreen extends ConsumerStatefulWidget {
-  const AudioPlayerScreen({super.key, required this.audioId, required this.url, this.accessToken, this.headers, this.title, this.artist, this.albumArtUrl});
+  const AudioPlayerScreen({
+    super.key,
+    required this.audioId,
+    required this.url,
+    this.accessToken,
+    this.headers,
+    this.audio,
+    this.albumArtUrl,
+    this.autoPlay = false,
+    this.onCompleted,
+  });
 
   final String audioId;
   final String url;
   final String? accessToken;
   final Map<String, String>? headers;
-  final String? title;
-  final String? artist;
+  final Audio? audio;
   final String? albumArtUrl;
+
+  /// Start playing as soon as the track has loaded.
+  final bool autoPlay;
+
+  /// Called once each time the track plays to its end.
+  final VoidCallback? onCompleted;
 
   @override
   ConsumerState<AudioPlayerScreen> createState() => _AudioPlayerScreenState();
 }
 
 class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
+  StreamSubscription<AudioPlayerState>? _completionSub;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref
-          .read(audioPlayerCommandsProvider.notifier)
-          .open(widget.url, headers: widget.headers, title: widget.title, artist: widget.artist, albumArtUrl: widget.albumArtUrl);
+
+    final commands = ref.read(audioPlayerCommandsProvider.notifier);
+
+    // Fires onCompleted once per transition into `ended` (position ticks that
+    // keep the status at `ended` don't re-fire it).
+    var wasEnded = false;
+    _completionSub = commands.stateStream.listen((s) {
+      final ended = s.status == AudioPlayerStatus.ended;
+      if (ended && !wasEnded && mounted) widget.onCompleted?.call();
+      wasEnded = ended;
     });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await commands.open(widget.url, headers: widget.headers, title: widget.audio?.title, artist: widget.audio?.tags?.artists.join(' & '), albumArtUrl: widget.albumArtUrl);
+
+      if (!mounted || !widget.autoPlay || commands.currentState.hasError) return;
+      // Not awaited: just_audio's play() only completes when playback stops.
+      unawaited(commands.play());
+    });
+  }
+
+  @override
+  void dispose() {
+    _completionSub?.cancel();
+    super.dispose();
   }
 
   @override

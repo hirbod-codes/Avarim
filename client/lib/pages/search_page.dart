@@ -5,7 +5,7 @@
 //   - three tabs: Artists / Albums / Audios (the active tab decides which endpoint is searched)
 //   - paginated results (infinite scroll OR a "Load more" button, see [LoadMoreMode])
 //   - initial load with no query -> fetches the selected tab's endpoint without `search`
-//   - tapping an audio opens a minimizable floating player (see now_playing_dock.dart)
+//   - tapping an audio plays it in the global player dock (see audio_player_service.dart)
 //   - EDIT MODE (audios tab): the pencil in the app bar toggles per-audio buttons
 //       edit   -> pushes EditAudioPage with `?audioId=...` (the list refreshes when you come back)
 //       delete -> DELETE /api/audio/:audioId, the button turns into a spinner while it runs
@@ -27,7 +27,7 @@ import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:avarim/auth/token_storage.dart';
-import 'package:avarim/components/contents/now_playing_dock.dart';
+import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:dio/dio.dart';
@@ -284,9 +284,8 @@ class MusicSearchNotifier extends Notifier<SearchState> {
       results: {for (final e in state.results.entries) e.key: e.value.copyWith(items: e.value.items.where((item) => item.id != id).toList())},
     );
 
-    if (ref.read(nowPlayingProvider)?.audioId == id) {
-      ref.read(nowPlayingProvider.notifier).close();
-    }
+    // Drops it from the player queue (no-op if it isn't queued; closes the dock if it was the last track).
+    AudioPlayerService.remove(id);
   }
 
   // ── internals ──────────────────────────────────────────────────────────────
@@ -451,15 +450,9 @@ class _MusicSearchPageState extends ConsumerState<SearchPage> with SingleTickerP
           tabs: [for (final t in SearchTab.values) Tab(text: t.label)],
         ),
       ),
-      body: Stack(
-        children: [
-          TabBarView(
-            controller: _tabs,
-            children: [for (final t in SearchTab.values) _ResultsList(tab: t, mode: widget.loadMoreMode, onItemTap: widget.onItemTap)],
-          ),
-          // Floating, minimizable player. Taps outside the panel fall through to the list.
-          const Align(alignment: Alignment.bottomCenter, child: NowPlayingDock()),
-        ],
+      body: TabBarView(
+        controller: _tabs,
+        children: [for (final t in SearchTab.values) _ResultsList(tab: t, mode: widget.loadMoreMode, onItemTap: widget.onItemTap)],
       ),
     );
   }
@@ -520,7 +513,7 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
     widget.onItemTap?.call(item);
 
     if (item is Audio) {
-      ref.read(nowPlayingProvider.notifier).play(audioId: item.id, title: item.title, subtitle: _joinParts([item.tags?.artists.join(', '), item.tags?.album]));
+      AudioPlayerService.play(audioId: item.id);
     }
   }
 
@@ -558,7 +551,6 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
 
     final r = ref.watch(musicSearchProvider.select((s) => s.of(widget.tab)));
     final notifier = ref.read(musicSearchProvider.notifier);
-    final playingId = ref.watch(nowPlayingProvider.select((s) => s?.audioId));
     final editMode = ref.watch(musicSearchProvider.select((s) => s.editMode));
     final deletingIds = ref.watch(musicSearchProvider.select((s) => s.deletingIds));
 
@@ -576,33 +568,39 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
 
     final showFooter = r.isLoadingMore || r.error != null || (r.hasMore && !_auto);
 
-    // Keep the last item reachable above the floating player.
-    final bottomPadding = playingId == null ? 0.0 : kDockCollapsedExtent + MediaQuery.paddingOf(context).bottom;
+    return ValueListenableBuilder<AudioQueueState>(
+      valueListenable: AudioPlayerService.queue,
+      builder: (context, queue, _) {
+        final playingId = queue.currentId;
+        // Keep the last item reachable above the player dock.
+        final bottomPadding = queue.isEmpty ? 0.0 : kDockCollapsedExtent + MediaQuery.paddingOf(context).bottom;
 
-    return RefreshIndicator(
-      onRefresh: () => notifier.refresh(widget.tab),
-      child: ListView.separated(
-        controller: _scroll,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(bottom: bottomPadding),
-        itemCount: r.items.length + (showFooter ? 1 : 0),
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          if (i < r.items.length) {
-            final item = r.items[i];
-            return _ResultTile(
-              item: item,
-              isPlaying: item is Audio && item.id == playingId,
-              editMode: editMode,
-              isDeleting: deletingIds.contains(item.id),
-              onTap: (item is Audio || widget.onItemTap != null) ? () => _onTap(item) : null,
-              onEdit: item is Audio ? () => _edit(item) : null,
-              onDelete: item is Audio ? () => _delete(item) : null,
-            );
-          }
-          return _Footer(isLoadingMore: r.isLoadingMore, hasError: r.error != null, onLoadMore: _loadMore, onRetry: () => _loadMore(retry: true));
-        },
-      ),
+        return RefreshIndicator(
+          onRefresh: () => notifier.refresh(widget.tab),
+          child: ListView.separated(
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(bottom: bottomPadding),
+            itemCount: r.items.length + (showFooter ? 1 : 0),
+            separatorBuilder: (context, index) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              if (i < r.items.length) {
+                final item = r.items[i];
+                return _ResultTile(
+                  item: item,
+                  isPlaying: item is Audio && item.id == playingId,
+                  editMode: editMode,
+                  isDeleting: deletingIds.contains(item.id),
+                  onTap: (item is Audio || widget.onItemTap != null) ? () => _onTap(item) : null,
+                  onEdit: item is Audio ? () => _edit(item) : null,
+                  onDelete: item is Audio ? () => _delete(item) : null,
+                );
+              }
+              return _Footer(isLoadingMore: r.isLoadingMore, hasError: r.error != null, onLoadMore: _loadMore, onRetry: () => _loadMore(retry: true));
+            },
+          ),
+        );
+      },
     );
   }
 }
