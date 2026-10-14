@@ -47,13 +47,13 @@ class _ImagesState extends ConsumerState<ImageContainer> {
         _token = token;
         _loading = false;
       });
-    } catch (e, st) {
-      _handleError(e, st);
+    } catch (e) {
+      _handleError(e);
     }
   }
 
-  FutureOr<Null> _handleError(dynamic e, StackTrace st) {
-    talker.error('caught error while trying to fetch image', e, st);
+  FutureOr<Null> _handleError(dynamic e) {
+    talker.error('caught error while trying to fetch image', e);
     if (!mounted) return null;
 
     AppLocalizations l10n = AppLocalizations.of(context)!;

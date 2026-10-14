@@ -128,9 +128,10 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
           url: _url!,
           headers: {'Authorization': 'Bearer ${_token!}'},
           accessToken: _token!,
+          title: _audio!.title,
+          audio: _audio,
           autoPlay: widget.autoPlay,
           onCompleted: widget.onCompleted,
-          audio: _audio,
         ),
       ),
     );

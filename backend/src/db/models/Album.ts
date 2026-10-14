@@ -1,4 +1,4 @@
-import { boolean, InferType, number, object, string } from 'yup';
+import { array, boolean, InferType, number, object, string } from 'yup';
 
 export const collectionName = 'album'
 

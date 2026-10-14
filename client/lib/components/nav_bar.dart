@@ -49,13 +49,30 @@ class _NavBar extends ConsumerState<NavBar> {
 
     final ui = ref.watch(userInfoProvider);
 
-    if (ui.info?.role == 'admin' && navDestinations.indexWhere((e) => e.path == '/upload_audio') == -1) {
+    if (ui.info?.role == 'admin' && navDestinations.indexWhere((e) => e.path == '/artist/edit') == -1) {
       navDestinations.add(
         NavDestinationItem(
-          path: '/upload_audio',
-          label: (AppLocalizations l10n) => 'Upload Audio',
+          path: '/artist/edit',
+          label: (AppLocalizations l10n) => 'Edit Artist',
+          icon: Icons.account_box_outlined,
+          selectedIcon: Icons.account_box_sharp,
+        ),
+      );
+    }
+
+    if (ui.info?.role == 'admin' && navDestinations.indexWhere((e) => e.path == '/album/edit') == -1) {
+      navDestinations.add(
+        NavDestinationItem(path: '/album/edit', label: (AppLocalizations l10n) => 'Edit Album', icon: Icons.album, selectedIcon: Icons.album),
+      );
+    }
+
+    if (ui.info?.role == 'admin' && navDestinations.indexWhere((e) => e.path == '/audio/edit') == -1) {
+      navDestinations.add(
+        NavDestinationItem(
+          path: '/audio/edit',
+          label: (AppLocalizations l10n) => 'Edit Audio',
           icon: Icons.upload_file_outlined,
-          selectedIcon: Icons.upload_file_rounded,
+          selectedIcon: Icons.upload_file_sharp,
         ),
       );
     }

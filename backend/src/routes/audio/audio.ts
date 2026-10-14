@@ -87,9 +87,9 @@ router.get('/is_upload_finished', auth, isAdminIfAuthenticated, async (req, res)
         const audio = await runWithLogger(log, () => audioRepository.getUnsafe(audioId));
         log.debug({ audio });
 
-        if (!audio) return res.status(500).json({ status: 'error', error_code: 'JOB_FAILED' });
+        if (!audio) return res.status(400).json({ status: 'error', error_code: 'JOB_FAILED' });
 
-        audio.temporary !== true ? res.status(201).json({ status: 'success', data: true }) : res.status(400).json({ status: 'queued', error_code: 'UNFINISHED_UPLOAD' })
+        audio.temporary !== true ? res.status(201).json({ status: 'success', data: true }) : res.status(200).json({ status: 'queued', error_code: 'UNFINISHED_UPLOAD' })
     } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
@@ -165,7 +165,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
             const fileNameSegments = basename(inputPath).split('.')
             if (fileNameSegments.length > 1) fileNameSegments.pop()
-            const title = userTitle ?? metadata.tags.audioTitle ?? fileNameSegments[fileNameSegments.length - 1]
+            const title = metadata.tags.audioTitle ?? userTitle ?? fileNameSegments[fileNameSegments.length - 1]
             log.debug({ title })
 
             // ------------------------------------------------------------------------- checking whether title or sha256 already exists
@@ -453,11 +453,13 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
             }
         }
 
-        if (updates.tags?.artists) {
+        if (updates.tags?.artists || updates.tags?.albumArtists) {
             // ------------------------------------------------------------------------- create artists if don't exist
             log.info("create artists if don't exist")
 
-            const addedArtists = newAudio.tags?.artists?.filter(f => !(audio.tags?.artists ?? []).includes(f)) ?? []
+            const addedTagArtists = newAudio.tags?.artists?.filter(f => !(audio.tags?.artists ?? []).includes(f)) ?? []
+            const addedTagAlbumArtists = newAudio.tags?.albumArtists?.filter(f => !(audio.tags?.albumArtists ?? []).includes(f)) ?? []
+            const addedArtists = addedTagArtists.concat(addedTagAlbumArtists.filter(f => !addedTagArtists.includes(f)))
             const promises = []
             for (const an of addedArtists) {
                 promises.push((async () => {

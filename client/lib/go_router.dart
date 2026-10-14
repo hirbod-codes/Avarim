@@ -5,7 +5,9 @@ import 'package:avarim/auth/auth_state.dart';
 import 'package:avarim/go_router_refresh_notifier.dart';
 import 'package:avarim/localization/on_boarding_status.dart';
 import 'package:avarim/pages/about_page.dart';
-import 'package:avarim/pages/audio/edit_audio_page.dart';
+import 'package:avarim/pages/edit_album/edit_album_page.dart';
+import 'package:avarim/pages/edit_artist/edit_artist_page.dart';
+import 'package:avarim/pages/edit_audio/edit_audio_page.dart';
 import 'package:avarim/pages/search_page.dart';
 import 'package:avarim/pages/auth/auth_page.dart';
 import 'package:avarim/pages/contact_page.dart';
@@ -144,9 +146,27 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           builder: (context, state) => const PrivateWidget(child: AppShell(child: TestPage())),
         ),
       GoRoute(
-        path: '/upload_audio',
+        path: '/artist/edit',
         builder: (context, state) {
-          return  PrivateWidget(child: AppShell(child: EditAudioPage(audioId: state.uri.queryParameters['audioId'])));
+          return PrivateWidget(
+            child: AppShell(child: EditArtistPage(artistId: state.uri.queryParameters['artistId'])),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/album/edit',
+        builder: (context, state) {
+          return PrivateWidget(
+            child: AppShell(child: EditAlbumPage(albumId: state.uri.queryParameters['albumId'])),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/audio/edit',
+        builder: (context, state) {
+          return PrivateWidget(
+            child: AppShell(child: EditAudioPage(audioId: state.uri.queryParameters['audioId'])),
+          );
         },
       ),
     ],

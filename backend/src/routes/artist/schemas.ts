@@ -11,6 +11,27 @@ export const albumListQuerySchema = object().required().shape({
     artistName: string().required().label('Artist Name'),
 })
 
+export const infoQuerySchema = object().required().shape({
+    artistId: string().objectIdString().optional().label('Artist id').when('name', {
+        is: (name: any) => !name || name === null || name === undefined,
+        then(schema) {
+            return schema.required()
+        },
+        otherwise(schema) {
+            return schema.notRequired()
+        },
+    }),
+    name: string().optional().label('Title').when('artistId', {
+        is: (artistId: any) => !artistId || artistId === null || artistId === undefined,
+        then(schema) {
+            return schema.required()
+        },
+        otherwise(schema) {
+            return schema.notRequired()
+        },
+    }),
+}, [['artistId', 'name']]).required().stripUnknown()
+
 export const listQuerySchema = object().required().shape({
     search: string().max(5000).optional(),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
+import 'package:avarim/components/contents/players/audio/audio_info_panels.dart';
 import 'package:avarim/components/contents/players/audio/audio_player_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,8 +16,10 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
     required this.url,
     this.accessToken,
     this.headers,
-    this.audio,
+    this.title,
+    this.artist,
     this.albumArtUrl,
+    this.audio,
     this.autoPlay = false,
     this.onCompleted,
   });
@@ -25,8 +28,12 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
   final String url;
   final String? accessToken;
   final Map<String, String>? headers;
-  final Audio? audio;
+  final String? title;
+  final String? artist;
   final String? albumArtUrl;
+
+  /// The full audio document. Enables the lyrics / tags / technical buttons (hidden when null).
+  final Audio? audio;
 
   /// Start playing as soon as the track has loaded.
   final bool autoPlay;
@@ -40,6 +47,7 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
 
 class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   StreamSubscription<AudioPlayerState>? _completionSub;
+  AudioInfoPanel? _panel;
 
   @override
   void initState() {
@@ -58,7 +66,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await commands.open(widget.url, headers: widget.headers, title: widget.audio?.title, artist: widget.audio?.tags?.artists.join(' & '), albumArtUrl: widget.albumArtUrl);
+      await commands.open(widget.url, headers: widget.headers, title: widget.title, artist: widget.artist, albumArtUrl: widget.albumArtUrl);
 
       if (!mounted || !widget.autoPlay || commands.currentState.hasError) return;
       // Not awaited: just_audio's play() only completes when playback stops.
@@ -89,19 +97,49 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 24),
-              Container(
-                constraints: BoxConstraints(maxHeight: 300),
-                child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
+              // Album art + track info. An open info panel takes over exactly this area
+              // (the original stays laid out underneath so nothing jumps).
+              SizedBox(
+                width: double.infinity,
+                child: Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+                    Visibility(
+                      visible: _panel == null || widget.audio == null,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      maintainState: true,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 24),
+                          Container(
+                            constraints: BoxConstraints(maxHeight: 300),
+                            child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
+                          ),
+                          const SizedBox(height: 40),
+                          _TrackInfo(title: state.title, artist: state.artist),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+                    if (_panel != null && widget.audio != null)
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: AudioInfoPanelView(key: ValueKey(_panel), audio: widget.audio!, panel: _panel!, onClose: () => setState(() => _panel = null)),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 40),
-              _TrackInfo(title: state.title, artist: state.artist),
-              const SizedBox(height: 32),
               Column(
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [_SpeedControls(state: state)],
+                    children: [
+                      if (widget.audio != null) AudioInfoButtons(audio: widget.audio!, selected: _panel, onSelected: (p) => setState(() => _panel = p)),
+                      const Spacer(),
+                      _SpeedControls(state: state),
+                    ],
                   ),
                   _SeekBar(state: state),
                 ],

@@ -604,7 +604,7 @@ export async function extractMetadata(filePath: string, originalName: string, op
     }
 
     /* ---- tags: embedded > ffprobe > filename ---- */
-    const tags = emptyTags(basename(originalName).split('.')[0]);
+    const tags = emptyTags(md?.common.title ?? basename(originalName).split('.')[0]);
     const tagSources: ExtractionResult['tagSources'] = {};
     if (md) fill(tags, tagsFromParser(md.common), 'tags', tagSources);
     fill(tags, tagsFromFfprobe(probe), 'ffprobe', tagSources);

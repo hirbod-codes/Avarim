@@ -5,10 +5,11 @@
 //   - three tabs: Artists / Albums / Audios (the active tab decides which endpoint is searched)
 //   - paginated results (infinite scroll OR a "Load more" button, see [LoadMoreMode])
 //   - initial load with no query -> fetches the selected tab's endpoint without `search`
-//   - tapping an audio plays it in the global player dock (see audio_player_service.dart)
-//   - EDIT MODE (audios tab): the pencil in the app bar toggles per-audio buttons
-//       edit   -> pushes EditAudioPage with `?audioId=...` (the list refreshes when you come back)
-//       delete -> DELETE /api/audio/:audioId, the button turns into a spinner while it runs
+//   - tapping an audio opens a minimizable floating player (see now_playing_dock.dart)
+//   - EDIT MODE: the pencil in the app bar toggles per-row buttons
+//       edit   -> audios, artists and albums: pushes the edit page with `?audioId=` / `?artistId=` /
+//                 `?albumId=` (the tab refreshes when you come back)
+//       delete -> audios only: DELETE /api/audio/:audioId, the button turns into a spinner while it runs
 //
 // pubspec.yaml:
 //   flutter_riverpod: ^3.0.0   (plain Notifier API, no code-gen needed)
@@ -50,7 +51,13 @@ const kFirstPage = 1;
 /// Ask "Delete this audio?" before actually deleting. Set to false to delete on the first press.
 const kConfirmBeforeDelete = true;
 
-const kEditAudioRoute = '/upload_audio';
+/// Route of EditAudioPage. It reads the audio id from the `audioId` query parameter:
+///   GoRoute(path: '/audio/edit', builder: (context, state) => EditAudioPage(audioId: state.uri.queryParameters['audioId']))
+const kEditAudioRoute = '/audio/edit';
+
+/// Routes of the artist / album edit pages (`?artistId=` / `?albumId=`), see edit_entity_page.dart.
+const kEditArtistRoute = '/artist/edit';
+const kEditAlbumRoute = '/album/edit';
 
 enum SearchTab {
   artists('Artists', '/api/artist'),
@@ -266,8 +273,8 @@ class MusicSearchNotifier extends Notifier<SearchState> {
     var deleted = false;
     try {
       deleted = await ref.read(musicSearchApiProvider).deleteAudio(id);
-    } catch (e, st) {
-      talker.error('deleting audio failed', e, st);
+    } catch (e) {
+      talker.error('deleting audio failed', e);
     }
     if (!ref.mounted) return;
 
@@ -435,15 +442,13 @@ class _MusicSearchPageState extends ConsumerState<SearchPage> with SingleTickerP
           ),
         ),
         actions: [
-          // Edit mode only does something for audios.
-          if (tab == SearchTab.audios)
-            IconButton(
-              tooltip: editMode ? 'Done' : 'Edit mode',
-              isSelected: editMode,
-              icon: const Icon(Icons.edit_outlined),
-              selectedIcon: const Icon(Icons.check),
-              onPressed: notifier.toggleEditMode,
-            ),
+          IconButton(
+            tooltip: editMode ? 'Done' : 'Edit mode',
+            isSelected: editMode,
+            icon: const Icon(Icons.edit_outlined),
+            selectedIcon: const Icon(Icons.check),
+            onPressed: notifier.toggleEditMode,
+          ),
         ],
         bottom: TabBar(
           controller: _tabs,
@@ -517,13 +522,20 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
     }
   }
 
-  /// Opens EditAudioPage for [audio]; refreshes the audios when the user comes back.
-  Future<void> _edit(Audio audio) async {
-    final location = Uri(path: kEditAudioRoute, queryParameters: {'audioId': audio.id}).toString();
-    await context.push(location);
+  /// Opens the edit page of [item] (audio / artist / album); refreshes this tab when the user comes back.
+  Future<void> _edit(WithId item) async {
+    final location = switch (item) {
+      Audio() => Uri(path: kEditAudioRoute, queryParameters: {'audioId': item.id}),
+      Artist() => Uri(path: kEditArtistRoute, queryParameters: {'artistId': item.id}),
+      Album() => Uri(path: kEditAlbumRoute, queryParameters: {'albumId': item.id}),
+      _ => null,
+    };
+    if (location == null) return;
+
+    await context.push(location.toString());
 
     if (!mounted) return;
-    unawaited(ref.read(musicSearchProvider.notifier).refresh(SearchTab.audios));
+    unawaited(ref.read(musicSearchProvider.notifier).refresh(widget.tab));
   }
 
   Future<void> _delete(Audio audio) async {
@@ -675,7 +687,7 @@ class _ResultTile extends StatelessWidget {
   /// True for the audio currently loaded in the floating player.
   final bool isPlaying;
 
-  /// Audios show edit / delete buttons instead of the duration.
+  /// Rows show edit buttons (audios also delete) instead of the duration.
   final bool editMode;
 
   /// This audio's delete request is in flight.
@@ -690,12 +702,14 @@ class _ResultTile extends StatelessWidget {
         onTap: onTap,
         leading: Thumb(url: '/api/artist/avatar/${a.id}', icon: Icons.person, circular: true),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: editMode ? _editActions(context) : null,
       ),
       Album a => ListTile(
         onTap: onTap,
         leading: Thumb(url: '/api/album/avatar/${a.id}', icon: Icons.album),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: _subtitle([a.name]),
+        trailing: editMode ? _editActions(context) : null,
       ),
       Audio a => ListTile(
         onTap: isDeleting ? null : onTap,
@@ -720,7 +734,7 @@ class _ResultTile extends StatelessWidget {
             padding: EdgeInsets.all(12),
             child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
           )
-        else
+        else if (onDelete != null)
           IconButton(
             tooltip: 'Delete',
             icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
@@ -776,8 +790,8 @@ class _Thumb extends ConsumerState<Thumb> {
         _token = token;
         _loading = false;
       });
-    } catch (e, st) {
-      talker.error('caught error while trying to fetch image', e, st);
+    } catch (e) {
+      talker.error('caught error while trying to fetch image', e);
       if (!mounted) return null;
 
       setState(() {

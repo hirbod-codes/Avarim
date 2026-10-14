@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { albumListQuerySchema, avatarParamsSchema, deleteParamsSchema, listQuerySchema, postSchema } from './schemas';
+import { albumListQuerySchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
 import ArtistRepository from '../../db/MongoDB/ArtistRepository';
 import { meiliArtist } from '../../db/meilisearch';
 import { Artist, getAvatarKey, getBannerKey } from '../../db/models/Artist';
@@ -90,6 +90,43 @@ router.get('/', auth, async (req, res) => {
 
         log.info('Listed artists');
         res.status(200).json({ status: 'success', data: items });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.get('/info', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/info' });
+
+    try {
+        log.info('artist info request received');
+
+        log.debug({ query: req.query });
+        const { artistId, name } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
+        log.info('Input validated');
+        log.debug({ artistId, name });
+
+        const userId = req.user!.userId;
+        log = log.child({ userId });
+
+        const artistRepository = new ArtistRepository();
+
+        log.info('fetch from artistRepository')
+
+        let artist
+        if (artistId)
+            artist = await runWithLogger(log, () => artistRepository.get(artistId))
+        else
+            artist = await runWithLogger(log, () => artistRepository.getByName(name!))
+
+        log.debug({ artist });
+
+        if (!artist) {
+            log.info('artist not found')
+            return res.status(404).json({ status: 'error', error_code: 'ARTIST_NOT_FOUND' });
+        }
+
+        res.status(200).json({ status: 'success', data: artist });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
