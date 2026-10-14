@@ -1,12 +1,20 @@
-// audio_upload_page.dart
+// edit_audio_page.dart
 //
-// Upload flow:
-//   1. AudioUploadDialog      -> POST /api/audio/  (multipart)   => { status: 'queued', data: { title } }
-//   2. poll every 5 seconds   -> GET  /api/audio/is_upload_finished
-//   3. when finished          -> GET  /api/audio/info?title=...  => { status: 'success', data: audio }
-//   4. edit title + tags      (everything else is shown read-only)
+// Two ways in (decided by the `audioId` query parameter):
+//
+//   EditAudioPage(audioId: 'abc')  -> edit an existing audio
+//       GET  /api/audio/info?audioId=...  => { status: 'success', data: audio }
+//
+//   EditAudioPage()                -> upload a new audio, then edit it
+//       1. AudioUploadDialog      -> POST /api/audio/  (multipart)   => { status: 'queued', data: { id } }
+//       2. poll every 5 seconds   -> GET  /api/audio/is_upload_finished
+//       3. when finished          -> GET  /api/audio/info?audioId=...
+//
+// Editing (both ways):
+//   - cover art               -> GET / PUT /api/audio/coverArt/:audioId   (see cover_art_section.dart)
+//   - title + tags            (everything else is shown read-only)
 //        title uniqueness     -> GET  /api/audio/is_title_unique (204 = free, 400 TITLE_NOT_UNIQUE)
-//   5. "Update"               -> POST /api/audio/  { updates: { audioId, title?, tags? } }
+//   - "Update"                -> POST /api/audio/  { updates: { audioId, title?, tags? } }
 //
 // Everything is in one file for easy copy/paste; split it when you customize it.
 
@@ -17,6 +25,7 @@ import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/components/dialogs/upload/audio_upload_dialog.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/lib/talker.dart';
+import 'package:avarim/pages/audio/cover_art_section.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -69,7 +78,7 @@ class AudioUploadApi {
   AudioUploadApi(this._dio);
   final Dio _dio;
 
-  /// Whether the server finished processing the queued upload [title].
+  /// Whether the server finished processing the queued upload [audioId].
   /// Throws a [StateError] if the server reports that the job failed.
   Future<bool> isUploadFinished(String audioId, {CancelToken? cancelToken}) async {
     final res = await apiCall(() => _dio.get<dynamic>(kIsUploadFinishedPath, queryParameters: {'audioId': audioId}, cancelToken: cancelToken));
@@ -129,14 +138,14 @@ final audioUploadApiProvider = Provider<AudioUploadApi>((ref) => AudioUploadApi(
 // State
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum UploadPhase { idle, processing, failed, editing }
+enum UploadPhase { idle, processing, loading, failed, editing }
 
 class UploadState {
-  const UploadState({this.phase = UploadPhase.idle, this.id, this.audio, this.error, this.isSaving = false, this.revision = 0});
+  const UploadState({this.phase = UploadPhase.idle, this.id, this.audio, this.error, this.isSaving = false, this.revision = 0, this.existing = false});
 
   final UploadPhase phase;
 
-  /// Id the server queued the upload under (used for polling / info).
+  /// Id of the audio being uploaded / edited (used for polling / info).
   final String? id;
 
   /// The audio document returned by `/info` (kept up to date after saves).
@@ -147,15 +156,27 @@ class UploadState {
   /// Bumped after each successful save so the form re-initializes from the new values.
   final int revision;
 
-  UploadState copyWith({UploadPhase? phase, String? id, Map<String, dynamic>? audio, String? error, bool clearError = false, bool? isSaving, int? revision}) =>
-      UploadState(
-        phase: phase ?? this.phase,
-        id: id ?? this.id,
-        audio: audio ?? this.audio,
-        error: clearError ? null : (error ?? this.error),
-        isSaving: isSaving ?? this.isSaving,
-        revision: revision ?? this.revision,
-      );
+  /// True when an existing audio was opened by id (no upload flow).
+  final bool existing;
+
+  UploadState copyWith({
+    UploadPhase? phase,
+    String? id,
+    Map<String, dynamic>? audio,
+    String? error,
+    bool clearError = false,
+    bool? isSaving,
+    int? revision,
+    bool? existing,
+  }) => UploadState(
+    phase: phase ?? this.phase,
+    id: id ?? this.id,
+    audio: audio ?? this.audio,
+    error: clearError ? null : (error ?? this.error),
+    isSaving: isSaving ?? this.isSaving,
+    revision: revision ?? this.revision,
+    existing: existing ?? this.existing,
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,13 +191,6 @@ class AudioUploadNotifier extends Notifier<UploadState> {
   int _consecutiveErrors = 0;
 
   AudioUploadApi get _api => ref.read(audioUploadApiProvider);
-
-  Future<void> startEditing(String id) async {
-    _stop();
-    final audio = await _api.getInfo(id);
-    if (!ref.mounted) return;
-    state = state.copyWith(phase: UploadPhase.editing, audio: audio);
-  }
 
   @override
   UploadState build() {
@@ -199,6 +213,22 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     state = const UploadState();
   }
 
+  /// Opens an existing audio for editing.
+  Future<void> openExisting(String audioId) async {
+    _stop();
+    final token = _token = CancelToken();
+    state = UploadState(phase: UploadPhase.loading, id: audioId, existing: true);
+
+    try {
+      final audio = await _api.getInfo(audioId, cancelToken: token);
+      if (!ref.mounted || token.isCancelled) return;
+      state = state.copyWith(phase: UploadPhase.editing, audio: audio);
+    } catch (e, st) {
+      if (!ref.mounted || _isCancel(e)) return;
+      _fail(e, st);
+    }
+  }
+
   /// Called once the upload was accepted by the server (the dialog's result is `{ id }`).
   void startProcessing(String id) {
     _stop();
@@ -206,9 +236,16 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     _startPolling();
   }
 
-  /// After a failure during processing: check the queued job again.
+  /// After a failure: load the audio again / check the queued job again.
   void resume() {
-    if (state.id == null) return reset();
+    final id = state.id;
+    if (id == null) return reset();
+
+    if (state.existing) {
+      unawaited(openExisting(id));
+      return;
+    }
+
     state = state.copyWith(phase: UploadPhase.processing, clearError: true);
     _startPolling();
     unawaited(_poll());
@@ -256,7 +293,7 @@ class AudioUploadNotifier extends Notifier<UploadState> {
   }
 
   void _fail(Object e, [StackTrace? st]) {
-    talker.error('audio upload failed', e, st);
+    talker.error('audio upload / load failed', e, st);
     state = state.copyWith(phase: UploadPhase.failed, error: _describeError(e));
   }
 
@@ -298,20 +335,43 @@ final audioUploadProvider = NotifierProvider.autoDispose<AudioUploadNotifier, Up
 // ─────────────────────────────────────────────────────────────────────────────
 
 class EditAudioPage extends ConsumerStatefulWidget {
-  final String? audioId;
-
   const EditAudioPage({super.key, this.audioId});
 
+  /// The `audioId` query parameter. With an id the page edits that audio;
+  /// without one it starts the upload flow.
+  final String? audioId;
+
   @override
-  ConsumerState<EditAudioPage> createState() => _EditAudioPage();
+  ConsumerState<EditAudioPage> createState() => _EditAudioPageState();
 }
 
-class _EditAudioPage extends ConsumerState<EditAudioPage> {
+class _EditAudioPageState extends ConsumerState<EditAudioPage> {
+  bool get _hasId => widget.audioId != null && widget.audioId!.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
+    _open();
+  }
 
-    if (widget.audioId != null) ref.read(audioUploadProvider.notifier).startEditing(widget.audioId!);
+  @override
+  void didUpdateWidget(EditAudioPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.audioId != widget.audioId) _open();
+  }
+
+  void _open() {
+    final id = widget.audioId;
+    // After the first build: providers can't be modified while the tree is building.
+    Future.microtask(() {
+      if (!mounted) return;
+      final notifier = ref.read(audioUploadProvider.notifier);
+      if (id != null && id.isNotEmpty) {
+        unawaited(notifier.openExisting(id));
+      } else {
+        notifier.reset();
+      }
+    });
   }
 
   @override
@@ -319,14 +379,23 @@ class _EditAudioPage extends ConsumerState<EditAudioPage> {
     final s = ref.watch(audioUploadProvider);
 
     final Widget body = switch (s.phase) {
-      UploadPhase.idle => const _StartStep(),
+      // With an id, `idle` is only the frame before loading starts.
+      UploadPhase.idle => _hasId ? const _LoadingStep() : const _StartStep(),
       UploadPhase.processing => _ProcessingStep(state: s),
+      UploadPhase.loading => const _LoadingStep(),
       UploadPhase.failed => _FailedStep(state: s),
-      UploadPhase.editing => _EditForm(key: ValueKey(s.revision), audio: s.audio!, isSaving: s.isSaving),
+      UploadPhase.editing => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CoverArtSection(key: ValueKey('${s.audio!['_id']}'), audioId: '${s.audio!['_id']}'),
+          const SizedBox(height: 24),
+          _EditForm(key: ValueKey(s.revision), audio: s.audio!, isSaving: s.isSaving, isExisting: s.existing),
+        ],
+      ),
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Upload audio')),
+      appBar: AppBar(title: Text(_hasId ? 'Edit audio' : 'Upload audio')),
       body: LayoutBuilder(
         builder: (context, c) => SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -343,7 +412,7 @@ class _EditAudioPage extends ConsumerState<EditAudioPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Steps: start / processing / failed
+// Steps: start / processing / loading / failed
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _StartStep extends ConsumerWidget {
@@ -413,6 +482,22 @@ class _ProcessingStep extends ConsumerWidget {
   }
 }
 
+class _LoadingStep extends StatelessWidget {
+  const _LoadingStep();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(width: 48, height: 48, child: CircularProgressIndicator()),
+        const SizedBox(height: 24),
+        Text('Loading audio…', style: Theme.of(context).textTheme.titleLarge),
+      ],
+    );
+  }
+}
+
 class _FailedStep extends ConsumerWidget {
   const _FailedStep({required this.state});
   final UploadState state;
@@ -435,9 +520,9 @@ class _FailedStep extends ConsumerWidget {
           runSpacing: 12,
           alignment: WrapAlignment.center,
           children: [
-            // A job that was already queued can simply be checked again.
-            if (state.id != null) FilledButton(onPressed: notifier.resume, child: const Text('Check again')),
-            OutlinedButton(onPressed: notifier.reset, child: const Text('Start over')),
+            // A queued job can simply be checked again; an existing audio can be loaded again.
+            if (state.id != null) FilledButton(onPressed: notifier.resume, child: Text(state.existing ? 'Try again' : 'Check again')),
+            if (!state.existing) OutlinedButton(onPressed: notifier.reset, child: const Text('Start over')),
           ],
         ),
       ],
@@ -551,10 +636,13 @@ final _allSpecs = [for (final g in _tagGroups) ...g.fields];
 enum _TitleStatus { unchanged, checking, available, taken, unknown }
 
 class _EditForm extends ConsumerStatefulWidget {
-  const _EditForm({super.key, required this.audio, required this.isSaving});
+  const _EditForm({super.key, required this.audio, required this.isSaving, required this.isExisting});
 
   final Map<String, dynamic> audio;
   final bool isSaving;
+
+  /// Opened by id (no upload flow), so there is no "Upload another".
+  final bool isExisting;
 
   @override
   ConsumerState<_EditForm> createState() => _EditFormState();
@@ -631,7 +719,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
     _titleDebounce?.cancel();
     _titleToken?.cancel();
 
-    // The uploaded audio already owns its current title, so only a CHANGED title needs checking.
+    // The audio already owns its current title, so only a CHANGED title needs checking.
     if (t.isEmpty || t == _baseTitle) {
       setState(() => _titleStatus = _TitleStatus.unchanged);
       return;
@@ -764,8 +852,10 @@ class _EditFormState extends ConsumerState<_EditForm> {
                 icon: widget.isSaving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
                 label: const Text('Update'),
               ),
-              const SizedBox(width: 12),
-              TextButton(onPressed: widget.isSaving ? null : ref.read(audioUploadProvider.notifier).reset, child: const Text('Upload another')),
+              if (!widget.isExisting) ...[
+                const SizedBox(width: 12),
+                TextButton(onPressed: widget.isSaving ? null : ref.read(audioUploadProvider.notifier).reset, child: const Text('Upload another')),
+              ],
             ],
           ),
         ],

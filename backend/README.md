@@ -103,4 +103,9 @@ Ctrl + C DOES NOT work to terminate the app, run `taskkill /IM node.exe /F` on w
 
 ## To do
 
-1. add routes to update album name and artist name
+1. fix cron jobs
+2. improve artist/album and album/audio routes
+3. add pages to update artist and albums
+4. make audio player a single global object that is callable from anywhere
+5. add support for playlists in audio player
+6. add playlists page

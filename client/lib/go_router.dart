@@ -5,7 +5,7 @@ import 'package:avarim/auth/auth_state.dart';
 import 'package:avarim/go_router_refresh_notifier.dart';
 import 'package:avarim/localization/on_boarding_status.dart';
 import 'package:avarim/pages/about_page.dart';
-import 'package:avarim/pages/edit_audio_page.dart';
+import 'package:avarim/pages/audio/edit_audio_page.dart';
 import 'package:avarim/pages/search_page.dart';
 import 'package:avarim/pages/auth/auth_page.dart';
 import 'package:avarim/pages/contact_page.dart';

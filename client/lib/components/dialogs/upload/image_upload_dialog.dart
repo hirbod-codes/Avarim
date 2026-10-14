@@ -10,7 +10,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ImageUploadDialog extends ConsumerStatefulWidget {
-  const ImageUploadDialog({super.key});
+  const ImageUploadDialog({super.key, this.showTitle = true, this.onUpload});
+
+  /// Show the title field and require it before uploading. Turn off when the image
+  /// has no title of its own (e.g. an audio's cover art).
+  final bool showTitle;
+
+  /// Replaces the default upload (`POST /api/image/`). Receives the picked image and the
+  /// title (empty when [showTitle] is false). Return a non-null value to close the dialog
+  /// with it, or null to keep the dialog open (e.g. after showing your own error).
+  final Future<Object?> Function(XFile image, String title)? onUpload;
 
   @override
   ConsumerState<ImageUploadDialog> createState() => _ImageUploadDialogState();
@@ -42,7 +51,7 @@ class _ImageUploadDialogState extends ConsumerState<ImageUploadDialog> {
     });
   }
 
-  bool isButtonDisabled() => _image == null || titleController.text.trim().isEmpty;
+  bool isButtonDisabled() => _image == null || (widget.showTitle && titleController.text.trim().isEmpty);
 
   Future<void> _upload() async {
     if (isButtonDisabled()) return;
@@ -50,14 +59,22 @@ class _ImageUploadDialogState extends ConsumerState<ImageUploadDialog> {
     setState(() => _loading = true);
 
     try {
-      final form = FormData.fromMap({'file': MultipartFile.fromStream(() => _image!.openRead(), await _image!.length(), filename: _image!.name)});
-      final result = await apiCall(
-        () => ref.read(authDioProvider).post('/api/image/', data: form, queryParameters: {'title': titleController.text.trim(), 'fileName': _image!.name}),
-      );
-      if (!mounted) return;
-      if (result.isFailure || result.dataOrNull == null) return;
+      final title = titleController.text.trim();
 
-      Navigator.pop(context, result.dataOrNull);
+      final Object? data;
+      if (widget.onUpload != null) {
+        data = await widget.onUpload!(_image!, title);
+      } else {
+        final form = FormData.fromMap({'file': MultipartFile.fromStream(() => _image!.openRead(), await _image!.length(), filename: _image!.name)});
+        final result = await apiCall(
+          () => ref.read(authDioProvider).post('/api/image/', data: form, queryParameters: {'title': title, 'fileName': _image!.name}),
+        );
+        data = result.isFailure ? null : result.dataOrNull;
+      }
+
+      if (!mounted || data == null) return;
+
+      Navigator.pop(context, data);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -82,13 +99,15 @@ class _ImageUploadDialogState extends ConsumerState<ImageUploadDialog> {
 
               const SizedBox(height: 16),
 
-              TextField(
-                controller: titleController,
-                decoration: InputDecoration(labelText: l10n.title),
-                onChanged: (_) => setState(() {}),
-              ),
+              if (widget.showTitle) ...[
+                TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(labelText: l10n.title),
+                  onChanged: (_) => setState(() {}),
+                ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
 
               // Preview
               Container(

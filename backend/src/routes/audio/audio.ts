@@ -502,7 +502,7 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
             // ------------------------------------------------------------------------- delete old ArtistAlbumAudio records
             log.info("delete old ArtistAlbumAudio records")
 
-            const deleteOldResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteManyByArtistNameByAudioTitle(audio.tags!.album!, audio.title));
+            const deleteOldResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteManyByAlbumNameByAudioTitle(audio.tags!.album!, audio.title));
             log.debug({ deleteOldResult })
             if (!deleteOldResult.acknowledged) {
                 log.warn('Failed to delete old ArtistAlbumAudio records')
