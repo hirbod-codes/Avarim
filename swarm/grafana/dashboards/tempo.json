@@ -1,0 +1,19 @@
+{
+    "title": "Tempo Tracing",
+    "uid": "tempo",
+    "schemaVersion": 39,
+    "panels": [
+        {
+            "title": "Trace Rate",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "datasource": {
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(traces_spanmetrics_calls_total[5m]))"
+                }
+            ]
+        }
+    ]
+}

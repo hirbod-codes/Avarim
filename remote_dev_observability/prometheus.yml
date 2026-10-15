@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    env: development
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Windows can't be scraped directly (home NAT blocks the VPS pulling in),
+  # so the Node app pushes its prom-client metrics to Pushgateway instead —
+  # this job just does the normal pull, but from Pushgateway, which lives
+  # on the VPS and is always reachable.
+  - job_name: pushgateway
+    honor_labels: true # let the pushed job/instance labels win over Pushgateway's own
+    static_configs:
+      - targets: ["pushgateway:9091"]

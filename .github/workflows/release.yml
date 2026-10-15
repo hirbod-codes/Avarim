@@ -1,0 +1,511 @@
+name: hirbod-codes/Memoize/Release
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release_by_commit:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+    outputs:
+      version: ${{ steps.semantic.outputs.new_release_version }}
+      released: ${{ steps.semantic.outputs.new_release_published }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Semantic Release (backend)
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          working_directory: backend
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release_by_workflow_dispatch:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+      version: ${{ steps.bump.outputs.new_version }}
+      released: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full tag history, not just last commit
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          last_tag=$(git tag --sort=-v:refname | head -n1)
+
+          if [ -z "$last_tag" ]; then
+            new_version="0.1.0"
+          else
+            ver="${last_tag#v}"
+            IFS='.' read -r major minor patch <<< "$ver"
+            patch=$((patch + 1))
+            new_version="${major}.${minor}.${patch}"
+          fi
+
+          new_tag="v${new_version}"
+          echo "last tag: ${last_tag:-none}, new: $new_tag"
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "released=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        if: steps.bump.outputs.released == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.bump.outputs.new_tag }}" -m "Release ${{ steps.bump.outputs.new_tag }}"
+          git push origin "${{ steps.bump.outputs.new_tag }}"
+
+      - name: Create GitHub release
+        if: steps.bump.outputs.released == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ steps.bump.outputs.new_tag }}" --title "${{ steps.bump.outputs.new_tag }}" --generate-notes
+
+  release:
+    needs:
+      - release_by_commit
+      - release_by_workflow_dispatch
+    runs-on: ubuntu-latest
+    if: always() && !cancelled()
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+      released: ${{ steps.vars.outputs.released }}
+
+    steps:
+      - run: |
+          echo "commit version=${{ needs.release_by_commit.outputs.version }}"
+          echo "commit released=${{ needs.release_by_commit.outputs.released }}"
+          echo "dispatch version=${{ needs.release_by_workflow_dispatch.outputs.version }}"
+          echo "dispatch released=${{ needs.release_by_workflow_dispatch.outputs.released }}"
+
+      - id: vars
+        run: |
+          if [ -n "${{ needs.release_by_commit.outputs.version }}" ]; then
+            echo "version=${{ needs.release_by_commit.outputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "released=${{ needs.release_by_commit.outputs.released }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ needs.release_by_workflow_dispatch.outputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "released=${{ needs.release_by_workflow_dispatch.outputs.released }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  backend-build:
+    runs-on: ubuntu-latest
+    needs: release
+    if: always() && needs.release.outputs.released == 'true' && needs.release.outputs.version != ''
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Build Docker image
+        run: |
+          cd backend
+          echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker build -t ghcr.io/hirbod-codes/memoize/backend:${{ needs.release.outputs.version }} --target production .
+          docker push ghcr.io/hirbod-codes/memoize/backend:${{ needs.release.outputs.version }}
+          docker save ghcr.io/hirbod-codes/memoize/backend:${{ needs.release.outputs.version }} | gzip > backend-image-${{ needs.release.outputs.version }}.tar.gz
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image
+          path: backend/backend-image-${{ needs.release.outputs.version }}.tar.gz
+          retention-days: 1
+
+  android-build:
+    needs: release
+    if: always() && needs.release.result == 'success' && needs.release.outputs.released == 'true' && needs.release.outputs.version != ''
+    runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set Version
+        run: |
+          echo "VERSION=${{ needs.release.outputs.version }}" >> $GITHUB_ENV
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1" # whatever is running locally
+          channel: stable
+
+      - name: Update version
+        working-directory: client
+        run: dart run update_flutter_version.dart
+
+      - name: Install flutter project dependencies
+        run: |
+          cd client
+          flutter pub get
+
+      - name: Build android app
+        run: |
+          cd client
+          flutter build apk --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+          flutter build appbundle --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+
+      - name: Rename app release
+        run: |
+          mkdir artifacts
+          cp client/build/app/outputs/flutter-apk/app-release.apk artifacts/memoize-app-release-${{ needs.release.outputs.version }}.apk
+          cp client/build/app/outputs/bundle/release/app-release.aab artifacts/memoize-app-release-${{ needs.release.outputs.version }}.aab
+
+      - name: Upload android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: artifacts/*
+          retention-days: 1
+
+  windows-build:
+    needs: release
+    if: always() && needs.release.result == 'success' && needs.release.outputs.released == 'true' && needs.release.outputs.version != ''
+    runs-on: windows-latest
+
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set Version
+        run: |
+          echo "VERSION=${{ needs.release.outputs.version }}" >> $GITHUB_ENV
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1" # whatever is running locally
+          channel: stable
+
+      - name: Update version
+        working-directory: client
+        run: dart run update_flutter_version.dart
+
+      - name: Install flutter project dependencies
+        run: |
+          cd client
+          flutter pub get
+
+      - name: Build windows app
+        run: |
+          cd client
+          flutter build windows --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+
+      - name: Package Windows
+        run: |
+          Compress-Archive -Path client/build/windows/x64/runner/Release/* -DestinationPath memoize-windows-${{ needs.release.outputs.version }}.zip
+
+      - name: Upload windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: memoize-windows-${{ needs.release.outputs.version }}.zip
+          retention-days: 1
+
+  linux-build:
+    needs: release
+    if: always() && needs.release.result == 'success' && needs.release.outputs.released == 'true' && needs.release.outputs.version != ''
+    runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1" # whatever is running locally
+          channel: stable
+
+      - name: Update version
+        working-directory: client
+        run: dart run update_flutter_version.dart
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libasound2-dev libmpv-dev mpv
+
+      - name: Install flutter project dependencies
+        run: |
+          cd client
+          flutter pub get
+
+      - name: Build linux app
+        run: |
+          cd client
+          flutter build linux --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+
+      - name: Package Linux
+        run: |
+          tar -czf memoize-linux-${{ needs.release.outputs.version }}.tar.gz -C client/build/linux/x64/release/bundle .
+
+      - name: Upload linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: memoize-linux-${{ needs.release.outputs.version }}.tar.gz
+          retention-days: 1
+
+  web-build:
+    needs: release
+    if: always() && needs.release.result == 'success' && needs.release.outputs.released == 'true' && needs.release.outputs.version != ''
+    runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set Version
+        run: |
+          echo "VERSION=${{ needs.release.outputs.version }}" >> $GITHUB_ENV
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Update version
+        working-directory: client
+        run: dart run update_flutter_version.dart
+
+      - name: Install flutter project dependencies
+        run: |
+          cd client
+          flutter pub get
+
+      - name: Build web app
+        run: |
+          cd client
+          flutter build web --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+
+      - name: Package web
+        run: |
+          mkdir -p ./NginX/build/memoize/
+          mv client/build/web/* ./NginX/build/memoize/
+          cd ./NginX/build/memoize/
+          zip -r ../../../memoize-web-${{ needs.release.outputs.version }}.zip .
+
+      - name: Create SSL files
+        run: |
+          mkdir -p ./NginX/certs
+          echo "${{ secrets.SSL_CERT }}" > ./NginX/certs/fullchain.pem
+          echo "${{ secrets.SSL_KEY }}" > ./NginX/certs/privkey.pem
+
+      - name: Build Docker image
+        run: |
+          cd NginX
+          echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker build -t ghcr.io/hirbod-codes/nginx:latest -t ghcr.io/hirbod-codes/nginx:${{ needs.release.outputs.version }} .
+          docker push ghcr.io/hirbod-codes/nginx:${{ needs.release.outputs.version }}
+          docker push ghcr.io/hirbod-codes/nginx:latest
+          docker save ghcr.io/hirbod-codes/nginx:${{ needs.release.outputs.version }} | gzip > ../nginx-image-${{ needs.release.outputs.version }}.tar.gz
+
+      - run: |
+          mkdir artifacts
+          mv memoize-web-${{ needs.release.outputs.version }}.zip artifacts/memoize-web-${{ needs.release.outputs.version }}.zip
+          mv nginx-image-${{ needs.release.outputs.version }}.tar.gz artifacts/
+
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: artifacts/*
+          retention-days: 1
+
+  macos-build:
+    needs: release
+    if: always() && needs.release.result == 'success' && needs.release.outputs.released == 'true' && needs.release.outputs.version != ''
+    runs-on: macos-latest
+
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set Version
+        run: |
+          echo "VERSION=${{ needs.release.outputs.version }}" >> $GITHUB_ENV
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1" # whatever is running locally
+          channel: stable
+
+      - name: Update version
+        working-directory: client
+        run: dart run update_flutter_version.dart
+
+      - name: Install flutter project dependencies
+        run: |
+          cd client
+          flutter pub get
+
+      - name: Build macOS app
+        run: |
+          cd client
+          flutter build macos --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+
+      - name: Package macOS
+        run: |
+          APP=$(find client/build/macos/Build/Products/Release -name "*.app" | head -1)
+          echo "Found app: $APP"
+          ditto -c -k "$APP" "memoize-macos-${{ needs.release.outputs.version }}.zip"
+
+      - name: Upoad macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: memoize-macos-${{ needs.release.outputs.version }}.zip
+          retention-days: 1
+
+  ios-build:
+    needs: release
+    if: always() && needs.release.result == 'success' && needs.release.outputs.released == 'true' && needs.release.outputs.version != ''
+    runs-on: macos-latest
+
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set Version
+        run: |
+          echo "VERSION=${{ needs.release.outputs.version }}" >> $GITHUB_ENV
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1" # whatever is running locally
+          channel: stable
+
+      - name: Update version
+        working-directory: client
+        run: dart run update_flutter_version.dart
+
+      - name: Install flutter project dependencies
+        run: |
+          cd client
+          flutter pub get
+
+      - name: Build ios app
+        run: |
+          cd client
+          flutter build ios --release --no-codesign --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+
+      - name: Create the unsigned ipa
+        run: |
+          mkdir Payload
+          mv client/build/ios/iphoneos/Runner.app/ Payload
+          zip -qq -r -9 memoize-ios-${{ needs.release.outputs.version }}.ipa Payload
+
+      - name: Upload ios artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: memoize-ios-${{ needs.release.outputs.version }}.ipa
+          retention-days: 1
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs:
+      - release
+      - backend-build
+      - android-build
+      - windows-build
+      - linux-build
+      - web-build
+      - macos-build
+      - ios-build
+    if: |
+      always() &&
+      needs.release.outputs.released == 'true' &&
+      needs.release.result != 'failure' &&
+      needs.backend-build.result != 'failure' &&
+      needs.android-build.result != 'failure' &&
+      needs.windows-build.result != 'failure' &&
+      needs.linux-build.result != 'failure' &&
+      needs.web-build.result != 'failure' &&
+      needs.macos-build.result != 'failure' &&
+      needs.ios-build.result != 'failure'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release.outputs.version }}
+          files: artifacts/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

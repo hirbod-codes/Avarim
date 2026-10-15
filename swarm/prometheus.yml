@@ -1,0 +1,38 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    env: production
+
+scrape_configs:
+  # Prometheus scraping itself
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # memoize backend — requires the /metrics route from the instrumentation
+  # code (observability/metricsRoute.ts). Scraped by container name since
+  # prometheus and memoize share backend_net.
+  - job_name: memoize-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["memoize:3000"]
+        labels:
+          service: memoize-backend
+
+  # Alloy's own internal metrics (component eval time, WAL size, etc.) —
+  # useful for noticing when the collector itself is falling behind.
+  - job_name: alloy
+    static_configs:
+      - targets: ["alloy:12345"]
+        labels:
+          service: alloy
+
+  # Host metrics via Alloy's prometheus.exporter.unix component (replaces
+  # a standalone node-exporter container — see alloy.config).
+  - job_name: host-metrics
+    metrics_path: /api/v0/component/prometheus.exporter.unix.host/metrics
+    static_configs:
+      - targets: ["alloy:12345"]
+        labels:
+          service: host

@@ -1,0 +1,120 @@
+services:
+  loki:
+    container_name: loki
+    image: grafana/loki:3.7.6
+    restart: unless-stopped
+    command:
+      - "-config.file=/etc/loki/config.yml"
+    ports:
+      - "1407:3100" # pino-loki pushes here from local dev
+    volumes:
+      - ./loki.yml:/etc/loki/config.yml:ro
+      - ./loki_data:/loki
+    networks:
+      - dev_observability
+
+  tempo:
+    container_name: tempo
+    image: grafana/tempo:3.0.2
+    restart: unless-stopped
+    command:
+      - "-config.file=/etc/tempo/config.yml"
+    ports:
+      - "1408:4317" # OTLP gRPC — traceExporter in tracing.ts can use this
+      - "1409:4318" # OTLP HTTP  — or this, matching OTLPTraceExporter's http default
+    volumes:
+      - ./tempo.yml:/etc/tempo/config.yml:ro
+      - ./tempo_data:/var/tempo
+    networks:
+      - dev_observability
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v3.13.2
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver"
+    ports:
+      - "1410:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus_data:/prometheus
+    networks:
+      - dev_observability
+
+  pushgateway:
+    container_name: pushgateway
+    image: prom/pushgateway:v1.11.1
+    restart: unless-stopped
+    ports:
+      - "1411:9091"
+    networks:
+      - dev_observability
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:13.0
+    restart: unless-stopped
+    ports:
+      - "1412:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./grafana/grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - dev_observability
+
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    ports:
+      - 1413:6379
+    command: >
+      sh -c '
+        redis-server
+        --requirepass "${ME_CONFIG_MONGODB_ADMINPASSWORD}"
+        --appendonly yes
+        --appendfsync everysec
+        --save 900 1
+        --save 300 10
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        --tcp-keepalive 60
+        --dir /data
+      '
+    volumes:
+      - ./redis_data:/data
+
+  mongo:
+    container_name: mongo
+    image: mongo:8.2.7
+    restart: unless-stopped
+    ports:
+      - "1414:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - ./mongo_data:/data/db
+
+  mongo-express:
+    container_name: mongo-express
+    image: mongo-express:1.0.2
+    restart: unless-stopped
+    ports:
+      - "1415:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${ME_CONFIG_MONGODB_ADMINUSERNAME}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${ME_CONFIG_MONGODB_ADMINPASSWORD}
+      ME_CONFIG_MONGODB_SERVER: mongo
+
+networks:
+  dev_observability:
+    driver: bridge
