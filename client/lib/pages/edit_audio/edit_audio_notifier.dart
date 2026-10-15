@@ -2,14 +2,15 @@
 //
 // Logic behind EditAudioPage: open an existing audio, or follow a queued upload
 // (poll until it is processed, then load it), and save edits.
+//
+// The API methods return ApiCallResult. A failure there was already shown to the user as a
+// toast (or is silent on purpose and shown on the page), so nothing here toasts it again.
 
 import 'dart:async';
 
-import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/lib/talker.dart';
+import 'package:avarim/api/api_call.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_api.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_state.dart';
-import 'package:avarim/pages/common/edit_errors.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -54,14 +55,9 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     final token = _token = CancelToken();
     state = UploadState(phase: UploadPhase.loading, id: audioId, existing: true);
 
-    try {
-      final audio = await _api.getInfo(audioId, cancelToken: token);
-      if (!ref.mounted || token.isCancelled) return;
-      state = state.copyWith(phase: UploadPhase.editing, audio: audio);
-    } catch (e) {
-      if (!ref.mounted || isCancel(e)) return;
-      _fail(e);
-    }
+    final result = await _api.getInfo(audioId, cancelToken: token);
+    if (!ref.mounted || token.isCancelled) return;
+    _showInfo(result);
   }
 
   /// Called once the upload was accepted by the server (the dialog's result is `{ id }`).
@@ -101,64 +97,79 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     final token = _token = CancelToken();
     try {
       _attempts++;
-      final finished = await _api.isUploadFinished(id, cancelToken: token);
+      final result = await _api.isUploadFinished(id, cancelToken: token);
       if (!ref.mounted || token.isCancelled) return;
+
+      if (result case ApiCallFailure(:final message)) {
+        // A flaky network gets a couple of retries before the job is reported as failed.
+        _consecutiveErrors++;
+        if (_consecutiveErrors >= 3) {
+          _timer?.cancel();
+          _fail(message);
+        }
+        return;
+      }
       _consecutiveErrors = 0;
 
-      if (finished) {
+      if (result.isSuccess) {
+        // Finished.
         _timer?.cancel();
-        final audio = await _api.getInfo(id, cancelToken: token);
+        final info = await _api.getInfo(id, cancelToken: token);
         if (!ref.mounted || token.isCancelled) return;
-        state = state.copyWith(phase: UploadPhase.editing, audio: audio);
+        _showInfo(info);
       } else if (_attempts >= kMaxPollAttempts) {
         _timer?.cancel();
-        _fail(StateError('Timed out waiting for the upload to finish processing'));
-      }
-    } catch (e) {
-      if (!ref.mounted || isCancel(e)) return;
-      // A flaky network gets a couple of retries; a server-reported failure is final.
-      _consecutiveErrors++;
-      if (_consecutiveErrors >= 3 || e is StateError) {
-        _timer?.cancel();
-        _fail(e);
+        _fail('Timed out waiting for the upload to finish processing');
       }
     } finally {
       _checking = false;
     }
   }
 
-  void _fail(Object e, [StackTrace? st]) {
-    talker.error('audio upload / load failed', e);
-    state = state.copyWith(phase: UploadPhase.failed, error: describeError(e));
+  /// Shows the editor for a loaded audio, or the failure.
+  void _showInfo(ApiCallResult<Map<String, dynamic>> result) {
+    if (result case ApiCallFailure(:final message)) {
+      _fail(message);
+      return;
+    }
+
+    final audio = result.dataOrNull;
+    if (audio == null) {
+      _fail('The server did not return the audio.');
+      return;
+    }
+    state = state.copyWith(phase: UploadPhase.editing, audio: audio);
   }
 
-  /// Sends only what changed. Returns true on success.
+  void _fail(String message) {
+    state = state.copyWith(phase: UploadPhase.failed, error: message);
+  }
+
+  /// Sends only what changed. Returns true on success (on failure the error was already shown).
   Future<bool> save({String? title, Map<String, dynamic>? tags}) async {
     final audio = state.audio;
     if (audio == null || state.isSaving) return false;
 
     state = state.copyWith(isSaving: true);
-    try {
-      await _api.update(audioId: '${audio['_id']}', title: title, tags: tags);
-      if (!ref.mounted) return true;
+    final result = await _api.update(audioId: '${audio['_id']}', title: title, tags: tags);
+    if (!ref.mounted) return !result.isFailure;
 
-      final oldTags = (audio['tags'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-      state = state.copyWith(
-        isSaving: false,
-        revision: state.revision + 1,
-        audio: {
-          ...audio,
-          'title': ?title,
-          if (tags != null) 'tags': {...oldTags, ...tags},
-        },
-      );
-      return true;
-    } catch (e) {
-      talker.error('audio update failed', e);
-      if (ref.mounted) state = state.copyWith(isSaving: false);
-      NotificationService.showError(message: describeError(e));
+    if (result.isFailure) {
+      state = state.copyWith(isSaving: false);
       return false;
     }
+
+    final oldTags = (audio['tags'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    state = state.copyWith(
+      isSaving: false,
+      revision: state.revision + 1,
+      audio: {
+        ...audio,
+        if (title != null) 'title': title,
+        if (tags != null) 'tags': {...oldTags, ...tags},
+      },
+    );
+    return true;
   }
 }
 

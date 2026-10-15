@@ -1,10 +1,12 @@
 // edit_album_notifier.dart
 //
 // Logic of the edit album page: create (when no id was given), load by id, save the name.
+//
+// The API methods return ApiCallResult. A failure there was already shown to the user as a
+// toast (the load is silent on purpose and shown on the page), so nothing here toasts it again.
 
+import 'package:avarim/api/api_call.dart';
 import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/lib/talker.dart';
-import 'package:avarim/pages/common/edit_errors.dart';
 import 'package:avarim/pages/edit_album/edit_album_api.dart';
 import 'package:avarim/pages/edit_album/edit_album_state.dart';
 import 'package:dio/dio.dart';
@@ -28,16 +30,21 @@ class EditAlbumNotifier extends Notifier<EditAlbumState> {
     if (state.isCreating) return;
     state = state.copyWith(isCreating: true);
 
-    final String id;
-    try {
-      id = await _api.create(name: name);
-    } catch (e) {
-      talker.error('creating album failed', e);
-      if (ref.mounted) state = state.copyWith(isCreating: false);
-      NotificationService.showError(message: describeError(e));
+    final result = await _api.create(name: name);
+    if (!ref.mounted) return;
+
+    // On failure the error was already shown; stay on the create screen so the user can retry.
+    if (result.isFailure) {
+      state = state.copyWith(isCreating: false);
       return;
     }
-    if (!ref.mounted) return;
+
+    final id = extractAlbumId(result.dataOrNull);
+    if (id == null) {
+      state = state.copyWith(isCreating: false);
+      NotificationService.showError(message: 'The server did not return the id of the new album.');
+      return;
+    }
 
     await open(id);
   }
@@ -49,15 +56,20 @@ class EditAlbumNotifier extends Notifier<EditAlbumState> {
     _id = albumId;
     state = EditAlbumState(id: albumId);
 
-    try {
-      final album = await _api.getInfo(albumId, cancelToken: token);
-      if (!ref.mounted || token.isCancelled) return;
-      state = state.copyWith(phase: EditAlbumPhase.editing, album: album);
-    } catch (e) {
-      if (!ref.mounted || isCancel(e)) return;
-      talker.error('loading album failed', e);
-      state = state.copyWith(phase: EditAlbumPhase.failed, error: describeError(e));
+    final result = await _api.getInfo(albumId, cancelToken: token);
+    if (!ref.mounted || token.isCancelled) return;
+
+    if (result case ApiCallFailure(:final message)) {
+      state = state.copyWith(phase: EditAlbumPhase.failed, error: message);
+      return;
     }
+
+    final album = result.dataOrNull;
+    if (album == null) {
+      state = state.copyWith(phase: EditAlbumPhase.failed, error: 'The server did not return the album.');
+      return;
+    }
+    state = state.copyWith(phase: EditAlbumPhase.editing, album: album);
   }
 
   /// "Try again" after a failed load.
@@ -67,25 +79,23 @@ class EditAlbumNotifier extends Notifier<EditAlbumState> {
     return open(id);
   }
 
-  /// Sends the new name. Returns true on success.
+  /// Sends the new name. Returns true on success (on failure the error was already shown).
   Future<bool> save({required String name}) async {
     final album = state.album;
     final id = _id;
     if (album == null || id == null || state.isSaving) return false;
 
     state = state.copyWith(isSaving: true);
-    try {
-      await _api.update(albumId: id, name: name);
-      if (!ref.mounted) return true;
+    final result = await _api.update(albumId: id, name: name);
+    if (!ref.mounted) return !result.isFailure;
 
-      state = state.copyWith(isSaving: false, revision: state.revision + 1, album: {...album, 'name': name});
-      return true;
-    } catch (e) {
-      talker.error('updating album failed', e);
-      if (ref.mounted) state = state.copyWith(isSaving: false);
-      NotificationService.showError(message: describeError(e));
+    if (result.isFailure) {
+      state = state.copyWith(isSaving: false);
       return false;
     }
+
+    state = state.copyWith(isSaving: false, revision: state.revision + 1, album: {...album, 'name': name});
+    return true;
   }
 }
 

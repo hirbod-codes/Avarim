@@ -130,10 +130,12 @@ Future<ApiCallResult<T>> apiCall<T>(Future<Response> Function() request, {T Func
     _showError(message);
     return ApiCallFailure<T>(message, errorCode: parsed is ApiErrorCode ? parsed.code : null);
   } on DioException catch (e) {
-    final message = _extractMessage(ApiResponse.tryParse(e.response?.data), e.response?.data, url: e.response?.requestOptions.path);
+    final parsed = ApiResponse.tryParse(e.response?.data);
+    final message = _extractMessage(parsed, e.response?.data, url: e.response?.requestOptions.path);
     // message is already shown by dio GlobalErrorInterceptor
     // _showError(message);
-    return ApiCallFailure<T>(message);
+    // errorCode lets callers branch on the backend's `error_code` (e.g. TITLE_NOT_UNIQUE).
+    return ApiCallFailure<T>(message, errorCode: parsed is ApiErrorCode ? parsed.code : null);
   } catch (e) {
     talker.error('apiCall: unexpected error', e);
     String message = rootContext == null ? 'Something went wrong.' : AppLocalizations.of(rootContext!)!.uncaughtError;

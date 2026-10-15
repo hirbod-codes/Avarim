@@ -5,12 +5,11 @@
 
 import 'dart:async';
 
-import 'package:avarim/lib/talker.dart';
+import 'package:avarim/api/api_call.dart';
 import 'package:avarim/pages/edit_audio/audio_tag_specs.dart';
 import 'package:avarim/pages/edit_audio/chip_list_field.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_api.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_notifier.dart';
-import 'package:avarim/pages/common/edit_errors.dart';
 import 'package:avarim/pages/common/read_only_details.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -118,15 +117,20 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
 
   Future<void> _checkTitle(String t) async {
     final token = _titleToken = CancelToken();
-    try {
-      final free = await ref.read(audioUploadApiProvider).isTitleUnique(t, cancelToken: token);
-      if (!mounted || token.isCancelled || _title.text.trim() != t) return;
-      setState(() => _titleStatus = free ? _TitleStatus.available : _TitleStatus.taken);
-    } catch (e) {
-      if (isCancel(e) || !mounted || _title.text.trim() != t) return;
-      talker.error('title uniqueness check failed', e);
-      setState(() => _titleStatus = _TitleStatus.unknown);
-    }
+
+    final result = await ref.read(audioUploadApiProvider).isTitleUnique(t, cancelToken: token);
+    if (!mounted || token.isCancelled || _title.text.trim() != t) return;
+
+    setState(() {
+      _titleStatus = switch (result) {
+        // 400 TITLE_NOT_UNIQUE: somebody else already uses this title.
+        ApiCallFailure(errorCode: kTitleNotUniqueCode) => _TitleStatus.taken,
+        // Any other failure: we couldn't verify (this request is silent, so no toast).
+        ApiCallFailure() => _TitleStatus.unknown,
+        // 204: free.
+        _ => _TitleStatus.available,
+      };
+    });
   }
 
   // ── what changed ───────────────────────────────────────────────────────────
@@ -288,9 +292,7 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
             return Wrap(
               spacing: 16,
               runSpacing: 16,
-              children: [
-                for (final s in g.fields) SizedBox(width: (s.kind == TagKind.list || s.kind == TagKind.multiline) ? c.maxWidth : half, child: _field(s)),
-              ],
+              children: [for (final s in g.fields) SizedBox(width: (s.kind == TagKind.list || s.kind == TagKind.multiline) ? c.maxWidth : half, child: _field(s))],
             );
           },
         ),

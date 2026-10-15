@@ -22,20 +22,12 @@ class GlobalErrorInterceptor extends Interceptor {
   /// quietly. Set `extra: {'silentErrors': true}` on the RequestOptions.
   static const silentErrorsKey = 'silentErrors';
 
-  bool _isSilent = false;
-
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler? handler) {
-    _isSilent = options.extra[silentErrorsKey] == true;
-
-    handler?.next(options);
-  }
-
   @override
   void onError(Exception err, ErrorInterceptorHandler? handler) {
     talker.error('error caught in GlobalErrorInterceptor', err);
     if (err is DioException) {
-      if (!_isSilent) {
+      final silent = err.requestOptions.extra[silentErrorsKey] == true;
+      if (!silent) {
         final message = _messageFor(err);
         final context = rootContext;
         if (context != null) {
@@ -45,7 +37,7 @@ class GlobalErrorInterceptor extends Interceptor {
 
       handler?.next(err);
     } else {
-      if (!_isSilent && rootContext != null) {
+      if (rootContext != null) {
         NotificationService.showError(message: AppLocalizations.of(rootContext!)?.uncaughtError ?? 'Something went wrong. Please try again.');
       }
     }

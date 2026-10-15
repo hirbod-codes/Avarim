@@ -59,6 +59,7 @@ Map<String, String Function(AppLocalizations? l10n)> errorCodeMessages = {
   'PLAN_NOT_FOUND': (l10n) => l10n?.error_code_plan_not_found ?? 'Plan not found',
   'PLAN_PAYMENT_METHOD': (l10n) => l10n?.error_code_plan_payment_method ?? 'This payment method is not available for this plan',
   'NO_UPGRADE_OPTIONS': (l10n) => l10n?.error_code_no_upgrade_options ?? 'Each plan renewal must add 3 days to due date or at least one GB to storage',
+  'TITLE_NOT_UNIQUE': (l10n) => 'An audio with this title already exists.',
 };
 
 String messageForErrorCode(String code) {

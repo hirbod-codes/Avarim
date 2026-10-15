@@ -1,10 +1,12 @@
 // edit_artist_notifier.dart
 //
 // Logic of the edit artist page: create (when no id was given), load by id, save the name.
+//
+// The API methods return ApiCallResult. A failure there was already shown to the user as a
+// toast (the load is silent on purpose and shown on the page), so nothing here toasts it again.
 
+import 'package:avarim/api/api_call.dart';
 import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/lib/talker.dart';
-import 'package:avarim/pages/common/edit_errors.dart';
 import 'package:avarim/pages/edit_artist/edit_artist_api.dart';
 import 'package:avarim/pages/edit_artist/edit_artist_state.dart';
 import 'package:dio/dio.dart';
@@ -28,16 +30,21 @@ class EditArtistNotifier extends Notifier<EditArtistState> {
     if (state.isCreating) return;
     state = state.copyWith(isCreating: true);
 
-    final String id;
-    try {
-      id = await _api.create(name: name);
-    } catch (e) {
-      talker.error('creating artist failed', e);
-      if (ref.mounted) state = state.copyWith(isCreating: false);
-      NotificationService.showError(message: describeError(e));
+    final result = await _api.create(name: name);
+    if (!ref.mounted) return;
+
+    // On failure the error was already shown; stay on the create screen so the user can retry.
+    if (result.isFailure) {
+      state = state.copyWith(isCreating: false);
       return;
     }
-    if (!ref.mounted) return;
+
+    final id = extractArtistId(result.dataOrNull);
+    if (id == null) {
+      state = state.copyWith(isCreating: false);
+      NotificationService.showError(message: 'The server did not return the id of the new artist.');
+      return;
+    }
 
     await open(id);
   }
@@ -49,15 +56,20 @@ class EditArtistNotifier extends Notifier<EditArtistState> {
     _id = artistId;
     state = EditArtistState(id: artistId);
 
-    try {
-      final artist = await _api.getInfo(artistId, cancelToken: token);
-      if (!ref.mounted || token.isCancelled) return;
-      state = state.copyWith(phase: EditArtistPhase.editing, artist: artist);
-    } catch (e) {
-      if (!ref.mounted || isCancel(e)) return;
-      talker.error('loading artist failed', e);
-      state = state.copyWith(phase: EditArtistPhase.failed, error: describeError(e));
+    final result = await _api.getInfo(artistId, cancelToken: token);
+    if (!ref.mounted || token.isCancelled) return;
+
+    if (result case ApiCallFailure(:final message)) {
+      state = state.copyWith(phase: EditArtistPhase.failed, error: message);
+      return;
     }
+
+    final artist = result.dataOrNull;
+    if (artist == null) {
+      state = state.copyWith(phase: EditArtistPhase.failed, error: 'The server did not return the artist.');
+      return;
+    }
+    state = state.copyWith(phase: EditArtistPhase.editing, artist: artist);
   }
 
   /// "Try again" after a failed load.
@@ -67,25 +79,23 @@ class EditArtistNotifier extends Notifier<EditArtistState> {
     return open(id);
   }
 
-  /// Sends the new name. Returns true on success.
+  /// Sends the new name. Returns true on success (on failure the error was already shown).
   Future<bool> save({required String name}) async {
     final artist = state.artist;
     final id = _id;
     if (artist == null || id == null || state.isSaving) return false;
 
     state = state.copyWith(isSaving: true);
-    try {
-      await _api.update(artistId: id, name: name);
-      if (!ref.mounted) return true;
+    final result = await _api.update(artistId: id, name: name);
+    if (!ref.mounted) return !result.isFailure;
 
-      state = state.copyWith(isSaving: false, revision: state.revision + 1, artist: {...artist, 'name': name});
-      return true;
-    } catch (e) {
-      talker.error('updating artist failed', e);
-      if (ref.mounted) state = state.copyWith(isSaving: false);
-      NotificationService.showError(message: describeError(e));
+    if (result.isFailure) {
+      state = state.copyWith(isSaving: false);
       return false;
     }
+
+    state = state.copyWith(isSaving: false, revision: state.revision + 1, artist: {...artist, 'name': name});
+    return true;
   }
 }
 

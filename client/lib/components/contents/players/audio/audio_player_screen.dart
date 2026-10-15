@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
@@ -22,6 +23,11 @@ const kPlayerContentDesignHeight = 760.0;
 /// saturation; `tonalSpot` (Material You default) is softer / more muted, `vibrant`
 /// is punchier. Any [DynamicSchemeVariant] works.
 const kCoverGradientVariant = DynamicSchemeVariant.content;
+
+/// How far the radial gradient reaches, as a fraction of the distance from the cover art's
+/// centre to the farthest corner of the screen. 1.0 = the last colour is reached exactly in
+/// that corner; lower values reach the plain background colour sooner.
+const kCoverGradientReach = 0.85;
 
 class AudioPlayerScreen extends ConsumerStatefulWidget {
   const AudioPlayerScreen({
@@ -80,6 +86,14 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   List<Color>? _gradient;
   Brightness? _gradientBrightness;
 
+  // The radial gradient is centred on the cover art. Its position depends on the layout
+  // (scaling, padding, screen size), so it is measured after layout.
+  final _artKey = GlobalKey();
+  final _backgroundKey = GlobalKey();
+  Alignment _gradientCenter = const Alignment(0, -0.45); // until the first measurement
+  double _gradientRadius = 1.0;
+  BoxConstraints? _lastLayout;
+
   @override
   void initState() {
     super.initState();
@@ -117,6 +131,42 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
     super.dispose();
   }
 
+  /// Finds the cover art's centre relative to the background and re-centres the gradient on it.
+  void _measureGradientCenter() {
+    if (!mounted) return;
+
+    final art = _artKey.currentContext?.findRenderObject();
+    final background = _backgroundKey.currentContext?.findRenderObject();
+    if (art is! RenderBox || background is! RenderBox) return;
+    if (!art.attached || !background.attached || !art.hasSize || !background.hasSize) return;
+
+    final size = background.size;
+    if (size.isEmpty) return;
+
+    // Both boxes share the same transforms (dock slide, content scaling), so converting
+    // through global coordinates gives the art's centre in the background's own pixels.
+    final center = background.globalToLocal(art.localToGlobal(art.size.center(Offset.zero)));
+    final alignment = Alignment(center.dx / size.width * 2 - 1, center.dy / size.height * 2 - 1);
+
+    // RadialGradient.radius is a fraction of the shortest side; reach (a share of) the farthest corner.
+    final farthest = [
+      Offset.zero,
+      Offset(size.width, 0),
+      Offset(0, size.height),
+      Offset(size.width, size.height),
+    ].map((c) => (c - center).distance).reduce(math.max);
+    final radius = farthest * kCoverGradientReach / size.shortestSide;
+
+    final unchanged =
+        (alignment.x - _gradientCenter.x).abs() < 0.002 && (alignment.y - _gradientCenter.y).abs() < 0.002 && (radius - _gradientRadius).abs() < 0.002;
+    if (unchanged) return;
+
+    setState(() {
+      _gradientCenter = alignment;
+      _gradientRadius = radius;
+    });
+  }
+
   /// Builds the gradient from the cover art's dominant colour. The colours come from a
   /// Material colour scheme generated in the CURRENT theme brightness, so they are
   /// deep / darkened in dark mode and soft / lightened in light mode, and are redone
@@ -133,7 +183,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
         dynamicSchemeVariant: kCoverGradientVariant,
       );
       if (!mounted || _gradientBrightness != brightness) return;
-      setState(() => _gradient = [scheme.primaryContainer, scheme.tertiaryContainer, scheme.surface]);
+      setState(() => _gradient = [scheme.primaryContainer, scheme.primaryContainer, scheme.surface]);
     } catch (_) {
       // No cover art (or it failed to load): keep the plain background.
     }
@@ -144,6 +194,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
     final notifier = ref.watch(audioPlayerCommandsProvider.notifier);
 
     return AnimatedContainer(
+      key: _backgroundKey,
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeOut,
       width: double.infinity,
@@ -151,7 +202,8 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
       decoration: _gradient == null
           ? const BoxDecoration()
           : BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: _gradient!, stops: const [0.0, 0.55, 1.0]),
+              // Brightest at the centre of the cover art, fading to the plain surface colour outwards.
+              gradient: RadialGradient(center: _gradientCenter, radius: _gradientRadius, colors: _gradient!, stops: const [0.0, 0.5, 1.0]),
             ),
       // Transparent Material: gives buttons / sliders a surface whose splashes are drawn ABOVE the gradient.
       child: Material(
@@ -168,6 +220,11 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
               padding: widget.contentPadding,
               child: LayoutBuilder(
                 builder: (context, box) {
+                  // The layout changed -> re-measure where the cover art ended up.
+                  if (_lastLayout != box) {
+                    _lastLayout = box;
+                    WidgetsBinding.instance.addPostFrameCallback((_) => _measureGradientCenter());
+                  }
                   // Only ever shrinks. The design width is widened by the same factor so the
                   // scaled content keeps the real width.
                   final scale = (box.maxHeight / kPlayerContentDesignHeight).clamp(0.05, 1.0);
@@ -203,6 +260,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                                               children: [
                                                 const SizedBox(height: 24),
                                                 Container(
+                                                  key: _artKey,
                                                   constraints: BoxConstraints(maxHeight: 300),
                                                   child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
                                                 ),

@@ -7,15 +7,20 @@
 //   PUT {path}   -> multipart, field [kImageFieldName]
 //
 // Picking / previewing is done by ImageUploadDialog (gallery / camera); its default upload
-// is replaced by the PUT above. Requests go through authDioProvider (base URL + auth), and
-// the current image is shown with Image.memory (no auth headers needed on the image).
+// is replaced by the PUT above. Requests go through authDioProvider (base URL + auth).
+//
+//   - PUT goes through apiCall: a failure is already shown to the user (GlobalErrorInterceptor).
+//   - GET returns raw image bytes, which apiCall's `{ status, data }` envelope can't represent,
+//     so it stays a plain Dio call; its errors are shown inline on the card
+//     and marked silent so cancelled / failed loads don't toast.
 
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:avarim/api/api_call.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
+import 'package:avarim/api/dio/global_error_interceptor.dart';
 import 'package:avarim/components/dialogs/upload/image_upload_dialog.dart';
-import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:avarim/pages/common/edit_errors.dart';
 import 'package:dio/dio.dart';
@@ -43,7 +48,11 @@ class ImageApi {
     final res = await _dio.get<List<int>>(
       path,
       cancelToken: cancelToken,
-      options: Options(responseType: ResponseType.bytes, validateStatus: (s) => s != null && (s < 300 || s == 404)),
+      options: Options(
+        responseType: ResponseType.bytes,
+        validateStatus: (s) => s != null && (s < 300 || s == 404),
+        extra: {GlobalErrorInterceptor.silentErrorsKey: true},
+      ),
     );
 
     final data = res.data;
@@ -51,14 +60,17 @@ class ImageApi {
     return Uint8List.fromList(data);
   }
 
-  Future<void> put(String path, XFile image) async {
-    final part = MultipartFile.fromStream(() => image.openRead(), await image.length(), filename: image.name);
+  /// Replaces the image. On failure the error was already shown (see the header).
+  Future<ApiCallResult<dynamic>> put(String path, XFile image) {
+    return apiCall<dynamic>(() async {
+      final part = MultipartFile.fromStream(() => image.openRead(), await image.length(), filename: image.name);
 
-    await _dio.put<dynamic>(
-      path,
-      data: FormData.fromMap({kImageFieldName: part}),
-      options: Options(sendTimeout: Duration.zero, receiveTimeout: const Duration(minutes: 2)),
-    );
+      return _dio.put<dynamic>(
+        path,
+        data: FormData.fromMap({kImageFieldName: part}),
+        options: Options(sendTimeout: Duration.zero, receiveTimeout: const Duration(minutes: 2)),
+      );
+    });
   }
 }
 
@@ -126,9 +138,9 @@ class _ImageSectionState extends ConsumerState<ImageSection> {
         _bytes = bytes;
         _loading = false;
       });
-    } catch (e) {
+    } catch (e, st) {
       if (!mounted || isCancel(e)) return;
-      talker.error('image fetch failed (${widget.path})', e);
+      talker.error('image fetch failed (${widget.path})', e, st);
       setState(() {
         _loading = false;
         _failed = true;
@@ -151,14 +163,9 @@ class _ImageSectionState extends ConsumerState<ImageSection> {
       builder: (_) => ImageUploadDialog(
         showTitle: false,
         onUpload: (image, _) async {
-          try {
-            await api.put(path, image);
-            return true;
-          } catch (e) {
-            talker.error('image update failed ($path)', e);
-            NotificationService.showError(message: describeError(e));
-            return null; // keep the dialog open so the user can retry
-          }
+          final result = await api.put(path, image);
+          // On failure the error was already shown: keep the dialog open so the user can retry.
+          return result.isFailure ? null : true;
         },
       ),
     );
@@ -189,10 +196,7 @@ class _ImageSectionState extends ConsumerState<ImageSection> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (_bytes != null)
-            Image.memory(_bytes!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (context, error, stack) => placeholder)
-          else
-            placeholder,
+          if (_bytes != null) Image.memory(_bytes!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (context, error, stack) => placeholder) else placeholder,
           if (_loading)
             const ColoredBox(
               color: Colors.black38,
