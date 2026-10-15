@@ -29,6 +29,37 @@ const kCoverGradientVariant = DynamicSchemeVariant.content;
 /// that corner; lower values reach the plain background colour sooner.
 const kCoverGradientReach = 0.85;
 
+/// Minimum contrast ratios the gradient must keep against the app's own colours, so that
+/// the text and the primary-coloured controls stay comfortable to look at on any cover.
+const kGradientMinContrastOnSurface = 7.0; // title, duration, labels  (WCAG AAA)
+const kGradientMinContrastOnSurfaceVariant = 4.5; // artist, icons       (WCAG AA)
+const kGradientMinContrastPrimary = 3.0; // play button, seek bar        (WCAG non-text AA)
+
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+}
+
+/// Darkens ([theme] is dark) or lightens ([theme] is light) [color] until the theme's text
+/// colours and its primary colour all have enough contrast against it. The hue and
+/// saturation are kept, so it still looks like the cover.
+Color _fitToTheme(Color color, ColorScheme theme) {
+  bool readable(Color c) =>
+      _contrast(c, theme.onSurface) >= kGradientMinContrastOnSurface &&
+      _contrast(c, theme.onSurfaceVariant) >= kGradientMinContrastOnSurfaceVariant &&
+      _contrast(c, theme.primary) >= kGradientMinContrastPrimary;
+
+  if (readable(color)) return color;
+
+  final step = theme.brightness == Brightness.dark ? -0.02 : 0.02;
+  var hsl = HSLColor.fromColor(color);
+  for (var i = 0; i < 50 && !readable(hsl.toColor()); i++) {
+    hsl = hsl.withLightness((hsl.lightness + step).clamp(0.0, 1.0));
+  }
+  return hsl.toColor();
+}
+
 class AudioPlayerScreen extends ConsumerStatefulWidget {
   const AudioPlayerScreen({
     super.key,
@@ -85,6 +116,10 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   /// or when the audio has no cover art.
   List<Color>? _gradient;
   Brightness? _gradientBrightness;
+
+  // [_gradient] adjusted to the current theme's text / primary colours (see _fitToTheme); cached per theme.
+  List<Color> _fitted = const [];
+  ColorScheme? _fittedFor;
 
   // The radial gradient is centred on the cover art. Its position depends on the layout
   // (scaling, padding, screen size), so it is measured after layout.
@@ -183,7 +218,10 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
         dynamicSchemeVariant: kCoverGradientVariant,
       );
       if (!mounted || _gradientBrightness != brightness) return;
-      setState(() => _gradient = [scheme.primaryContainer, scheme.primaryContainer, scheme.surface]);
+      setState(() {
+        _gradient = [scheme.primaryContainer, scheme.tertiaryContainer, scheme.surface];
+        _fittedFor = null; // re-fit to the theme in build
+      });
     } catch (_) {
       // No cover art (or it failed to load): keep the plain background.
     }
@@ -192,6 +230,12 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final notifier = ref.watch(audioPlayerCommandsProvider.notifier);
+
+    final themeScheme = Theme.of(context).colorScheme;
+    if (_gradient != null && _fittedFor != themeScheme) {
+      _fitted = [for (final c in _gradient!) _fitToTheme(c, themeScheme)];
+      _fittedFor = themeScheme;
+    }
 
     return AnimatedContainer(
       key: _backgroundKey,
@@ -203,7 +247,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
           ? const BoxDecoration()
           : BoxDecoration(
               // Brightest at the centre of the cover art, fading to the plain surface colour outwards.
-              gradient: RadialGradient(center: _gradientCenter, radius: _gradientRadius, colors: _gradient!, stops: const [0.0, 0.5, 1.0]),
+              gradient: RadialGradient(center: _gradientCenter, radius: _gradientRadius, colors: _fitted, stops: const [0.0, 0.5, 1.0]),
             ),
       // Transparent Material: gives buttons / sliders a surface whose splashes are drawn ABOVE the gradient.
       child: Material(
@@ -418,6 +462,7 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 4,
+            inactiveTrackColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24),
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
             secondaryActiveTrackColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
@@ -515,7 +560,10 @@ class _VolumeControls extends ConsumerWidget {
       children: [
         const Icon(Icons.volume_down_rounded, size: 20),
         Expanded(
-          child: Slider(value: state.volume.clamp(0.0, 1.0), onChanged: (v) => commands.setVolume(v)),
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(inactiveTrackColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24)),
+            child: Slider(value: state.volume.clamp(0.0, 1.0), onChanged: (v) => commands.setVolume(v)),
+          ),
         ),
         const Icon(Icons.volume_up_rounded, size: 20),
       ],
