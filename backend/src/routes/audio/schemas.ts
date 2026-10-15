@@ -2,6 +2,7 @@ import { object, string } from "yup";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from '../schemas';
 import { number } from "yup";
 import { audioPatchSchema } from "../../db/models/Audio";
+import { array } from "yup";
 
 export const isUploadFinished = object().required().shape({
     audioId: string().required().label('Audio Id'),
@@ -15,7 +16,23 @@ export const postSchema = object().required().shape({
     title: string().optional().label('Title'),
 })
 
-export const postApproveSchema = audioPatchSchema.shape({
+export const artistUpdateSchema = object().shape({
+    artists: array(string().required().label('Artist').max(1000)).min(1).required(),
+    audioId: string().required().label('Audio Id'),
+}).required().stripUnknown()
+
+export const albumUpdateSchema = object().shape({
+    album: string().required().label('Album').max(1000),
+    audioId: string().required().label('Audio Id'),
+}).required().stripUnknown()
+
+export const lyricsUpdateSchema = object().shape({
+    lyrics: string().required().label('Lyrics').max(500000),
+    audioId: string().required().label('Audio Id'),
+}).required().stripUnknown()
+
+export const titleUpdateSchema = object().shape({
+    title: string().required().label('Title'),
     audioId: string().required().label('Audio Id'),
 }).required().stripUnknown()
 

@@ -83,6 +83,10 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!.updateMany({ albumName, audioTitle }, { $set: { ...updates, updatedAt: Date.now() } }, { session: this.session })
     }
 
+    async upsertManyByAlbumNameByAudioTitle(albumName: string, audioTitle: string, updates: ArtistAlbumAudioUpdate) {
+        return await ArtistAlbumAudioRepository.collection!.updateMany({ albumName, audioTitle }, { $set: { ...updates, updatedAt: Date.now() } }, { upsert: true, session: this.session })
+    }
+
     async delete(id: string): Promise<DeleteResult> {
         return await ArtistAlbumAudioRepository.collection!.deleteOne({ _id: ObjectId.createFromHexString(id) }, { session: this.session })
     }

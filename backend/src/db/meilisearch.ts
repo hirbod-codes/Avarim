@@ -4,6 +4,7 @@ import { meilisearchHost, meilisearchKey, meilisearchPort } from '../configs';
 import { ArtistSearch, collectionName as artistCollection } from './models/Artist';
 import { AlbumSearch, collectionName as albumCollection } from './models/Album';
 import { collectionName as playlistCollection, PlaylistSearch } from './models/Playlist';
+import { collectionName as playlistAudioCollection, PlaylistAudioSearch } from './models/PlaylistAudio';
 
 /* ------------------------------------------------------------------ */
 /* Errors                                                             */
@@ -68,7 +69,9 @@ export interface WriteOptions {
     wait?: boolean;
 }
 
-export type Where<T> = { [K in Extract<keyof T, string>]?: string | number | boolean };
+type FilterValue = string | number | boolean;
+/** A scalar means "equals"; an array means "equals any of these" (Meilisearch `IN`). */
+export type Where<T> = { [K in Extract<keyof T, string>]?: FilterValue | FilterValue[] };
 
 export interface WriteResult { taskUid: number; status: Task['status'] }
 
@@ -226,14 +229,25 @@ export class MeiliCrud<T extends Record<string, any>> {
         return (await this.list({ filter, limit: opts.limit ?? 100 })).results as (T & { _id: any })[];
     }
 
-    /** `{ title: 'x', userId: 'u' }` -> `title = "x" AND userId = "u"` (values are quoted/escaped). */
+    /**
+     * `{ title: 'x', userId: 'u' }`   -> `title = "x" AND userId = "u"`
+     * `{ audioId: ['a', 'b'] }`       -> `audioId IN ["a", "b"]`
+     * Values are JSON-quoted, so quotes and backslashes inside them are escaped.
+     */
     private filterFrom(where: Where<T>): string {
-        const filter = Object.entries(where)
+        const parts = Object.entries(where)
             .filter(([, v]) => v !== undefined)
-            .map(([field, value]) => `${field} = ${JSON.stringify(value)}`)       // JSON quoting escapes " and \ inside values
-            .join(' AND ');
-        if (!filter) throw new SearchError('invalid', 'Meilisearch lookup needs at least one condition');
-        return filter;
+            .map(([field, value]) => {
+                if (Array.isArray(value)) {
+                    // An empty list matches nothing. Dropping the condition instead would WIDEN the delete
+                    // (e.g. { playlistId, audioId: [] } would wipe the whole playlist), so refuse it.
+                    if (value.length === 0) throw new SearchError('invalid', `Meilisearch lookup: the "${field}" list must not be empty`);
+                    return `${field} IN [${value.map((v) => JSON.stringify(v)).join(', ')}]`;
+                }
+                return `${field} = ${JSON.stringify(value)}`;
+            });
+        if (!parts.length) throw new SearchError('invalid', 'Meilisearch lookup needs at least one condition');
+        return parts.join(' AND ');
     }
 
     /** All primary keys matching a filter, paging through every result (no silent 20/100 cap). */
@@ -264,6 +278,35 @@ export class MeiliCrud<T extends Record<string, any>> {
         return this.write('update', () => this.index.updateDocuments([{ ...patch, [this.primaryKey]: id } as Partial<T>], { primaryKey: this.primaryKey }), o);
     }
 
+    /**
+     * Like MongoDB's `updateMany(where, { $set: patch })`: merges `patch` into EVERY document matching `where`.
+     *
+     *   await meiliPlaylistAudio.updateBy({ audioId }, { audioTitle: 'New title' });
+     *   await meiliPlaylistAudio.updateBy({ playlistId: 'p1', audioId: ['a1', 'a2'] }, { audioTitle: 'x' });
+     *
+     * Returns how many documents matched (like Mongo's `matchedCount`); `task` is null when nothing matched
+     * (no write is enqueued). Fields used in `where` must be in `filterableAttributes`.
+     *
+     * Meilisearch has no "update by filter" on stable releases, so this is two steps: collect the matching
+     * primary keys (paging through all of them), then one partial update for those ids. The two steps aren't
+     * atomic: a document created in between is missed. Fine for admin-style traffic, same caveat as `update()`.
+     * Like `$set`, top-level fields are replaced as a whole (nested objects are not deep-merged).
+     */
+    async updateBy(where: Where<T>, patch: Partial<T>, o?: WriteOptions): Promise<{ matched: number; task: WriteResult | null }> {
+        if (Object.keys(patch).length === 0) throw new SearchError('invalid', 'Meilisearch updateBy needs at least one field to set');
+
+        const ids = await this.idsMatching(this.filterFrom(where));
+        if (ids.length === 0) return { matched: 0, task: null };
+
+        const task = await this.write(
+            'updateBy',
+            // the primary key is set last, so a primary key inside `patch` can never retarget a document
+            () => this.index.updateDocuments(ids.map((id) => ({ ...patch, [this.primaryKey]: id }) as Partial<T>), { primaryKey: this.primaryKey }),
+            o,
+        );
+        return { matched: ids.length, task };
+    }
+
     /** Insert-or-replace by primary key (same as create, named for intent). */
     upsert(doc: T | T[], o?: WriteOptions) { return this.create(doc, o); }
 
@@ -283,7 +326,10 @@ export class MeiliCrud<T extends Record<string, any>> {
         return this.write('deleteByFilter', () => this.index.deleteDocuments({ filter }), o);
     }
 
-    /** Deletes EVERY document matching `where`: `deleteBy({ audioTitle: 'x', userId })`. Fields must be filterable. */
+    /**
+     * Deletes EVERY document matching `where`. Fields must be filterable.
+     * `deleteBy({ audioTitle: 'x', userId })`, or `deleteBy({ audioId: audioIds })` for "any of these".
+     */
     deleteBy(where: Where<T>, o?: WriteOptions) {
         return this.write('deleteBy', () => this.index.deleteDocuments({ filter: this.filterFrom(where) }), o);
     }
@@ -300,8 +346,8 @@ export const meiliAudio = new MeiliCrud<AudioSearch>(meili, audioCollection, {
 });
 
 export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, artistCollection, {
-    primaryKey: '_id',
-    settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
+    primaryKey: 'name',
+    settings: { filterableAttributes: ['name'], sortableAttributes: ['name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
@@ -314,5 +360,12 @@ export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, albumCollection, {
 export const meiliPlaylist = new MeiliCrud<PlaylistSearch>(meili, playlistCollection, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
+    waitByDefault: true
+});
+
+// to be able to search for audios in a playlist
+export const meiliPlaylistAudio = new MeiliCrud<PlaylistAudioSearch>(meili, playlistAudioCollection, {
+    primaryKey: '_id',
+    settings: { filterableAttributes: ['_id', 'playlistId', 'audioId'], sortableAttributes: ['_id', 'playlistId', 'audioTitle'], searchableAttributes: ['audioTitle'] },
     waitByDefault: true
 });

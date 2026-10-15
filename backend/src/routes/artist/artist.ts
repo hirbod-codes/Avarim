@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { albumListQuerySchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
+import { albumListQuerySchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, isNameUnique, listQuerySchema, postSchema } from './schemas';
 import ArtistRepository from '../../db/MongoDB/ArtistRepository';
 import { meiliArtist } from '../../db/meilisearch';
 import { Artist, getAvatarKey, getBannerKey } from '../../db/models/Artist';
@@ -14,9 +14,39 @@ import { createReadStream } from 'node:fs';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 
+const router = express.Router();
+
 const ARTIST_NAME_SEPARATOR = '__ARTIST_NAME_SEPARATOR__'
 
-const router = express.Router();
+router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'Get /api/artist/is_title_unique' });
+
+    try {
+        log.info('artist title uniqueness check request received');
+
+        log.debug({ query: req.query });
+        const { name } = await runWithLogger(log, () => validate(isNameUnique, req.query))
+        log.info('input validated');
+        log.debug({ name });
+
+        const userId = req.user!.userId
+        log = log.child({ userId });
+
+        const artistRepository = new ArtistRepository()
+
+        log.info('checking whether title already exists')
+        const artist = await runWithLogger(log, () => artistRepository.getByName(name));
+        log.debug({ artist });
+        if (artist) {
+            log.info('Rejected artist upload: title already exists');
+            return res.status(400).json({ status: 'error', error_code: 'NAME_NOT_UNIQUE' });
+        }
+
+        res.status(204).json({ status: 'success', data: true })
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err))
+    }
+})
 
 router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/' });
@@ -42,6 +72,13 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
         log.debug({ result })
         if (!result.acknowledged) {
             log.info('failed to create artist')
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+        }
+
+        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
+        log.debug({ meiliResult })
+        if (meiliResult.status !== 'succeeded') {
+            log.warn('Failed to create artist')
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
         }
 

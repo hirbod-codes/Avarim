@@ -62,6 +62,14 @@ class PlaylistRepository implements IRepository, ISeedable, IDropable {
         return (await PlaylistRepository.collection!.find({ name }, { session: this.session }).toArray())[0]
     }
 
+    async getByNameForUser(userId: string, name: string): Promise<WithId<Playlist>> {
+        return (await PlaylistRepository.collection!.find({ name, userId }, { session: this.session }).toArray())[0]
+    }
+
+    async getForUser(userId: string, playlistId: string): Promise<WithId<Playlist>> {
+        return (await PlaylistRepository.collection!.find({ playlistId, userId }, { session: this.session }).toArray())[0]
+    }
+
     async getMany(playlistIds: string[]): Promise<WithId<Playlist>[]> {
         return await PlaylistRepository.collection!.find({ _id: { $in: playlistIds.map(m => ObjectId.createFromHexString(m)) } }, { session: this.session }).toArray()
     }

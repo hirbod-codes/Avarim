@@ -1,10 +1,6 @@
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import AudioRepository from "../../db/MongoDB/AudioRepository";
 import { getLogger, runWithLogger } from "../../observability/requestLoggerContext";
-import { s3 } from "../..";
 import { Request, Response } from "express";
-import { BUCKET_NAME } from "../../configs";
-import { Readable } from "stream";
 import { handleError } from "../../lib";
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -68,7 +64,7 @@ export async function prepareAudioInDb(metadata: ExtractionResult) {
                         // ------------------------------------------------------------------------- create meilisearch artist(s)
                         log.info('create meilisearch artist(s)')
 
-                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ _id: createResult.insertedId.toString(), name }))
+                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
                         log.debug({ meiliResult })
                         if (meiliResult.status !== 'succeeded') {
                             log.warn('Failed to create artist')

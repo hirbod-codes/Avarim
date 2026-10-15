@@ -2,9 +2,9 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
+import { avatarParamsSchema, createPlaylistAudioSchema, deleteParamsSchema, infoQuerySchema, isNameUnique, listQuerySchema, postSchema } from './schemas';
 import PlaylistRepository from '../../db/MongoDB/PlaylistRepository';
-import { meiliPlaylist } from '../../db/meilisearch';
+import { meiliPlaylist, meiliPlaylistAudio } from '../../db/meilisearch';
 import { Playlist, getAvatarKey } from '../../db/models/Playlist';
 import { deleteFromS3, detectContentType, getS3ObjectStream, receiveUpload, uploadToS3 } from '../../lib/file_management';
 import { imageUploadTmpDir } from '../../configs';
@@ -13,10 +13,43 @@ import { mkdir, rm, unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import PlaylistAudioRepository from '../../db/MongoDB/PlaylistAudioRepository';
+import { Audio } from '../../db/models/Audio';
+import { WithId } from '../../db/common_schemas';
+import AudioRepository from '../../db/MongoDB/AudioRepository';
 
 const PLAYLIST_NAME_SEPARATOR = '__PLAYLIST_NAME_SEPARATOR__'
 
 const router = express.Router();
+
+router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'playlist', route: 'Get /api/playlist/is_title_unique' });
+
+    try {
+        log.info('playlist title uniqueness check request received');
+
+        log.debug({ query: req.query });
+        const { name } = await runWithLogger(log, () => validate(isNameUnique, req.query))
+        log.info('input validated');
+        log.debug({ name });
+
+        const userId = req.user!.userId
+        log = log.child({ userId });
+
+        const playlistRepository = new PlaylistRepository()
+
+        log.info('checking whether title already exists')
+        const playlist = await runWithLogger(log, () => playlistRepository.getByName(name));
+        log.debug({ playlist });
+        if (playlist) {
+            log.info('Rejected playlist upload: title already exists');
+            return res.status(400).json({ status: 'error', error_code: 'NAME_NOT_UNIQUE' });
+        }
+
+        res.status(204).json({ status: 'success', data: true })
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err))
+    }
+})
 
 router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'playlist', route: 'GET /api/playlist/' });
@@ -114,20 +147,13 @@ router.get('/info', auth, async (req, res) => {
 
         const playlistRepository = new PlaylistRepository();
 
-        log.info('fetch from playlistRepository')
-
         let playlist
-        if (playlistId)
-            playlist = await runWithLogger(log, () => playlistRepository.get(playlistId))
+        if (name)
+            playlist = await runWithLogger(log, () => playlistRepository.getByNameForUser(userId, name))
         else
-            playlist = await runWithLogger(log, () => playlistRepository.getByName(name!))
+            playlist = await runWithLogger(log, () => playlistRepository.getForUser(userId, playlistId!))
 
         log.debug({ playlist });
-
-        if (!playlist) {
-            log.info('playlist not found')
-            return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' });
-        }
 
         res.status(200).json({ status: 'success', data: playlist });
     } catch (err) {
@@ -135,32 +161,195 @@ router.get('/info', auth, async (req, res) => {
     }
 });
 
-router.get('/list', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'playlist', route: 'GET /api/playlist/list' });
+router.post('/audio', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'playlist', route: 'POST /api/playlist/audio' });
 
+    let db: MongoDB | undefined
     try {
-        log.info('playlist info request received');
+        log.info('playlist audio list request received');
 
         log.debug({ query: req.query });
-        const { playlistId, name } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
+        const { playlistId, audioId, audioIds } = await runWithLogger(log, () => validate(createPlaylistAudioSchema, req.query));
+        log.debug({ playlistId, audioId, audioIds });
+
         log.info('Input validated');
-        log.debug({ playlistId, name });
 
         const userId = req.user!.userId;
         log = log.child({ userId });
 
-        const playlistRepository = new PlaylistAudioRepository();
+        const audioRepository = new AudioRepository();
+        const playlistRepository = new PlaylistRepository();
 
-        let playlists
-        if (name)
-            playlists = await runWithLogger(log, () => playlistRepository.getByPlaylistNameForUser(userId, name))
-        else
-            playlists = await runWithLogger(log, () => playlistRepository.getByPlaylistIdForUser(userId, playlistId!))
 
-        log.debug({ playlists });
+        const playlist = await runWithLogger(log, playlistRepository.getForUser(userId, playlistId))
+        log.debug({ playlist })
+        if (!playlist) {
+            log.info('playlist not found')
+            return res.status(404).json({ status: 'error', error_code: 'PLAYLIST_NOT_FOUND' })
+        }
 
-        res.status(200).json({ status: 'success', data: playlists });
+        db = MongoDB.getDbInstance()
+        const session = await db.startTransaction()
+
+        const playlistAudioRepository = new PlaylistAudioRepository();
+        playlistAudioRepository.setTransactionSession(session)
+
+        if (audioId) {
+            const audio: WithId<Audio> = await runWithLogger(log, audioRepository.get(audioId))
+            if (!audio) {
+                log.info('invalid audio id provided')
+                await db.abortTransaction()
+                return res.status(400).json({ status: 'error', error_code: 'INVALID_AUDIO_ID' })
+            }
+
+            const result = await runWithLogger(log, playlistAudioRepository.insert({ playlistId, audioId }))
+            log.debug({ result })
+            if (!result.acknowledged) {
+                log.info('failed to insert playlist audio record')
+                await db.abortTransaction()
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+            }
+
+            const meiliResult = await meiliPlaylistAudio.create({ _id: `${playlistId}_${audio.toString()}`, audioId: audio._id!.toString(), audioTitle: audio.title, playlistId: playlistId })
+            log.debug({ meiliResult })
+            if (meiliResult.status !== 'succeeded') {
+                await db.abortTransaction()
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+            }
+        } else {
+            const audios: WithId<Audio>[] = await runWithLogger(log, audioRepository.getMany(audioIds!))
+            if (audios.length < audioIds!.length || audioIds!.find(f => audios.find(ff => ff._id.toString() === f) === undefined) !== undefined) {
+                log.info('invalid audio ids provided')
+                await db.abortTransaction()
+                return res.status(400).json({ status: 'error', error_code: 'INVALID_AUDIO_IDS' })
+            }
+
+            const result = await runWithLogger(log, playlistAudioRepository.insertMany(audioIds!.map((audioId) => ({ playlistId, audioId }))))
+            log.debug({ result })
+            if (!result.acknowledged) {
+                log.info('failed to insert playlist audio records')
+                await db.abortTransaction()
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+            }
+
+            const meiliResult = await meiliPlaylistAudio.create(audios.map(m => ({ _id: `${playlistId}_${m.toString()}`, audioId: m._id!.toString(), audioTitle: m.title, playlistId: playlistId })))
+            log.debug({ meiliResult })
+            if (meiliResult.status !== 'succeeded') {
+                await db.abortTransaction()
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+            }
+        }
+
+        await db.commitTransaction()
+
+        res.status(201).json({ status: 'success' });
     } catch (err) {
+        await db?.abortTransaction()
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.get('/audio', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'playlist', route: 'GET /api/playlist/audio' });
+
+    try {
+        log.info('playlist audio list request received');
+
+        log.debug({ query: req.query });
+        const { playlistId, name, page, pageSize, search: audioNameSearch } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
+        log.info('Input validated');
+        log.debug({ playlistId, name, page, pageSize, search: audioNameSearch });
+
+        const userId = req.user!.userId;
+        log = log.child({ userId });
+
+        const playlistRepository = new PlaylistRepository();
+        const playlistAudioRepository = new PlaylistAudioRepository();
+
+        let playlist: WithId<Playlist>
+        if (playlistId)
+            playlist = await runWithLogger(log, playlistRepository.getForUser(userId, playlistId))
+        else
+            playlist = await runWithLogger(log, playlistRepository.getByNameForUser(userId, name!))
+        log.debug({ playlist });
+
+        let audioIds: string[] | undefined = undefined
+        if (audioNameSearch) {
+            log.info('search in meilisearch')
+
+            const searchResult = await meiliPlaylistAudio.search(audioNameSearch, { filter: [['playlistId', playlist._id.toString()]], page, hitsPerPage: pageSize })
+            const { totalHits, totalPages, hits } = searchResult
+            log.debug({ totalHits, totalPages, hits })
+
+            audioIds = hits.map(m => m.audioId)
+        }
+
+        if (!playlist) {
+            log.info('playlist not found')
+            return res.status(404).json({ status: 'error', error_code: 'PLAYLIST_NOT_FOUND' })
+        }
+
+        const skip = (page - 1) * pageSize;
+        const audios: Audio[] = await playlistAudioRepository.getAudiosByPlaylistId(playlist._id!.toString(), skip, pageSize, audioIds)
+        log.debug({ audios });
+
+        res.status(200).json({ status: 'success', data: audios });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.delete('/audio', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'playlist', route: 'DELETE /api/playlist/audio' });
+
+    let db: MongoDB | undefined
+    try {
+        log.info('playlist audio list request received');
+
+        log.debug({ query: req.query });
+        const { playlistId, audioId, audioIds } = await runWithLogger(log, () => validate(createPlaylistAudioSchema, req.query));
+        log.info('Input validated');
+        log.debug({ playlistId, audioId, audioIds });
+
+        const userId = req.user!.userId;
+        log = log.child({ userId });
+
+        const playlistRepository = new PlaylistRepository();
+
+        db = MongoDB.getDbInstance()
+        const session = await db.startTransaction()
+
+        const playlistAudioRepository = new PlaylistAudioRepository();
+        playlistAudioRepository.setTransactionSession(session)
+
+        let playlist: WithId<Playlist> = await runWithLogger(log, playlistRepository.getForUser(userId, playlistId))
+        log.debug({ playlist });
+        if (!playlist) {
+            log.info('playlist not found')
+            return res.status(404).json({ status: 'error', error_code: 'PLAYLIST_NOT_FOUND' })
+        }
+
+        const result = await runWithLogger(log, playlistAudioRepository.deleteManyByPlaylistIdByAudioIdsForUser(userId, playlistId, audioIds ?? [audioId!]))
+        log.debug({ result });
+        if (!result.acknowledged) {
+            log.info('failed to delete playlist audios')
+            await db.abortTransaction()
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+        }
+
+        const meiliResult = await runWithLogger(log, meiliPlaylistAudio.deleteBy({ playlistId: playlistId, audioId: audioIds ?? audioId! }))
+        log.debug({ meiliResult });
+        if (meiliResult.status !== 'succeeded') {
+            log.info('failed to delete playlist audios')
+            await db.abortTransaction()
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+        }
+
+        await db.commitTransaction()
+
+        res.status(200).json({ status: 'success' });
+    } catch (err) {
+        await db?.abortTransaction()
         runWithLogger(log, () => handleError(res, err));
     }
 });

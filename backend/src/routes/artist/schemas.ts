@@ -7,6 +7,10 @@ export const postSchema = object().required().shape({
     name: string().required().label('Name'),
 })
 
+export const isNameUnique = object().required().shape({
+    name: string().required().label('Name'),
+})
+
 export const albumListQuerySchema = object().required().shape({
     artistName: string().required().label('Artist Name'),
 })

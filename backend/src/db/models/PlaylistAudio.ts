@@ -10,7 +10,7 @@ const shape = {
     schemaVersion: string().optional().min(6).max(20),
 
     playlistId: string().required(),
-    
+
     audioId: string().required(),
 
     deletionQueued: boolean().optional(),
@@ -21,7 +21,9 @@ const shape = {
 
 const search = {
     _id: string().required(),
-    name: string().required(),
+    playlistId: string().required(),
+    audioId: string().required(),
+    audioTitle: string().required(),
 }
 
 export const playlistAudioSearchSchema = object(search).strict();

@@ -86,3 +86,5 @@ export const contentTypeSchema = object().shape({
     extension: string().required(),
 })
 export type ContentType = InferType<typeof contentTypeSchema>
+
+export type WithId<T> = T & { _id: any }

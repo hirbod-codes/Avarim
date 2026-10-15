@@ -18,6 +18,11 @@ export function getLogger(): Logger {
  * since there's no single bounded callback representing "the rest of this
  * request" to wrap).
  */
-export function runWithLogger<T>(log: Logger, fn: () => T): T {
+export function runWithLogger<T>(log: Logger, fn: Promise<T>): Promise<T>
+export function runWithLogger<T>(log: Logger, fn: () => T): T
+export function runWithLogger<T>(log: Logger, fn: (() => T) | Promise<T>): Promise<T> | T {
+    if (fn instanceof Promise)
+        return als.run(log, () => fn);
+
     return als.run(log, fn);
 }
