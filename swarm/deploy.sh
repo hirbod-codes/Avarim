@@ -4,8 +4,8 @@
 # `docker stack deploy`, since stack deploy has no built-in .env support.
 #
 # USAGE:
-#   ./deploy.sh memoize                 # uses ./.env, compose.swarm.yml
-#   ./deploy.sh memoize path/to/.env    # explicit env file
+#   ./deploy.sh avarim                 # uses ./.env, compose.swarm.yml
+#   ./deploy.sh avarim path/to/.env    # explicit env file
 # =============================================================================
 
 set -euo pipefail
@@ -33,7 +33,7 @@ ROOT_ABSOLUTE_PATH=$(pwd)
 export ROOT_ABSOLUTE_PATH
 
 mkdir -p \
-    "$ROOT_ABSOLUTE_PATH/memoize_logs" \
+    "$ROOT_ABSOLUTE_PATH/avarim_logs" \
     "$ROOT_ABSOLUTE_PATH/redis_data" \
     "$ROOT_ABSOLUTE_PATH/mongo_data" \
     "$ROOT_ABSOLUTE_PATH/meili_data" \

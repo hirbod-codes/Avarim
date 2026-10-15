@@ -1,5 +1,3 @@
-import 'package:avarim/components/footer/enamad/badge.dart';
-import 'package:avarim/components/footer/zibal/badge.dart';
 import 'package:flutter/material.dart';
 
 /// Renders nothing on mobile/desktop — a footer bar makes sense on a
@@ -24,19 +22,13 @@ class AppFooter extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(width: 70, height: 70, child: const EnamadBadge()),
-              SizedBox(width: 70, height: 70, child: const ZibalBadge()),
-            ],
-          ),
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: []),
           SizedBox(
             width: 100,
             height: 20,
             child: Directionality(
               textDirection: TextDirection.ltr,
-              child: Text('© ${DateTime.now().year} Memoize', style: theme.textTheme.bodySmall),
+              child: Text('© ${DateTime.now().year} Avarim', style: theme.textTheme.bodySmall),
             ),
           ),
         ],

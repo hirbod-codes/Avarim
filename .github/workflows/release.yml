@@ -1,4 +1,4 @@
-name: hirbod-codes/Memoize/Release
+name: hirbod-codes/Avarim/Release
 
 on:
   push:
@@ -136,9 +136,9 @@ jobs:
         run: |
           cd backend
           echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker build -t ghcr.io/hirbod-codes/memoize/backend:${{ needs.release.outputs.version }} --target production .
-          docker push ghcr.io/hirbod-codes/memoize/backend:${{ needs.release.outputs.version }}
-          docker save ghcr.io/hirbod-codes/memoize/backend:${{ needs.release.outputs.version }} | gzip > backend-image-${{ needs.release.outputs.version }}.tar.gz
+          docker build -t ghcr.io/hirbod-codes/avarim/backend:${{ needs.release.outputs.version }} --target production .
+          docker push ghcr.io/hirbod-codes/avarim/backend:${{ needs.release.outputs.version }}
+          docker save ghcr.io/hirbod-codes/avarim/backend:${{ needs.release.outputs.version }} | gzip > backend-image-${{ needs.release.outputs.version }}.tar.gz
 
       - name: Upload backend artifact
         uses: actions/upload-artifact@v4
@@ -183,14 +183,14 @@ jobs:
       - name: Build android app
         run: |
           cd client
-          flutter build apk --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
-          flutter build appbundle --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+          flutter build apk --release --dart-define=API_URL=https://avarim.ir --dart-define=ENV=prod
+          flutter build appbundle --release --dart-define=API_URL=https://avarim.ir --dart-define=ENV=prod
 
       - name: Rename app release
         run: |
           mkdir artifacts
-          cp client/build/app/outputs/flutter-apk/app-release.apk artifacts/memoize-app-release-${{ needs.release.outputs.version }}.apk
-          cp client/build/app/outputs/bundle/release/app-release.aab artifacts/memoize-app-release-${{ needs.release.outputs.version }}.aab
+          cp client/build/app/outputs/flutter-apk/app-release.apk artifacts/avarim-app-release-${{ needs.release.outputs.version }}.apk
+          cp client/build/app/outputs/bundle/release/app-release.aab artifacts/avarim-app-release-${{ needs.release.outputs.version }}.aab
 
       - name: Upload android artifact
         uses: actions/upload-artifact@v4
@@ -235,17 +235,17 @@ jobs:
       - name: Build windows app
         run: |
           cd client
-          flutter build windows --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+          flutter build windows --release --dart-define=API_URL=https://avarim.ir --dart-define=ENV=prod
 
       - name: Package Windows
         run: |
-          Compress-Archive -Path client/build/windows/x64/runner/Release/* -DestinationPath memoize-windows-${{ needs.release.outputs.version }}.zip
+          Compress-Archive -Path client/build/windows/x64/runner/Release/* -DestinationPath avarim-windows-${{ needs.release.outputs.version }}.zip
 
       - name: Upload windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: memoize-windows-${{ needs.release.outputs.version }}.zip
+          path: avarim-windows-${{ needs.release.outputs.version }}.zip
           retention-days: 1
 
   linux-build:
@@ -285,17 +285,17 @@ jobs:
       - name: Build linux app
         run: |
           cd client
-          flutter build linux --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+          flutter build linux --release --dart-define=API_URL=https://avarim.ir --dart-define=ENV=prod
 
       - name: Package Linux
         run: |
-          tar -czf memoize-linux-${{ needs.release.outputs.version }}.tar.gz -C client/build/linux/x64/release/bundle .
+          tar -czf avarim-linux-${{ needs.release.outputs.version }}.tar.gz -C client/build/linux/x64/release/bundle .
 
       - name: Upload linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: memoize-linux-${{ needs.release.outputs.version }}.tar.gz
+          path: avarim-linux-${{ needs.release.outputs.version }}.tar.gz
           retention-days: 1
 
   web-build:
@@ -333,14 +333,14 @@ jobs:
       - name: Build web app
         run: |
           cd client
-          flutter build web --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+          flutter build web --release --dart-define=API_URL=https://avarim.ir --dart-define=ENV=prod
 
       - name: Package web
         run: |
-          mkdir -p ./NginX/build/memoize/
-          mv client/build/web/* ./NginX/build/memoize/
-          cd ./NginX/build/memoize/
-          zip -r ../../../memoize-web-${{ needs.release.outputs.version }}.zip .
+          mkdir -p ./NginX/build/avarim/
+          mv client/build/web/* ./NginX/build/avarim/
+          cd ./NginX/build/avarim/
+          zip -r ../../../avarim-web-${{ needs.release.outputs.version }}.zip .
 
       - name: Create SSL files
         run: |
@@ -359,7 +359,7 @@ jobs:
 
       - run: |
           mkdir artifacts
-          mv memoize-web-${{ needs.release.outputs.version }}.zip artifacts/memoize-web-${{ needs.release.outputs.version }}.zip
+          mv avarim-web-${{ needs.release.outputs.version }}.zip artifacts/avarim-web-${{ needs.release.outputs.version }}.zip
           mv nginx-image-${{ needs.release.outputs.version }}.tar.gz artifacts/
 
       - name: Upload web artifacts
@@ -405,19 +405,19 @@ jobs:
       - name: Build macOS app
         run: |
           cd client
-          flutter build macos --release --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+          flutter build macos --release --dart-define=API_URL=https://avarim.ir --dart-define=ENV=prod
 
       - name: Package macOS
         run: |
           APP=$(find client/build/macos/Build/Products/Release -name "*.app" | head -1)
           echo "Found app: $APP"
-          ditto -c -k "$APP" "memoize-macos-${{ needs.release.outputs.version }}.zip"
+          ditto -c -k "$APP" "avarim-macos-${{ needs.release.outputs.version }}.zip"
 
       - name: Upoad macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: memoize-macos-${{ needs.release.outputs.version }}.zip
+          path: avarim-macos-${{ needs.release.outputs.version }}.zip
           retention-days: 1
 
   ios-build:
@@ -456,19 +456,19 @@ jobs:
       - name: Build ios app
         run: |
           cd client
-          flutter build ios --release --no-codesign --dart-define=API_URL=https://memoize.ir --dart-define=ENV=prod
+          flutter build ios --release --no-codesign --dart-define=API_URL=https://avarim.ir --dart-define=ENV=prod
 
       - name: Create the unsigned ipa
         run: |
           mkdir Payload
           mv client/build/ios/iphoneos/Runner.app/ Payload
-          zip -qq -r -9 memoize-ios-${{ needs.release.outputs.version }}.ipa Payload
+          zip -qq -r -9 avarim-ios-${{ needs.release.outputs.version }}.ipa Payload
 
       - name: Upload ios artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ios
-          path: memoize-ios-${{ needs.release.outputs.version }}.ipa
+          path: avarim-ios-${{ needs.release.outputs.version }}.ipa
           retention-days: 1
 
   create-release:

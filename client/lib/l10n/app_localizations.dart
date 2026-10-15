@@ -102,7 +102,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'Memoize'**
+  /// **'Avarim'**
   String get appTitle;
 
   /// No description provided for @changeEmail.
@@ -717,11 +717,11 @@ abstract class AppLocalizations {
   /// **'Verify your new email'**
   String get verify_your_new_email;
 
-  /// No description provided for @welcome_to_memoize.
+  /// No description provided for @welcome_to_avarim.
   ///
   /// In en, this message translates to:
-  /// **'Welcome to Memoize'**
-  String get welcome_to_memoize;
+  /// **'Welcome to Avarim'**
+  String get welcome_to_avarim;
 
   /// No description provided for @login_success.
   ///
@@ -1026,7 +1026,7 @@ abstract class AppLocalizations {
   /// No description provided for @landing_page_content_type_description.
   ///
   /// In en, this message translates to:
-  /// **'A vocabulary word with its pronunciation. A diagram next to your own explanation. It\'s your material — Memoize doesn\'t limit how you represent it.'**
+  /// **'A vocabulary word with its pronunciation. A diagram next to your own explanation. It\'s your material — Avarim doesn\'t limit how you represent it.'**
   String get landing_page_content_type_description;
 
   /// No description provided for @landing_page_use_case_first_title.
@@ -1080,7 +1080,7 @@ abstract class AppLocalizations {
   /// No description provided for @pricing_page_choose_plan_description.
   ///
   /// In en, this message translates to:
-  /// **'Pick the plan that fits how you use Memoize.'**
+  /// **'Pick the plan that fits how you use Avarim.'**
   String get pricing_page_choose_plan_description;
 
   /// No description provided for @pricing_page_levels_of_nesting.

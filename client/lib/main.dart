@@ -62,7 +62,7 @@ class MyApp extends ConsumerWidget {
           ],
           supportedLocales: supportedLocales,
           routerConfig: router,
-          title: 'Memoize',
+          title: 'Avarim',
           // theme: AppTheme.light(),
           // darkTheme: AppTheme.dark(),
           // themeMode: ref.watch(themeModeProvider),

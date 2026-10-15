@@ -12,7 +12,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get addNew => 'Neu hinzufügen';
 
   @override
-  String get appTitle => 'Memoize';
+  String get appTitle => 'Avarim';
 
   @override
   String get changeEmail => 'E-Mail ändern';
@@ -326,7 +326,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get verify_your_new_email => 'Bestätigen Sie Ihre neue E-Mail-Adresse';
 
   @override
-  String get welcome_to_memoize => 'Willkommen bei Memoize';
+  String get welcome_to_avarim => 'Willkommen bei Avarim';
 
   @override
   String get login_success => 'Sie sind angemeldet!';
@@ -482,7 +482,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get landing_page_content_type_description =>
-      'Ein Vokabelwort mit seiner Aussprache. Ein Diagramm neben Ihrer eigenen Erklärung. Es sind Ihre Inhalte — Memoize schränkt nicht ein, wie Sie sie darstellen.';
+      'Ein Vokabelwort mit seiner Aussprache. Ein Diagramm neben Ihrer eigenen Erklärung. Es sind Ihre Inhalte — Avarim schränkt nicht ein, wie Sie sie darstellen.';
 
   @override
   String get landing_page_use_case_first_title => 'Eine neue Sprache lernen';
@@ -511,7 +511,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get pricing_page_choose_plan => 'Wählen Sie Ihren Tarif';
 
   @override
-  String get pricing_page_choose_plan_description => 'Wählen Sie den Tarif, der zu Ihrer Nutzung von Memoize passt.';
+  String get pricing_page_choose_plan_description => 'Wählen Sie den Tarif, der zu Ihrer Nutzung von Avarim passt.';
 
   @override
   String get pricing_page_levels_of_nesting => 'Verschachtelungsebenen';

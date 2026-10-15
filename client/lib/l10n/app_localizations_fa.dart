@@ -325,7 +325,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get verify_your_new_email => 'ایمیل جدید خود را تأیید کنید';
 
   @override
-  String get welcome_to_memoize => 'به Memoize خوش آمدید';
+  String get welcome_to_avarim => 'به Avarim خوش آمدید';
 
   @override
   String get login_success => 'با موفقیت وارد شدید!';
@@ -481,7 +481,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get landing_page_content_type_description =>
-      'یک واژه با تلفظ آن. یک نمودار در کنار توضیح خودتان. این مطالب شما هستند — Memoize محدودیتی برای نحوه نمایش آن‌ها ایجاد نمی‌کند.';
+      'یک واژه با تلفظ آن. یک نمودار در کنار توضیح خودتان. این مطالب شما هستند — Avarim محدودیتی برای نحوه نمایش آن‌ها ایجاد نمی‌کند.';
 
   @override
   String get landing_page_use_case_first_title => 'یادگیری یک زبان جدید';
@@ -510,7 +510,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get pricing_page_choose_plan => 'طرح خود را انتخاب کنید';
 
   @override
-  String get pricing_page_choose_plan_description => 'طرحی را انتخاب کنید که با نحوه استفاده شما از Memoize متناسب باشد.';
+  String get pricing_page_choose_plan_description => 'طرحی را انتخاب کنید که با نحوه استفاده شما از Avarim متناسب باشد.';
 
   @override
   String get pricing_page_levels_of_nesting => 'سطوح تو‌در‌تو بودن';

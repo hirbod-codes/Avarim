@@ -1,7 +1,7 @@
 import 'models/auth_models.dart';
 
 /// Boundary between the auth UI and your actual backend.
-/// Implement this against your existing HTTP client and Memoize's
+/// Implement this against your existing HTTP client and Avarim's
 /// auth endpoints. Throw [AuthException] with a user-facing message for
 /// known failures (wrong password, expired/invalid code, duplicate email,
 /// etc); let unexpected errors (network, 5xx) propagate as-is so the UI

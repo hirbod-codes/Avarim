@@ -23,7 +23,7 @@ AVARIM_S3_API_KEY=api_key \
 ./rotate_secrets.sh ./secrets.env
 
 # Because swarm doesn't automatically load .env file, we use compose config instead.
-./deploy.sh memoize
+./deploy.sh avarim
 ```
 
 ## To add a new secret

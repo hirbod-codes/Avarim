@@ -90,8 +90,8 @@ services:
           cpus: "0.10"
           memory: 64M
 
-  memoize:
-    image: ghcr.io/hirbod-codes/memoize/backend:${AVARIM_BACKEND_VERSION}
+  avarim:
+    image: ghcr.io/hirbod-codes/avarim/backend:${AVARIM_BACKEND_VERSION}
     environment:
       NODE_ENV: production
       LOG_LEVEL: info
@@ -104,11 +104,11 @@ services:
       PUSHGATEWAY_URL: http://pushgateway:9091
       HOST: 0.0.0.0
       PORT: 3000
-      APP_URL: memoize.ir
+      APP_URL: avarim.ir
       ALLOWED_ORIGINS: ${AVARIM_ALLOWED_ORIGINS}
       ENV_PREFIX: ${AVARIM_ENV_PREFIX}
       ENV_SUFFIX: ${AVARIM_ENV_SUFFIX}
-      DB_DATABASE_NAME: Memoize
+      DB_DATABASE_NAME: Avarim
       DB_SUPPORTS_TRANSACTION: "false"
       DB_URL: mongodb://mongo:27017
       MAX_UPLOAD_SIZE: 50000000000
@@ -172,7 +172,7 @@ services:
       - AVARIM_ZARINPAL_MERCHANT_ID
       - AVARIM_ZIBAL_MERCHANT_ID
     volumes:
-      - ${ROOT_ABSOLUTE_PATH}/memoize_logs:/app/logs:rw
+      - ${ROOT_ABSOLUTE_PATH}/avarim_logs:/app/logs:rw
     networks:
       - db_net
       - backend_net
@@ -416,7 +416,7 @@ services:
       - /:/rootfs:ro
       - ${ROOT_ABSOLUTE_PATH}/alloy_data:/var/lib/alloy/data
       - ${ROOT_ABSOLUTE_PATH}/alloy.config:/etc/alloy/config.alloy:ro
-      - ${ROOT_ABSOLUTE_PATH}/memoize_logs:/var/log/memoize:ro
+      - ${ROOT_ABSOLUTE_PATH}/avarim_logs:/var/log/avarim:ro
     networks:
       - observability
       - backend_net

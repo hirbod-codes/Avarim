@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: memoize
+  - name: avarim
     orgId: 1
-    folder: Memoize
+    folder: Avarim
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30

@@ -5,11 +5,11 @@
 # USAGE:
 #   ./rotate-secrets.sh [env-file]         (default: ./secrets.env)
 #
-#   STACK_NAME=memoize ./rotate-secrets.sh secrets.env
+#   STACK_NAME=avarim ./rotate-secrets.sh secrets.env
 #   DRY_RUN=1 ./rotate-secrets.sh                # preview only, no changes
 #
 #   # inline, no file needed:
-#   AVARIM_S3_API_KEY=xxx AVARIM_BUCKET_NAME=memoize-media ./rotate-secrets.sh
+#   AVARIM_S3_API_KEY=xxx AVARIM_BUCKET_NAME=avarim-media ./rotate-secrets.sh
 #
 # VALUE RESOLUTION ORDER, per secret:
 #   1. Already-exported shell/environment variable of that exact name
@@ -21,7 +21,7 @@
 #        AVARIM_S3_STORAGE_ACCESS_KEY=AKIA...
 #        AVARIM_S3_STORAGE_SECRET_KEY=...
 #        AVARIM_S3_API_KEY=...
-#        AVARIM_BUCKET_NAME=memoize-media
+#        AVARIM_BUCKET_NAME=avarim-media
 #   3. Anything still unresolved after both falls through to the automatic
 #      handling below:
 #   - GENERATED with `openssl rand -base64 32`   (passwords, signing/token
@@ -63,7 +63,7 @@
 
 set -euo pipefail
 
-STACK_NAME="${STACK_NAME:-memoize}"
+STACK_NAME="${STACK_NAME:-avarim}"
 ENV_FILE="${1:-secrets.env}"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -180,22 +180,22 @@ declare -A MODE=(
 )
 
 declare -A TARGET_SERVICE=(
-    [AVARIM_MELIPAYAMAK_USERNAME]="memoize"
-    [AVARIM_MELIPAYAMAK_API_KEY]="memoize"
-    [AVARIM_MELIPAYAMAK_FROM]="memoize"
-    [AVARIM_ZARINPAL_MERCHANT_ID]="memoize"
-    [AVARIM_ZIBAL_MERCHANT_ID]="memoize"
-    [AVARIM_REDIS_USERNAME]="memoize"
-    [AVARIM_REDIS_PASSWORD]="memoize"
-    [AVARIM_TTS_API_KEY]="memoize"
-    [AVARIM_MONGODB_USERNAME]="memoize"
-    [AVARIM_MONGODB_PASSWORD]="memoize"
-    [AVARIM_BUCKET_NAME]="memoize"
-    [AVARIM_S3_STORAGE_ENDPOINT]="memoize"
-    [AVARIM_S3_STORAGE_ACCESS_KEY]="memoize"
-    [AVARIM_S3_STORAGE_SECRET_KEY]="memoize"
-    [AVARIM_S3_API_KEY]="memoize"
-    [AVARIM_MEILISEARCH_KEY]="memoize"
+    [AVARIM_MELIPAYAMAK_USERNAME]="avarim"
+    [AVARIM_MELIPAYAMAK_API_KEY]="avarim"
+    [AVARIM_MELIPAYAMAK_FROM]="avarim"
+    [AVARIM_ZARINPAL_MERCHANT_ID]="avarim"
+    [AVARIM_ZIBAL_MERCHANT_ID]="avarim"
+    [AVARIM_REDIS_USERNAME]="avarim"
+    [AVARIM_REDIS_PASSWORD]="avarim"
+    [AVARIM_TTS_API_KEY]="avarim"
+    [AVARIM_MONGODB_USERNAME]="avarim"
+    [AVARIM_MONGODB_PASSWORD]="avarim"
+    [AVARIM_BUCKET_NAME]="avarim"
+    [AVARIM_S3_STORAGE_ENDPOINT]="avarim"
+    [AVARIM_S3_STORAGE_ACCESS_KEY]="avarim"
+    [AVARIM_S3_STORAGE_SECRET_KEY]="avarim"
+    [AVARIM_S3_API_KEY]="avarim"
+    [AVARIM_MEILISEARCH_KEY]="avarim"
 
     [AVARIM_MONGO_INITDB_ROOT_USERNAME]="mongo"
     [AVARIM_MONGO_INITDB_ROOT_PASSWORD]="mongo"
@@ -208,9 +208,9 @@ declare -A TARGET_SERVICE=(
 
     [AVARIM_MEILI_MASTER_KEY]="meilisearch"
 
-    [AVARIM_STREAM_SIGNING_SECRET]="memoize"
-    [AVARIM_ACCESS_TOKEN_SECRET]="memoize"
-    [AVARIM_REFRESH_TOKEN_SECRET]="memoize"
+    [AVARIM_STREAM_SIGNING_SECRET]="avarim"
+    [AVARIM_ACCESS_TOKEN_SECRET]="avarim"
+    [AVARIM_REFRESH_TOKEN_SECRET]="avarim"
 
     [AVARIM_REDIS_MASTER_PASSWORD]="redis"
 )
