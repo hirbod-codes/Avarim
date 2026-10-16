@@ -135,7 +135,7 @@ jobs:
       - name: Build Docker image
         run: |
           cd backend
-          echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GHCR_PAT_AVARIM }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           docker build -t ghcr.io/hirbod-codes/avarim/backend:${{ needs.release.outputs.version }} --target production .
           docker push ghcr.io/hirbod-codes/avarim/backend:${{ needs.release.outputs.version }}
           docker save ghcr.io/hirbod-codes/avarim/backend:${{ needs.release.outputs.version }} | gzip > backend-image-${{ needs.release.outputs.version }}.tar.gz
@@ -351,7 +351,7 @@ jobs:
       - name: Build Docker image
         run: |
           cd NginX
-          echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GHCR_PAT_AVARIM }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           docker build -t ghcr.io/hirbod-codes/nginx:latest -t ghcr.io/hirbod-codes/nginx:${{ needs.release.outputs.version }} .
           docker push ghcr.io/hirbod-codes/nginx:${{ needs.release.outputs.version }}
           docker push ghcr.io/hirbod-codes/nginx:latest

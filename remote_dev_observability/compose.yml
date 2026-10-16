@@ -96,7 +96,7 @@ services:
 
   redis_commander:
     container_name: redis_commander
-    image: rediscommander/redis-commander:9.30.1
+    image: rediscommander/redis-commander:redis-commander-210
     restart: unless-stopped
     ports:
       - ${REDIS_COMMANDER_PORT}:8081
