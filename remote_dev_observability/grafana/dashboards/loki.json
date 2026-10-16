@@ -1,0 +1,19 @@
+{
+    "title": "Loki Logs",
+    "uid": "loki",
+    "schemaVersion": 39,
+    "panels": [
+        {
+            "title": "Application Logs",
+            "type": "logs",
+            "targets": [
+                {
+                    "datasource": {
+                        "uid": "loki"
+                    },
+                    "expr": "{job=~\".+\"}"
+                }
+            ]
+        }
+    ]
+}

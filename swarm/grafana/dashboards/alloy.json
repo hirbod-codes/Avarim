@@ -1,0 +1,36 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": true,
+    "schemaVersion": 39,
+    "title": "Grafana Alloy",
+    "uid": "alloy",
+    "timezone": "browser",
+    "panels": [
+        {
+            "title": "Alloy CPU Usage",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "process_cpu_seconds_total{job=\"alloy\"}",
+                    "datasource": {
+                        "uid": "prometheus"
+                    }
+                }
+            ]
+        },
+        {
+            "title": "Alloy Memory",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "process_resident_memory_bytes{job=\"alloy\"}",
+                    "datasource": {
+                        "uid": "prometheus"
+                    }
+                }
+            ]
+        }
+    ]
+}
