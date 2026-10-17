@@ -71,7 +71,7 @@ secrets:
 
 services:
   nginx:
-    image: ghcr.io/hirbod-codes/nginx:${AVARIM_NGINX_VERSION}
+    image: ghcr.io/hirbod-codes/avarim/nginx:${AVARIM_NGINX_VERSION}
     ports:
       - "${AVARIM_HTTPS_PORT}:443"
       - "${AVARIM_HTTP_PORT}:80"
@@ -245,13 +245,12 @@ services:
           memory: 256M
 
   meilisearch_ui:
-    container_name: meilisearch_ui
     image: eyeix/meilisearch-ui:v0.15.1
     restart: unless-stopped
     ports:
       - "${AVARIM_MEILISEARCH_UI_PORT}:24900"
     networks:
-      - dev_observability
+      - db_net
 
   redis:
     image: redis:7-alpine
@@ -296,7 +295,6 @@ services:
         order: stop-first # Redis is stateful; don't start a new one before the old one releases the volume
 
   redis_commander:
-    container_name: redis_commander
     image: rediscommander/redis-commander:redis-commander-210
     restart: unless-stopped
     ports:
@@ -304,7 +302,7 @@ services:
     environment:
       REDIS_HOSTS: local:redis:6379
     networks:
-      - dev_observability
+      - db_net
 
   prometheus:
     image: prom/prometheus:v3.13.2

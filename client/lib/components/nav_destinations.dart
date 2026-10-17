@@ -20,7 +20,7 @@ class NavDestinationItem {
 List<NavDestinationItem> navDestinations = [
   // NavDestinationItem(path: '/app', label: 'App', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard),
   NavDestinationItem(path: '/app', label: (AppLocalizations l10n) => l10n.home, icon: Icons.home_outlined, selectedIcon: Icons.home),
-  NavDestinationItem(path: '/pricing', label: (AppLocalizations l10n) => l10n.plan, icon: Icons.star_border, selectedIcon: Icons.star),
+  // NavDestinationItem(path: '/pricing', label: (AppLocalizations l10n) => l10n.plan, icon: Icons.star_border, selectedIcon: Icons.star),
   NavDestinationItem(path: '/settings', label: (AppLocalizations l10n) => l10n.settings, icon: Icons.settings_outlined, selectedIcon: Icons.settings),
   if (kDebugMode) NavDestinationItem(path: '/test', label: (AppLocalizations l10n) => l10n.text, icon: Icons.abc_sharp, selectedIcon: Icons.abc_sharp),
 ];

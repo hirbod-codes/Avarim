@@ -8,7 +8,6 @@ import 'package:avarim/api/api_call_extensions.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/auth/models/auth_models.dart';
 import 'package:avarim/components/button.dart';
-import 'package:avarim/components/checkout/checkout_dialog.dart';
 import 'package:avarim/l10n/app_localizations.dart';
 import 'package:avarim/localization/components/calendar_switcher.dart';
 import 'package:avarim/localization/components/locale_switcher.dart';
@@ -16,11 +15,6 @@ import 'package:avarim/localization/components/timezone_switcher.dart';
 import 'package:avarim/pages/settings/change_email_sheet.dart';
 import 'package:avarim/pages/settings/change_password_sheet.dart';
 import 'package:avarim/pages/settings/change_phone_sheet.dart';
-import 'package:avarim/plan/all_plans_notifier.dart';
-import 'package:avarim/plan/components/storage_usage.dart';
-import 'package:avarim/plan/models/plan.dart';
-import 'package:avarim/subscription/models/subscription.dart';
-import 'package:avarim/subscription/subscription_notifier.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -41,17 +35,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(userInfoProvider.notifier).refresh();
-      await ref.read(subscriptionProvider.notifier).refresh();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final userInfoState = ref.watch(userInfoProvider);
-    final subscriptionState = ref.watch(subscriptionProvider);
-    final allPlans = ref.watch(allPlansProvider);
+    // final subscriptionState = ref.watch(subscriptionProvider);
+    // final allPlans = ref.watch(allPlansProvider);
 
-    if (userInfoState.isLoading || subscriptionState.isLoading || allPlans.isLoading) {
+    // if (userInfoState.isLoading || subscriptionState.isLoading || allPlans.isLoading) {
+    //   return const Center(child: CircularProgressIndicator());
+    // }
+
+    if (userInfoState.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -59,21 +56,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return _RetryState(onRetry: () => ref.read(userInfoProvider.notifier).refresh());
     }
 
-    Plan? plan;
-    try {
-      plan = allPlans.plans?.singleWhere((element) => element.title == subscriptionState.subscription?.planTitle);
-    } catch (_) {}
+    // Plan? plan;
+    // try {
+    //   plan = allPlans.plans?.singleWhere((element) => element.title == subscriptionState.subscription?.planTitle);
+    // } catch (_) {}
 
-    return SettingsContent(userInfo: userInfoState.info!, subscription: subscriptionState.subscription, plan: plan);
+    return SettingsContent(userInfo: userInfoState.info!);
   }
 }
 
 class SettingsContent extends ConsumerStatefulWidget {
   final UserInfo userInfo;
-  final Subscription? subscription;
-  final Plan? plan;
+  // final Subscription? subscription;
+  // final Plan? plan;
 
-  const SettingsContent({super.key, required this.userInfo, this.subscription, this.plan});
+  const SettingsContent({super.key, required this.userInfo});
 
   @override
   ConsumerState<SettingsContent> createState() => _SettingsContent();
@@ -83,7 +80,7 @@ class _SettingsContent extends ConsumerState<SettingsContent> {
   bool _isUploadingAvatar = false;
   bool _isRemovingAvatar = false;
   bool _isCancelingPlan = false;
-  bool _isAddingStorage = false;
+  // bool _isAddingStorage = false;
 
   @override
   Widget build(BuildContext context) {
@@ -94,26 +91,27 @@ class _SettingsContent extends ConsumerState<SettingsContent> {
 
     return SingleChildScrollView(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(title: l10n.account),
-          _InfoTile(label: l10n.plan, value: widget.subscription?.planTitle ?? 'free'),
-          if (widget.userInfo.username != null) _InfoTile(label: l10n.username, value: widget.userInfo.username!),
-          if (widget.subscription != null)
-            Button(
-              type: ButtonType.outlined,
-              label: l10n.remove_subscription,
-              color: theme.colorScheme.error,
-              isLoading: _isCancelingPlan,
-              onPressed: () async {
-                setState(() {
-                  _isCancelingPlan = true;
-                });
-                await apiCall(() => ref.read(authDioProvider).delete('/api/subscription').notifyOnSuccess(l10n.subscription_delete_success));
-                setState(() {
-                  _isCancelingPlan = false;
-                });
-              },
-            ),
+          // _SectionHeader(title: l10n.account),
+          // _InfoTile(label: l10n.plan, value: widget.subscription?.planTitle ?? 'free'),
+          // if (widget.userInfo.username != null) _InfoTile(label: l10n.username, value: widget.userInfo.username!),
+          // if (widget.subscription != null)
+          Button(
+            type: ButtonType.outlined,
+            label: l10n.remove_subscription,
+            color: theme.colorScheme.error,
+            isLoading: _isCancelingPlan,
+            onPressed: () async {
+              setState(() {
+                _isCancelingPlan = true;
+              });
+              await apiCall(() => ref.read(authDioProvider).delete('/api/subscription').notifyOnSuccess(l10n.subscription_delete_success));
+              setState(() {
+                _isCancelingPlan = false;
+              });
+            },
+          ),
           const SizedBox(height: 8),
 
           if (isEmailAccount) ...[
@@ -226,31 +224,31 @@ class _SettingsContent extends ConsumerState<SettingsContent> {
             ],
           ),
 
-          if (widget.plan != null && widget.subscription != null && widget.subscription!.planTitle != 'free') ...[
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _SectionHeader(title: l10n.storage_usage),
-                Button(
-                  type: ButtonType.outlined,
-                  label: l10n.add_storage,
-                  isLoading: _isAddingStorage,
-                  onPressed: () async {
-                    setState(() {
-                      _isAddingStorage = true;
-                    });
-                    await showCheckoutDialog(context, plan: widget.plan!, subscription: widget.subscription!);
-                    setState(() {
-                      _isAddingStorage = false;
-                    });
-                  },
-                ),
-              ],
-            ),
-            const StorageUsage(),
-          ],
+          // if (widget.plan != null && widget.subscription != null && widget.subscription!.planTitle != 'free') ...[
+          //   const SizedBox(height: 24),
+          //   Row(
+          //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          //     crossAxisAlignment: CrossAxisAlignment.center,
+          //     children: [
+          //       _SectionHeader(title: l10n.storage_usage),
+          //       Button(
+          //         type: ButtonType.outlined,
+          //         label: l10n.add_storage,
+          //         isLoading: _isAddingStorage,
+          //         onPressed: () async {
+          //           setState(() {
+          //             _isAddingStorage = true;
+          //           });
+          //           await showCheckoutDialog(context, plan: widget.plan!, subscription: widget.subscription!);
+          //           setState(() {
+          //             _isAddingStorage = false;
+          //           });
+          //         },
+          //       ),
+          //     ],
+          //   ),
+          //   const StorageUsage(),
+          // ],
         ],
       ),
     );

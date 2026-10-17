@@ -104,6 +104,27 @@ class AudioRepository implements IRepository, ISeedable, IDropable {
         return AudioRepository.collection!.find({ $and: [{ updatedAt: { $gte: fromTsMs } }, { $or: [{ temporaryAvatar: true }, { deletionQueued: true }] }] }, { session: this.session })
     }
 
+    async updateArtistName(oldValue: string, newValue: string) {
+        return await AudioRepository.collection!.updateMany(
+            { 'tags.artists': oldValue },
+            {
+                $set: {
+                    'tags.artists.$[element]': newValue,
+                },
+            },
+            {
+                arrayFilters: [
+                    { element: oldValue },
+                ],
+                session: this.session
+            },
+        )
+    }
+
+    async updateAlbumName(oldValue: string, newValue: string) {
+        return await AudioRepository.collection!.updateMany({ 'tags.album': oldValue }, { $set: { 'tags.album': newValue, updatedAt: Date.now() } }, { session: this.session })
+    }
+
     async updateTitle(audioId: string, title: string) {
         return await AudioRepository.collection!.updateOne({ temporary: false, _id: ObjectId.createFromHexString(audioId) }, { $set: { title, updatedAt: Date.now() } }, { session: this.session })
     }

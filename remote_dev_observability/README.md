@@ -10,7 +10,7 @@ sudo chown -R 472:472 ./grafana/grafana_data
 sudo chown -R 10001:10001 ./tempo_data ./loki_data
 sudo chown -R 65534:65534 ./prometheus_data
 
-sudo docker compose -f compose.yml up -d --remove-orphans
+sudo docker compose -f compose.yml -f compose.memory.yml up -d
 ```
 
 ## Note before running ./deploy.sh

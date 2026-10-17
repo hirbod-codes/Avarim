@@ -5,6 +5,7 @@ import { ArtistSearch, collectionName as artistCollection } from './models/Artis
 import { AlbumSearch, collectionName as albumCollection } from './models/Album';
 import { collectionName as playlistCollection, PlaylistSearch } from './models/Playlist';
 import { collectionName as playlistAudioCollection, PlaylistAudioSearch } from './models/PlaylistAudio';
+import { ObjectId } from 'mongodb';
 
 /* ------------------------------------------------------------------ */
 /* Errors                                                             */
@@ -88,6 +89,9 @@ export const meili = new Meilisearch({
     host: meilisearchHost + ':' + meilisearchPort.toString(),
     apiKey: meilisearchKey
 })
+
+/** A document to create: `_id` is optional and generated when missing (a MongoDB-style ObjectId). */
+export type NewDoc<T> = Omit<T, '_id'> & { _id?: string };
 
 /**
  * usage:
@@ -182,13 +186,48 @@ export class MeiliCrud<T extends Record<string, any>> {
 
     /* ---------- create ---------- */
 
-    /** 
-     * Adds documents. A document with an existing primary key is REPLACED entirely. 
-     * With { wait: true }, success is "it didn't throw" 
-    */
-    create(doc: T | T[], o?: WriteOptions) {
-        return this.write('create', () => this.index.addDocuments(Array.isArray(doc) ? doc : [doc], { primaryKey: this.primaryKey }), o);
+    /**
+     * Adds documents. `_id` is optional: when missing it is generated the way MongoDB does
+     * (a new ObjectId as a 24-char hex string) and returned as `id` (or `ids` for an array).
+     * A document that DOES carry an existing `_id` is REPLACED entirely.
+     * With { wait: true }, success is "it didn't throw".
+     *
+     *   const { id } = await meiliPlaylistAudio.create({ playlistId, audioId, audioTitle });
+     *   const { ids } = await meiliPlaylistAudio.create([{ playlistId, audioId: 'a1', audioTitle: 'x' }, { ... }]);
+     */
+    create(doc: NewDoc<T>, o?: WriteOptions): Promise<WriteResult & { id: string }>;
+    create(docs: NewDoc<T>[], o?: WriteOptions): Promise<WriteResult & { ids: string[] }>;
+    async create(input: NewDoc<T> | NewDoc<T>[], o?: WriteOptions): Promise<(WriteResult & { id: string }) | (WriteResult & { ids: string[] })> {
+        const many = Array.isArray(input);
+        const docs = (many ? input : [input]).map((d) => this.withId(d));
+        const result = await this.add('create', docs, o);
+        const ids = docs.map((d) => this.idOf(d));
+        return many ? { ...result, ids } : { ...result, id: ids[0] };
     }
+
+    /** Insert-or-replace by primary key. Unlike `create`, the `_id` is required (nothing is generated). */
+    upsert(doc: T | T[], o?: WriteOptions) {
+        return this.add('upsert', Array.isArray(doc) ? doc : [doc], o);
+    }
+
+    /** Keeps a given primary key; generates a MongoDB-style one when it is missing. */
+    private withId(doc: NewDoc<T>): T {
+        const given = (doc as Record<string, unknown>)[this.primaryKey];
+        const id = given === undefined || given === null || given === '' ? new ObjectId().toHexString() : given;
+        return { ...doc, [this.primaryKey]: id } as unknown as T;
+    }
+
+    private add(op: string, docs: T[], o?: WriteOptions) {
+        return this.write(op, () => this.index.addDocuments(docs, { primaryKey: this.primaryKey }), o);
+    }
+
+    // /** 
+    //  * Adds documents. A document with an existing primary key is REPLACED entirely. 
+    //  * With { wait: true }, success is "it didn't throw" 
+    // */
+    // create(doc: T | T[], o?: WriteOptions) {
+    //     return this.write('create', () => this.index.addDocuments(Array.isArray(doc) ? doc : [doc], { primaryKey: this.primaryKey }), o);
+    // }
 
     /* ---------- read ---------- */
 
@@ -307,9 +346,6 @@ export class MeiliCrud<T extends Record<string, any>> {
         return { matched: ids.length, task };
     }
 
-    /** Insert-or-replace by primary key (same as create, named for intent). */
-    upsert(doc: T | T[], o?: WriteOptions) { return this.create(doc, o); }
-
     /* ---------- delete ---------- */
 
     /** Deleting a missing id is not an error in Meilisearch; the task simply succeeds. */
@@ -346,8 +382,8 @@ export const meiliAudio = new MeiliCrud<AudioSearch>(meili, audioCollection, {
 });
 
 export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, artistCollection, {
-    primaryKey: 'name',
-    settings: { filterableAttributes: ['name'], sortableAttributes: ['name'], searchableAttributes: ['name'] },
+    primaryKey: '_id',
+    settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 

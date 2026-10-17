@@ -11,8 +11,15 @@ export const audioListQuerySchema = object().required().shape({
     albumName: string().required().label('Album Name'),
 })
 
-export const artistListQuerySchema = object().required().shape({
+export const albumIdArtistNameSchema = object().required().shape({
+    albumId: string().objectIdString().required().label('Album id'),
     albumName: string().required().label('Album Name'),
+})
+
+export const albumNamePagePageSizeSchema = object().required().shape({
+    albumName: string().required().label('Album Name'),
+    page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
+    pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
 })
 
 export const infoQuerySchema = object().required().shape({

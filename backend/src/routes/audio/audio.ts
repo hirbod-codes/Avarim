@@ -5,7 +5,7 @@ import AudioRepository from '../../db/MongoDB/AudioRepository';
 import { generateStreamToken, verifyStreamToken } from '../../lib/signed_urls';
 import { pipeline } from 'stream/promises';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
-import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, isUploadFinished, isTitleUnique, titleUpdateSchema, lyricsUpdateSchema, albumUpdateSchema, artistUpdateSchema } from './schemas';
+import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, isUploadFinished, isTitleUnique, titleUpdateSchema, lyricsUpdateSchema, albumUpdateSchema, artistUpdateSchema, tagUpdateSchema } from './schemas';
 import { handleError, validate } from '../../lib';
 import { deleteFromS3, detectContentType, getS3ObjectStream, receiveUpload, uploadToS3 } from '../../lib/file_management';
 import { generateWebCompatibleCopy, isWebCompatible } from '../../ffmpeg';
@@ -111,6 +111,18 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const audioRepository = new AudioRepository()
 
+        if (userTitle) {
+            // ------------------------------------------------------------------------- checking whether title already exists
+            log.info('checking whether title already exists')
+
+            const sameTitleCheck = await runWithLogger(log, () => audioRepository.getByTitle(userTitle));
+            log.debug({ sameTitleCheck });
+            if (sameTitleCheck) {
+                log.info('Rejected audio upload: audio title already exists');
+                return res.status(400).json({ status: 'error', error_code: 'AUDIO_TITLE_NOT_UNIQUE' });
+            }
+        }
+
         // ------------------------------------------------------------------------- make the temporary directory
         log.info('make the temporary directory')
 
@@ -171,9 +183,9 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             // ------------------------------------------------------------------------- checking whether title or sha256 already exists
             log.info('checking whether title or sha256 already exists')
 
-            const sameTitleCheck = await runWithLogger(log, () => audioRepository.getByTitleByAudioSha256(title, metadata.technical.audioSha256));
-            log.debug({ sameTitleCheck });
-            if (sameTitleCheck) {
+            const uniquenessCheck = await runWithLogger(log, () => audioRepository.getByTitleByAudioSha256(title, metadata.technical.audioSha256));
+            log.debug({ uniquenessCheck });
+            if (uniquenessCheck) {
                 log.info('Rejected audio upload: audio already exists');
                 return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_UNIQUE' });
             }
@@ -317,6 +329,71 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
         // res.status(201).json({ status: 'success', data: temporaryAudio });
     } catch (err) {
+        runWithLogger(log, () => handleError(res, err))
+    }
+})
+
+router.patch('/tag', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'PATCH /api/audio/tag' });
+
+    let db
+    try {
+        log.info('audio approve request received');
+
+        log.debug({ body: req.body });
+        const updates = await runWithLogger(log, () => validate(tagUpdateSchema, req.body))
+        log.debug({ updates });
+
+        delete updates.tags?.audioTitle
+        delete updates.tags?.lyrics
+
+        if (!updates.tags || Object.keys(updates.tags).length < 1) {
+            log.info('invalid update tags field provided')
+            return res.status(400).json({ status: 'error', error_code: 'INVALID_UPDATE_PARAMETER' })
+        }
+
+        log.info('input validated');
+
+        const userId = req.user!.userId
+        log.debug({ userId });
+
+        db = MongoDB.getDbInstance()
+        const session = await db.startTransaction()
+
+        const audioRepository = new AudioRepository()
+        audioRepository.setTransactionSession(session)
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
+        artistAlbumAudioRepository.setTransactionSession(session)
+
+        // ------------------------------------------------------------------------- fetch the requested audio
+        log.info('fetch the requested audio')
+
+        const audio = await runWithLogger(log, () => audioRepository.get(updates.audioId));
+        log.debug({ audio });
+        if (!audio) {
+            log.info('audio not found');
+            await db.abortTransaction()
+            return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_FOUND' });
+        }
+
+        // ------------------------------------------------------------------------- update audio
+        log.info('update audio')
+
+        const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(updates.audioId, { tags: { ...audio.tags, ...updates.tags } }));
+        log.debug({ updateResult })
+        if (!updateResult.acknowledged) {
+            log.warn('failed to update audio record in db');
+            await db.abortTransaction()
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+        }
+
+        await db.commitTransaction()
+
+        res.status(204).send();
+    } catch (err) {
+        try { await db?.abortTransaction() } catch (_) { }
+
         runWithLogger(log, () => handleError(res, err))
     }
 })

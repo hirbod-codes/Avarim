@@ -1,20 +1,24 @@
 import { object, string } from "yup";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from '../schemas';
 import { number } from "yup";
-import { audioPatchSchema } from "../../db/models/Audio";
+import { audioPatchSchema, audioUpdateSchema } from "../../db/models/Audio";
 import { array } from "yup";
 
-export const isUploadFinished = object().required().shape({
+export const isUploadFinished = object().shape({
     audioId: string().required().label('Audio Id'),
-})
+}).required().stripUnknown()
 
-export const isTitleUnique = object().required().shape({
+export const isTitleUnique = object().shape({
     title: string().required().label('Title'),
-})
+}).required().stripUnknown()
 
-export const postSchema = object().required().shape({
+export const postSchema = object().shape({
     title: string().optional().label('Title'),
-})
+}).required().stripUnknown()
+
+export const tagUpdateSchema = audioUpdateSchema.pick(['tags']).shape({
+    audioId: string().required().label('Audio Id'),
+}).required().stripUnknown()
 
 export const artistUpdateSchema = object().shape({
     artists: array(string().required().label('Artist').max(1000)).min(1).required(),

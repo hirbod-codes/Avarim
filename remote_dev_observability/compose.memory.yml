@@ -1,0 +1,82 @@
+# docker-compose.memory.yml
+#
+# Memory limits for the dev stack. All limits together: 2016 MiB (< 2 GiB), so the whole stack
+# can't use more than 2 GiB of RAM (kernel overhead aside).
+#
+# Use it next to your compose file:
+#   docker compose -f docker-compose.yml -f docker-compose.memory.yml up -d
+# (or rename it to docker-compose.override.yml and Compose loads it automatically)
+#
+# memswap_limit == mem_limit disables swap for the container, so the limit is a hard cap.
+# A container that goes over its limit is OOM-killed: check with
+#   docker inspect -f '{{.Name}} oom={{.State.OOMKilled}}' $(docker ps -aq)
+# and watch real usage with `docker stats --no-stream`.
+
+services:
+  # ── observability (Go: GOMEMLIMIT makes the GC work harder near the limit instead of getting OOM-killed;
+  #    set to ~80% of the container limit) ──────────────────────────────────────────────────────────────
+  loki: # 192 MiB
+    mem_limit: 192m
+    memswap_limit: 192m
+    environment:
+      GOMEMLIMIT: 150MiB
+
+  tempo: # 192 MiB
+    mem_limit: 192m
+    memswap_limit: 192m
+    environment:
+      GOMEMLIMIT: 150MiB
+
+  prometheus: # 256 MiB
+    mem_limit: 256m
+    memswap_limit: 256m
+    environment:
+      GOMEMLIMIT: 200MiB
+
+  pushgateway: # 48 MiB
+    mem_limit: 48m
+    memswap_limit: 48m
+    environment:
+      GOMEMLIMIT: 36MiB
+
+  grafana: # 256 MiB
+    mem_limit: 256m
+    memswap_limit: 256m
+    environment:
+      GOMEMLIMIT: 200MiB
+
+  # ── redis ──────────────────────────────────────────────────────────────────────────────────────────
+  redis: # 64 MiB
+    mem_limit: 64m
+    memswap_limit: 64m
+
+  redis_commander: # 96 MiB (Node: cap the JS heap below the container limit)
+    mem_limit: 96m
+    memswap_limit: 96m
+    environment:
+      NODE_OPTIONS: --max-old-space-size=48
+
+  # ── mongo ──────────────────────────────────────────────────────────────────────────────────────────
+  # mongod sizes its WiredTiger cache from the container limit with a 256 MiB minimum,
+  # which is why it needs the biggest share.
+  mongo: # 448 MiB
+    mem_limit: 448m
+    memswap_limit: 448m
+
+  mongo_express: # 96 MiB
+    mem_limit: 96m
+    memswap_limit: 96m
+    environment:
+      NODE_OPTIONS: --max-old-space-size=48
+
+  # ── meilisearch ────────────────────────────────────────────────────────────────────────────────────
+  meilisearch: # 320 MiB
+    mem_limit: 320m
+    memswap_limit: 320m
+    environment:
+      MEILI_MAX_INDEXING_MEMORY: 128MiB # default is 2/3 of the machine's RAM
+      MEILI_MAX_INDEXING_THREADS: "1"
+
+  meilisearch_ui: # 48 MiB
+    mem_limit: 48m
+    memswap_limit: 48m
