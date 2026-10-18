@@ -1,7 +1,9 @@
 // edit_audio_form.dart
 //
 // The form of EditAudioPage: title (with uniqueness check), tags, read-only details
-// and the Update button. Only fields that changed are sent.
+// and the Update button. Only fields that changed are sent (see edit_audio_notifier.dart: title, artists,
+// album and lyrics have their own PATCH routes, every other editable tag goes through PATCH /tag).
+// Tags without an editor (audioTitle, albumArtists, ...) are shown read-only.
 
 import 'dart:async';
 
@@ -174,7 +176,7 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
   String? _validateSpec(TagSpec s, String? value) {
     final v = (value ?? '').trim();
     if (v.isEmpty) {
-      // The update payload can only set values, not clear them.
+      // The PATCH routes can only set values, not clear them.
       return (_baseText[s.key] ?? '').isNotEmpty ? "Can't be cleared once set" : null;
     }
 
@@ -214,6 +216,19 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
     if (ok) messenger.showSnackBar(const SnackBar(content: Text('Audio updated')));
   }
 
+  /// The audio with its `tags` reduced to the ones that have no editor above (shown read-only).
+  Map<String, dynamic> _readOnlyData() {
+    final editable = {for (final s in kAllTagSpecs) s.key};
+    final tags = (widget.audio['tags'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    return {
+      ...widget.audio,
+      'tags': {
+        for (final e in tags.entries)
+          if (!editable.contains(e.key)) e.key: e.value,
+      },
+    };
+  }
+
   // ── build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -234,7 +249,13 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
           _titleField(),
           const SizedBox(height: 24),
           for (final g in kTagGroups) ...[_group(theme, g), const SizedBox(height: 24)],
-          ReadOnlyDetails(data: widget.audio, hiddenKeys: const {'title', 'tags'}, title: 'File details (read-only)'),
+          ReadOnlyDetails(
+            data: _readOnlyData(),
+            hiddenKeys: const {'title'},
+            title: 'File details (read-only)',
+            // tags without an editor above get their own section
+            nestedSections: const {'tags': 'Other tags', 'technical': 'Technical details'},
+          ),
           const SizedBox(height: 24),
           Row(
             children: [
@@ -292,7 +313,9 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
             return Wrap(
               spacing: 16,
               runSpacing: 16,
-              children: [for (final s in g.fields) SizedBox(width: (s.kind == TagKind.list || s.kind == TagKind.multiline) ? c.maxWidth : half, child: _field(s))],
+              children: [
+                for (final s in g.fields) SizedBox(width: (s.kind == TagKind.list || s.kind == TagKind.multiline) ? c.maxWidth : half, child: _field(s)),
+              ],
             );
           },
         ),

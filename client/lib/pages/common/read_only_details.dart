@@ -2,11 +2,18 @@
 //
 // Card listing every field of a backend document that isn't editable on the page
 // (ids, keys, dates, sizes, the "technical" block, ...). Shared by the edit pages.
+// Nested maps listed in `nestedSections` become collapsible sections instead of one long row.
 
 import 'package:flutter/material.dart';
 
 class ReadOnlyDetails extends StatelessWidget {
-  const ReadOnlyDetails({super.key, required this.data, required this.hiddenKeys, this.title = 'Details (read-only)'});
+  const ReadOnlyDetails({
+    super.key,
+    required this.data,
+    required this.hiddenKeys,
+    this.title = 'Details (read-only)',
+    this.nestedSections = const {'technical': 'Technical details'},
+  });
 
   /// The document returned by the backend.
   final Map<String, dynamic> data;
@@ -16,20 +23,26 @@ class ReadOnlyDetails extends StatelessWidget {
 
   final String title;
 
+  /// Keys whose value is a nested map that gets its own collapsible section (key -> section title).
+  /// `waveform` entries are skipped (a long list of numbers).
+  final Map<String, String> nestedSections;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     final general = <MapEntry<String, String>>[];
-    final technical = <MapEntry<String, String>>[];
+    final sections = <String, List<MapEntry<String, String>>>{};
 
     data.forEach((key, value) {
       if (hiddenKeys.contains(key) || key.startsWith('__')) return;
 
-      if (key == 'technical' && value is Map) {
-        value.forEach((tk, tv) {
-          if (tk == 'waveform') return; // long list of numbers, not useful as text
-          technical.add(MapEntry(_humanizeKey('$tk'), _formatValue('$tk', tv)));
+      final sectionTitle = nestedSections[key];
+      if (sectionTitle != null && value is Map) {
+        final rows = sections.putIfAbsent(sectionTitle, () => []);
+        value.forEach((nk, nv) {
+          if (nk == 'waveform') return; // long list of numbers, not useful as text
+          rows.add(MapEntry(_humanizeKey('$nk'), _formatValue('$nk', nv)));
         });
         return;
       }
@@ -52,12 +65,13 @@ class ReadOnlyDetails extends StatelessWidget {
               children: [for (final e in general) _ReadOnlyRow(label: e.key, value: e.value)],
             ),
           ),
-          if (technical.isNotEmpty)
-            ExpansionTile(
-              title: const Text('Technical details'),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [for (final e in technical) _ReadOnlyRow(label: e.key, value: e.value)],
-            ),
+          for (final section in sections.entries)
+            if (section.value.isNotEmpty)
+              ExpansionTile(
+                title: Text(section.key),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [for (final e in section.value) _ReadOnlyRow(label: e.key, value: e.value)],
+              ),
         ],
       ),
     );

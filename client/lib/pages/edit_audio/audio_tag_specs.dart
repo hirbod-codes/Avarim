@@ -47,9 +47,13 @@ class TagGroup {
 
 String normalizeIsrc(String v) => v.replaceAll('-', '').replaceAll(' ', '').toUpperCase();
 
+/// The editable tags. Where each one is saved (see AudioUploadNotifier.save):
+///   artists -> PATCH /api/audio/artist     album -> PATCH /api/audio/album     lyrics -> PATCH /api/audio/lyrics
+///   every other tag here -> PATCH /api/audio/tag
+/// `audioTitle` (read from the file) is not editable, so it has no spec and is shown read-only,
+/// like any tag that has no spec (e.g. `albumArtists`).
 const kTagGroups = [
   TagGroup('Track info', [
-    TagSpec('audioTitle', 'Title in file tags', TagKind.text),
     TagSpec('artists', 'Artists', TagKind.list),
     TagSpec('album', 'Album', TagKind.text),
     TagSpec('genres', 'Genres', TagKind.list),

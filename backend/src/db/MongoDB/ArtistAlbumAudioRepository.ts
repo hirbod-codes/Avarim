@@ -4,7 +4,7 @@ import { IRepository } from '../IRepository';
 import { ISeedable } from '../ISeedable';
 import { MongoDB } from './mongodb';
 import { collectionName as artistAlbumAudioCollection, ArtistAlbumAudio, ArtistAlbumAudioUpdate } from '../models/ArtistAlbumAudio';
-import { Album } from '../models/Album';
+import { Album, collectionName as albumCollection } from '../models/Album';
 import { Audio, collectionName as audioCollection } from '../models/Audio';
 import { Artist, collectionName as artistCollection } from '../models/Artist';
 
@@ -73,7 +73,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $group: { _id: '$albumName' } },
                 {
                     $lookup: {
-                        from: audioCollection,
+                        from: albumCollection,
                         localField: '_id',
                         foreignField: 'name',
                         as: 'album'

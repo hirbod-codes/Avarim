@@ -145,31 +145,63 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     state = state.copyWith(phase: UploadPhase.failed, error: message);
   }
 
-  /// Sends only what changed. Returns true on success (on failure the error was already shown).
+  /// Sends only what changed: one PATCH each for the title, artists, album and lyrics (they have their own
+  /// routes), plus one PATCH /tag for all the other changed tags.
+  /// Returns true when every change was saved; on failure the error was already shown.
+  ///
+  /// Calls run one after another and stop at the first failure. Whatever was saved before it is kept,
+  /// and the form restarts from the saved values (so an unsaved edit of the failing field is dropped).
   Future<bool> save({String? title, Map<String, dynamic>? tags}) async {
     final audio = state.audio;
     if (audio == null || state.isSaving) return false;
 
-    state = state.copyWith(isSaving: true);
-    final result = await _api.update(audioId: '${audio['_id']}', title: title, tags: tags);
-    if (!ref.mounted) return !result.isFailure;
+    final id = '${audio['_id']}';
+    final saved = Map<String, dynamic>.of(audio);
+    final savedTags = Map<String, dynamic>.of((audio['tags'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{});
 
-    if (result.isFailure) {
-      state = state.copyWith(isSaving: false);
-      return false;
+    final artists = (tags?['artists'] as List?)?.cast<String>();
+    final album = tags?['album'] as String?;
+    final lyrics = tags?['lyrics'] as String?;
+    // Everything else goes through the generic /tag route. Artists and album must NOT: their routes also
+    // create the artist / album records and update the search index, /tag only rewrites the audio's tags.
+    final others = <String, dynamic>{
+      for (final e in (tags ?? const <String, dynamic>{}).entries)
+        if (e.key != 'artists' && e.key != 'album' && e.key != 'lyrics') e.key: e.value,
+    };
+
+    // The title goes first: it is the call most likely to be rejected (TITLE_NOT_UNIQUE),
+    // so when it fails nothing has been changed yet.
+    final steps = <({Future<ApiCallResult<dynamic>> Function() send, void Function() apply})>[
+      if (title != null) (send: () => _api.updateTitle(audioId: id, title: title), apply: () => saved['title'] = title),
+      if (others.isNotEmpty) (send: () => _api.updateTags(audioId: id, tags: others), apply: () => savedTags.addAll(others)),
+      if (artists != null) (send: () => _api.updateArtists(audioId: id, artists: artists), apply: () => savedTags['artists'] = artists),
+      if (album != null) (send: () => _api.updateAlbum(audioId: id, album: album), apply: () => savedTags['album'] = album),
+      if (lyrics != null) (send: () => _api.updateLyrics(audioId: id, lyrics: lyrics), apply: () => savedTags['lyrics'] = lyrics),
+    ];
+
+    state = state.copyWith(isSaving: true);
+
+    var applied = false;
+    var ok = true;
+    for (final step in steps) {
+      final result = await step.send();
+      if (!ref.mounted) return false;
+
+      if (result.isFailure) {
+        ok = false;
+        break;
+      }
+      step.apply();
+      applied = true;
     }
 
-    final oldTags = (audio['tags'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
     state = state.copyWith(
       isSaving: false,
-      revision: state.revision + 1,
-      audio: {
-        ...audio,
-        if (title != null) 'title': title,
-        if (tags != null) 'tags': {...oldTags, ...tags},
-      },
+      // anything that was saved becomes the form's new starting point
+      revision: applied ? state.revision + 1 : null,
+      audio: applied ? {...saved, 'tags': savedTags} : null,
     );
-    return true;
+    return ok;
   }
 }
 

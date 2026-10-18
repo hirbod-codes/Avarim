@@ -17,10 +17,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Config (assumptions - customize)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const kAudioPath = '/api/audio/';
 const kIsUploadFinishedPath = '/api/audio/is_upload_finished';
 const kAudioInfoPath = '/api/audio/info';
 const kIsTitleUniquePath = '/api/audio/is_title_unique';
+
+// PATCH routes (updates no longer go through `POST /api/audio/`): title, artists, album and lyrics
+// each have their own; every other editable tag goes through /tag.
+// Each answers 204 on success and 400 with an `error_code` (AUDIO_NOT_FOUND, TITLE_NOT_UNIQUE, ...) on failure.
+const kAudioTitlePath = '/api/audio/title';
+const kAudioArtistPath = '/api/audio/artist';
+const kAudioAlbumPath = '/api/audio/album';
+const kAudioLyricsPath = '/api/audio/lyrics';
+const kAudioTagPath = '/api/audio/tag';
 
 /// `error_code` the backend answers with (HTTP 400) when a title is already taken.
 const kTitleNotUniqueCode = 'TITLE_NOT_UNIQUE';
@@ -55,17 +63,39 @@ class AudioUploadApi {
     return apiCall<dynamic>(() => _dio.get<dynamic>(kIsTitleUniquePath, queryParameters: {'title': title}, cancelToken: cancelToken, options: _silent));
   }
 
-  /// Payload: { updates: { audioId, title?, tags? } }
-  /// If your backend expects `audioId` NEXT TO `updates` instead, move it here.
-  Future<ApiCallResult<dynamic>> update({required String audioId, String? title, Map<String, dynamic>? tags}) {
-    return apiCall<dynamic>(
-      () => _dio.post<dynamic>(
-        kAudioPath,
-        data: {
-          'updates': {'audioId': audioId, if (title != null) 'title': title, if (tags != null && tags.isNotEmpty) 'tags': tags},
-        },
-      ),
-    );
+  // ── updates (not silent: a failure is toasted by GlobalErrorInterceptor) ───
+
+  /// PATCH /api/audio/title  { audioId, title }
+  Future<ApiCallResult<dynamic>> updateTitle({required String audioId, required String title}) {
+    return _patch(kAudioTitlePath, {'audioId': audioId, 'title': title});
+  }
+
+  /// PATCH /api/audio/artist  { audioId, artists }
+  Future<ApiCallResult<dynamic>> updateArtists({required String audioId, required List<String> artists}) {
+    return _patch(kAudioArtistPath, {'audioId': audioId, 'artists': artists});
+  }
+
+  /// PATCH /api/audio/album  { audioId, album }
+  Future<ApiCallResult<dynamic>> updateAlbum({required String audioId, required String album}) {
+    return _patch(kAudioAlbumPath, {'audioId': audioId, 'album': album});
+  }
+
+  /// PATCH /api/audio/lyrics  { audioId, lyrics }
+  Future<ApiCallResult<dynamic>> updateLyrics({required String audioId, required String lyrics}) {
+    return _patch(kAudioLyricsPath, {'audioId': audioId, 'lyrics': lyrics});
+  }
+
+  /// PATCH /api/audio/tag  { audioId, tags }
+  ///
+  /// For every editable tag EXCEPT artists, album and lyrics. The backend drops `audioTitle` and `lyrics`
+  /// from this request, and the artist / album routes also keep the artist, album and search data in
+  /// sync, so those two must go through their own routes.
+  Future<ApiCallResult<dynamic>> updateTags({required String audioId, required Map<String, dynamic> tags}) {
+    return _patch(kAudioTagPath, {'audioId': audioId, 'tags': tags});
+  }
+
+  Future<ApiCallResult<dynamic>> _patch(String path, Map<String, dynamic> body) {
+    return apiCall<dynamic>(() => _dio.patch<dynamic>(path, data: body));
   }
 }
 
