@@ -1,5 +1,3 @@
-// music_search_page.dart
-//
 // Search page with:
 //   - a search box (auto-searches after the user stops typing for [kSearchDebounce])
 //   - four tabs: Artists / Albums / Audios / Playlists (the active tab decides which endpoint is searched)
