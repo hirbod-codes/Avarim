@@ -376,11 +376,26 @@ router.put('/avatar/:albumId', auth, isAdminIfAuthenticated, async (req, res) =>
                 try { await runWithLogger(log, () => deleteFromS3(album.avatarKey!)) } catch (err) { log.warn({ err }, 'failed to delete old avatar') }
             }
 
+            const tmpUpdateResult = await runWithLogger(log, () => albumRepository.unsafeUpdate(albumId, { temporaryAvatar: true }));
+            log.debug({ tmpUpdateResult });
+            if (!tmpUpdateResult) {
+                log.info('failed to update the album');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
+
             const key = getAvatarKey(albumId)
             await runWithLogger(log, () => uploadToS3(createReadStream(inputPath), key, contentType.mimeType, true))
+
+            const updateResult = await runWithLogger(log, () => albumRepository.unsafeUpdate(albumId, { avatarKey: key, temporaryAvatar: true }));
+            log.debug({ updateResult });
+            if (!updateResult) {
+                log.info('failed to update the album');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
         } catch (err) {
             log.error({ err }, 'caught an error while trying to upload files')
             cleanup()
+            throw err
         }
 
         res.status(201).json({ status: 'success' })

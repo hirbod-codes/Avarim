@@ -1053,10 +1053,25 @@ router.put('/coverArt/:audioId', auth, isAdminIfAuthenticated, async (req, res) 
                 try { await runWithLogger(log, () => deleteFromS3(audio.coverArtKey!)) } catch (err) { log.warn({ err }, 'failed to delete old cover art') }
             }
 
+            const tmpUpdateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(audioId, { temporaryAvatar: true }));
+            log.debug({ tmpUpdateResult });
+            if (!tmpUpdateResult) {
+                log.info('failed to update the audio');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
+
             await runWithLogger(log, () => uploadToS3(createReadStream(inputPath), key, contentType.mimeType, true))
+
+            const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(audioId, { coverArtKey: key, temporaryAvatar: true }));
+            log.debug({ updateResult });
+            if (!updateResult) {
+                log.info('failed to update the audio');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
         } catch (err) {
             log.error({ err }, 'caught an error while trying to upload files')
             cleanup()
+            throw err
         }
 
         res.status(201).json({ status: 'success' })

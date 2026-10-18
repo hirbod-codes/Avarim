@@ -56,7 +56,9 @@ const kQueueFetchPageSize = 50;
 /// Ask "Delete this audio?" before actually deleting. Set to false to delete on the first press.
 const kConfirmBeforeDelete = true;
 
-const kEditAudioRoute = '/upload_audio';
+const kEditArtistRoute = '/artist/edit';
+const kEditAlbumRoute = '/album/edit';
+const kEditAudioRoute = '/audio/edit';
 
 enum SearchTab {
   artists('Artists', '/api/artist'),
@@ -538,15 +540,13 @@ class _MusicSearchPageState extends ConsumerState<SearchPage> with SingleTickerP
           ),
         ),
         actions: [
-          // Edit mode only does something for audios.
-          if (tab == SearchTab.audios)
-            IconButton(
-              tooltip: editMode ? 'Done' : 'Edit mode',
-              isSelected: editMode,
-              icon: const Icon(Icons.edit_outlined),
-              selectedIcon: const Icon(Icons.check),
-              onPressed: notifier.toggleEditMode,
-            ),
+          IconButton(
+            tooltip: editMode ? 'Done' : 'Edit mode',
+            isSelected: editMode,
+            icon: const Icon(Icons.edit_outlined),
+            selectedIcon: const Icon(Icons.check),
+            onPressed: notifier.toggleEditMode,
+          ),
         ],
         bottom: TabBar(
           controller: _tabs,
@@ -624,12 +624,30 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
   }
 
   /// Opens EditAudioPage for [audio]; refreshes the audios when the user comes back.
-  Future<void> _edit(Audio audio) async {
-    final location = Uri(path: kEditAudioRoute, queryParameters: {'audioId': audio.id}).toString();
-    await context.push(location);
+  Future<void> _edit(WithId item) async {
+    if (item is Audio) {
+      final location = Uri(path: kEditAudioRoute, queryParameters: {'audioId': item.id}).toString();
+      await context.push(location);
 
-    if (!mounted) return;
-    unawaited(ref.read(musicSearchProvider.notifier).refresh(SearchTab.audios));
+      if (!mounted) return;
+      unawaited(ref.read(musicSearchProvider.notifier).refresh(SearchTab.audios));
+    }
+
+    if (item is Artist) {
+      final location = Uri(path: kEditArtistRoute, queryParameters: {'artistId': item.id}).toString();
+      await context.push(location);
+
+      if (!mounted) return;
+      unawaited(ref.read(musicSearchProvider.notifier).refresh(SearchTab.artists));
+    }
+
+    if (item is Album) {
+      final location = Uri(path: kEditAlbumRoute, queryParameters: {'albumId': item.id}).toString();
+      await context.push(location);
+
+      if (!mounted) return;
+      unawaited(ref.read(musicSearchProvider.notifier).refresh(SearchTab.albums));
+    }
   }
 
   Future<void> _delete(Audio audio) async {
@@ -707,7 +725,7 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
                           }
                         : ((item is Audio || item is Playlist || widget.onItemTap != null) ? () => _onTap(item) : null),
                     onAddToQueue: item is Album || item is Playlist ? () => notifier.addToQueue(item, play: false) : null,
-                    onEdit: item is Audio ? () => _edit(item) : null,
+                    onEdit: () => _edit(item),
                     onDelete: item is Audio ? () => _delete(item) : null,
                   ),
                 );

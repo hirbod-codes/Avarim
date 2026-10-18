@@ -413,11 +413,26 @@ router.put('/avatar/:artistId', auth, isAdminIfAuthenticated, async (req, res) =
                 try { await runWithLogger(log, () => deleteFromS3(artist.avatarKey!)) } catch (err) { log.warn({ err }, 'failed to delete old avatar') }
             }
 
+            const tmpUpdateResult = await runWithLogger(log, () => artistRepository.unsafeUpdate(artistId, { temporaryAvatar: true }));
+            log.debug({ tmpUpdateResult });
+            if (!tmpUpdateResult) {
+                log.info('failed to update the artist');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
+
             const key = getAvatarKey(artistId)
             await runWithLogger(log, () => uploadToS3(createReadStream(inputPath), key, contentType.mimeType, true))
+
+            const updateResult = await runWithLogger(log, () => artistRepository.unsafeUpdate(artistId, { avatarKey: key, temporaryAvatar: false }));
+            log.debug({ updateResult });
+            if (!updateResult) {
+                log.info('failed to update the artist');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
         } catch (err) {
             log.error({ err }, 'caught an error while trying to upload files')
             cleanup()
+            throw err
         }
 
         res.status(201).json({ status: 'success' })
@@ -532,11 +547,26 @@ router.put('/banner/:artistId', auth, isAdminIfAuthenticated, async (req, res) =
                 try { await runWithLogger(log, () => deleteFromS3(artist.bannerKey!)) } catch (err) { log.warn({ err }, 'failed to delete old banner') }
             }
 
+            const tmpUpdateResult = await runWithLogger(log, () => artistRepository.unsafeUpdate(artistId, { temporaryBanner: true }));
+            log.debug({ tmpUpdateResult });
+            if (!tmpUpdateResult) {
+                log.info('failed to update the artist');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
+
             const key = getBannerKey(artistId)
             await runWithLogger(log, () => uploadToS3(createReadStream(inputPath), key, contentType.mimeType, true))
+
+            const updateResult = await runWithLogger(log, () => artistRepository.unsafeUpdate(artistId, { bannerKey: key, temporaryBanner: false }));
+            log.debug({ updateResult });
+            if (!updateResult) {
+                log.info('failed to update the artist');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
         } catch (err) {
             log.error({ err }, 'caught an error while trying to upload files')
             cleanup()
+            throw err
         }
 
         res.status(201).json({ status: 'success' })

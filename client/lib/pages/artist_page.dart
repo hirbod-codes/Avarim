@@ -29,7 +29,7 @@
 //
 // Endpoints used:
 //   GET /api/artist/info?artistId=… | name=…
-//   GET /api/artist/avatar/:artistId        GET /api/artist/banner/:artistId
+//   GET /api/artist/avatar/:artistId        GET /api/artist/banner/:artistId   (the banner keeps its aspect ratio)
 //   GET /api/artist/album?artistName=…&page=…&pageSize=…      the artist's albums
 //   GET /api/artist/audio?artistName=…&page=…&pageSize=…      "Play" (all of the artist's audios)
 //   GET /api/album/audio?albumName=…&page=…&pageSize=…        an album's audios (play an album)
@@ -38,8 +38,8 @@
 // ASSUMPTIONS (those responses weren't visible, so they are parsed leniently):
 //   - an album item is a map with `_id` (or `albumId` / `id`) and `name` (or `albumName` / `album`),
 //     or just the album's name as a string
-//   - an audio item is a map with `_id` (or `audioId` / `id`); `tags.trackNumber` / `tags.discNumber`
-//     (when present) are used to order an album's audios, otherwise the server order is kept
+//   - audios are Audio documents (`_id`, plus `tags.trackNumber` / `tags.discNumber`, which order an
+//     album's audios; without them the server order is kept)
 //   - /api/album/audio is keyed by the album NAME only (not the artist), so two albums with the same
 //     name by different artists return the same audios.
 
@@ -68,9 +68,16 @@ const kArtistAudiosPageSize = 50;
 /// First page number the API expects.
 const kArtistFirstPage = 1;
 
-/// Visible banner height (the status bar area is added on top).
+/// Height of the placeholder shown until the banner image has loaded (or when there is none);
+/// the status bar area is added on top. Once loaded, the banner is as tall as its image is at full width.
 const kArtistBannerHeight = 180.0;
 const kArtistAvatarRadius = 48.0;
+
+/// The banner never grows taller than this fraction of the screen height (taller images are cropped to it).
+const kArtistBannerMaxHeightFactor = 0.4;
+
+/// Artist edit page (the same route the search page pushes).
+const kArtistEditRoute = '/artist/edit';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Models (lenient)
@@ -211,6 +218,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
   final Map<String, Future<List<ArtistTrack>>> _albumTracks = {}; // album name -> its audios, loaded on first play
   String? _busyAlbumKey;
   bool _playingAll = false;
+  int _imageEpoch = 0; // bumped after editing so that the avatar / banner are fetched again
 
   ArtistPageApi get _api => ref.read(artistPageApiProvider);
 
@@ -249,7 +257,8 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       });
     }
 
-    final artist = await _api.info(artistId: widget.artistId, name: widget.artistName);
+    final known = _artist;
+    final artist = await _api.info(artistId: known?.id ?? widget.artistId, name: known == null ? widget.artistName : null);
     if (!mounted) return;
 
     if (artist == null) {
@@ -325,6 +334,27 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       _albumTracks.clear();
     });
     await _loadInfo(); // reloads the albums too
+  }
+
+  // ── Editing ────────────────────────────────────────────────────────────────
+
+  /// Opens the artist edit page; reloads everything when the user comes back.
+  Future<void> _edit() async {
+    final artist = _artist;
+    if (artist == null) return;
+
+    final location = Uri(path: kArtistEditRoute, queryParameters: {'artistId': artist.id}).toString();
+    await context.push(location);
+    if (!mounted) return;
+
+    // The avatar / banner may have changed: drop the cached images so that they are fetched again.
+    final cache = PaintingBinding.instance.imageCache;
+    for (final kind in const ['avatar', 'banner']) {
+      cache.evict(NetworkImage('${AppConfig.apiUrl}/api/artist/$kind/${artist.id}'), includeLive: true);
+    }
+    setState(() => _imageEpoch++);
+
+    unawaited(_refresh());
   }
 
   // ── Playing ────────────────────────────────────────────────────────────────
@@ -473,7 +503,16 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
-            child: _ArtistHeader(artistId: artist.id, name: artist.name, subtitle: albumsLabel, headers: headers, playing: _playingAll, onPlay: _playAll),
+            child: _ArtistHeader(
+              artistId: artist.id,
+              name: artist.name,
+              subtitle: albumsLabel,
+              headers: headers,
+              imageEpoch: _imageEpoch,
+              playing: _playingAll,
+              onPlay: _playAll,
+              onEdit: _edit,
+            ),
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -536,48 +575,96 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ArtistHeader extends StatelessWidget {
-  const _ArtistHeader({required this.artistId, required this.name, required this.subtitle, required this.headers, required this.playing, required this.onPlay});
+  const _ArtistHeader({
+    required this.artistId,
+    required this.name,
+    required this.subtitle,
+    required this.headers,
+    required this.imageEpoch,
+    required this.playing,
+    required this.onPlay,
+    required this.onEdit,
+  });
 
   final String artistId;
   final String name;
   final String? subtitle;
   final Map<String, String>? headers;
+
+  /// Part of the images' keys: bumping it makes the avatar / banner load again.
+  final int imageEpoch;
   final bool playing;
   final VoidCallback onPlay;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bannerHeight = kArtistBannerHeight + MediaQuery.paddingOf(context).top;
+    final media = MediaQuery.of(context);
     const ring = 4.0; // surface-coloured ring around the avatar, like Instagram's
+
+    // What is shown until the banner has loaded, or when the artist has none.
+    final bannerFallback = SizedBox(
+      width: double.infinity,
+      height: kArtistBannerHeight + media.padding.top,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
+          ),
+        ),
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Banner on top, with the avatar's lower half hanging below it.
         SizedBox(
-          height: bannerHeight + kArtistAvatarRadius + ring,
+          width: double.infinity,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: bannerHeight,
-                child: _AuthImage(
-                  url: '${AppConfig.apiUrl}/api/artist/banner/$artistId',
-                  headers: headers,
-                  fallback: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
+              // The banner decides the height (its image at full width, aspect ratio kept); below it
+              // there is room for the avatar's lower half.
+              Column(
+                children: [
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOut,
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: media.size.height * kArtistBannerMaxHeightFactor),
+                      child: Stack(
+                        children: [
+                          _AuthImage(
+                            key: ValueKey('banner#$artistId#$imageEpoch'),
+                            url: '${AppConfig.apiUrl}/api/artist/banner/$artistId',
+                            headers: headers,
+                            naturalHeight: true,
+                            fallback: bannerFallback,
+                          ),
+                          // Dim fade into the page colour: transparent at the top, surface at 70% at the bottom.
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [theme.colorScheme.surface.withValues(alpha: 0), theme.colorScheme.surface.withValues(alpha: 0.7)],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: kArtistAvatarRadius + ring),
+                ],
               ),
               Positioned(
                 left: 16,
@@ -591,6 +678,7 @@ class _ArtistHeader extends StatelessWidget {
                         width: kArtistAvatarRadius * 2,
                         height: kArtistAvatarRadius * 2,
                         child: _AuthImage(
+                          key: ValueKey('avatar#$artistId#$imageEpoch'),
                           url: '${AppConfig.apiUrl}/api/artist/avatar/$artistId',
                           headers: headers,
                           fallback: ColoredBox(
@@ -606,12 +694,19 @@ class _ArtistHeader extends StatelessWidget {
               Positioned(
                 right: 16,
                 bottom: 4,
-                child: FilledButton.icon(
-                  onPressed: playing ? null : onPlay,
-                  icon: playing
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.play_arrow_rounded),
-                  label: const Text('Play'),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton.outlined(tooltip: 'Edit artist', icon: const Icon(Icons.edit_outlined), onPressed: onEdit),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: playing ? null : onPlay,
+                      icon: playing
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Play'),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -764,13 +859,17 @@ class _AlbumsFooter extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _AuthImage extends StatelessWidget {
-  const _AuthImage({required this.url, required this.headers, required this.fallback});
+  const _AuthImage({super.key, required this.url, required this.headers, required this.fallback, this.naturalHeight = false});
 
   final String url;
 
   /// null while the token is still being read.
   final Map<String, String>? headers;
   final Widget fallback;
+
+  /// false: fill the space it is given (cropped, BoxFit.cover).
+  /// true: full width, as tall as the image is at that width (aspect ratio kept).
+  final bool naturalHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -779,9 +878,9 @@ class _AuthImage extends StatelessWidget {
     return Image.network(
       url,
       headers: headers,
-      fit: BoxFit.cover,
+      fit: naturalHeight ? BoxFit.fitWidth : BoxFit.cover,
       width: double.infinity,
-      height: double.infinity,
+      height: naturalHeight ? null : double.infinity,
       errorBuilder: (context, error, stack) => fallback,
       // Show the fallback (not an empty box) until the first frame arrives.
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) => frame == null ? fallback : child,

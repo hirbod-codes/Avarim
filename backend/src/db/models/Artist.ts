@@ -15,6 +15,9 @@ const shape = {
     avatarKey: string().optional().url(),
     bannerKey: string().optional().url(),
 
+    temporaryAvatar: boolean().optional(),
+    temporaryBanner: boolean().optional(),
+
     deletionQueued: boolean().optional(),
 
     createdAt: number().optional(),

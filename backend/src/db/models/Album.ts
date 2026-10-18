@@ -13,6 +13,8 @@ const shape = {
 
     avatarKey: string().optional().url(),
 
+    temporaryAvatar: boolean().optional(),
+
     deletionQueued: boolean().optional(),
 
     createdAt: number().optional(),

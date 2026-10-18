@@ -80,8 +80,10 @@ const shape = {
     webBucketKey: string().optional().url(), // avarim/audio/web/<audioId>
     coverArtKey: string().optional().url(), // avarim/audio/cover_art/<audioId>
 
-    deletionQueued: boolean().optional(),
+    temporaryAvatar: boolean().optional(),
     temporary: boolean().optional(),
+
+    deletionQueued: boolean().optional(),
     isPrepared: boolean().optional(),
 
     createdAt: number().optional(),
