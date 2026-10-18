@@ -340,11 +340,11 @@ class AudioPlayerService {
   /// already queued. Call it once the user is signed in.
   static Future<void> restore() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final ids = (prefs.getStringList(_kQueueIdsKey) ?? const <String>[]).toSet().toList();
+      final preferences = await SharedPreferences.getInstance();
+      final ids = (preferences.getStringList(_kQueueIdsKey) ?? const <String>[]).toSet().toList();
       if (ids.isEmpty || !_state.value.isEmpty) return;
 
-      final index = math.min(math.max(prefs.getInt(_kQueueIndexKey) ?? 0, 0), ids.length - 1);
+      final index = math.min(math.max(preferences.getInt(_kQueueIndexKey) ?? 0, 0), ids.length - 1);
 
       _persistedIds = ids; // already on disk, no need to write it back
       _persistedIndex = index;
@@ -366,13 +366,13 @@ class AudioPlayerService {
 
   static Future<void> _save(List<String> ids, int index) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final preferences = await SharedPreferences.getInstance();
       if (ids.isEmpty) {
-        await prefs.remove(_kQueueIdsKey);
-        await prefs.remove(_kQueueIndexKey);
+        await preferences.remove(_kQueueIdsKey);
+        await preferences.remove(_kQueueIndexKey);
       } else {
-        await prefs.setStringList(_kQueueIdsKey, ids);
-        await prefs.setInt(_kQueueIndexKey, index);
+        await preferences.setStringList(_kQueueIdsKey, ids);
+        await preferences.setInt(_kQueueIndexKey, index);
       }
     } catch (e) {
       debugPrint('AudioPlayerService: saving the queue failed: $e');

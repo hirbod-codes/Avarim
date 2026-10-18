@@ -72,6 +72,8 @@ import ArtistAlbumAudioRepository from './db/MongoDB/ArtistAlbumAudioRepository'
 import { artistRoutes } from './routes/artist/artist';
 import { albumRoutes } from './routes/album/album';
 import { playlistRoutes } from './routes/playlist/playlist';
+import PlaylistRepository from './db/MongoDB/PlaylistRepository';
+import PlaylistAudioRepository from './db/MongoDB/PlaylistAudioRepository';
 
 export const s3 = new S3Client({
     region: 'us-east-1',
@@ -125,6 +127,8 @@ export const payments = {
             db.addRepository(new AlbumRepository())
             db.addRepository(new AudioRepository())
             db.addRepository(new ArtistAlbumAudioRepository())
+            db.addRepository(new PlaylistRepository())
+            db.addRepository(new PlaylistAudioRepository())
 
             // if (!isProduction)
             //     await MongoDB.getDbInstance().dropSeedableCollections()

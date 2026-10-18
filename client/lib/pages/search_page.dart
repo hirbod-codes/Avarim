@@ -2,10 +2,12 @@
 //
 // Search page with:
 //   - a search box (auto-searches after the user stops typing for [kSearchDebounce])
-//   - three tabs: Artists / Albums / Audios (the active tab decides which endpoint is searched)
+//   - four tabs: Artists / Albums / Audios / Playlists (the active tab decides which endpoint is searched)
 //   - paginated results (infinite scroll OR a "Load more" button, see [LoadMoreMode])
 //   - initial load with no query -> fetches the selected tab's endpoint without `search`
 //   - tapping an audio plays it in the global player dock (see audio_player_service.dart)
+//   - albums and playlists have an "add to queue" button (appends all their audios, the current track keeps
+//     playing); tapping a playlist adds all its audios to the queue and starts with the first of them
 //   - EDIT MODE (audios tab): the pencil in the app bar toggles per-audio buttons
 //       edit   -> pushes EditAudioPage with `?audioId=...` (the list refreshes when you come back)
 //       delete -> DELETE /api/audio/:audioId, the button turns into a spinner while it runs
@@ -25,6 +27,7 @@ import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
+import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:avarim/auth/token_storage.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
@@ -47,6 +50,9 @@ const kPageSize = 20;
 /// First page number your API expects (change to 0 if it is zero-based).
 const kFirstPage = 1;
 
+/// Page size used when fetching ALL the audios of an album / playlist to put them in the player queue.
+const kQueueFetchPageSize = 50;
+
 /// Ask "Delete this audio?" before actually deleting. Set to false to delete on the first press.
 const kConfirmBeforeDelete = true;
 
@@ -55,7 +61,8 @@ const kEditAudioRoute = '/upload_audio';
 enum SearchTab {
   artists('Artists', '/api/artist'),
   albums('Albums', '/api/album'),
-  audios('Audios', '/api/audio');
+  audios('Audios', '/api/audio'),
+  playlists('Playlists', '/api/playlist');
 
   const SearchTab(this.label, this.path);
   final String label;
@@ -76,7 +83,12 @@ enum LoadMoreMode {
 //   GET    {baseUrl}/artists?page=1&pageSize=20&search=foo
 //   GET    {baseUrl}/albums?page=1&pageSize=20&search=foo
 //   GET    {baseUrl}/audios?page=1&pageSize=20&search=foo
+//   GET    {baseUrl}/playlists?page=1&pageSize=20&search=foo
 //   DELETE {baseUrl}/api/audio/:audioId
+//
+// To queue an album / playlist, all of its audios are fetched page by page:
+//   GET    {baseUrl}/api/album/audio?albumName=...&page=1&pageSize=50
+//   GET    {baseUrl}/api/playlist/audio?playlistId=...&page=1&pageSize=50
 //
 // Response: { "items": [ {...}, {...} ] }   (a bare JSON array also works)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,6 +118,8 @@ class MusicSearchApi {
               return Album.fromJson(e);
             case SearchTab.audios:
               return Audio.fromJson(e);
+            case SearchTab.playlists:
+              return Playlist.fromJson(e);
           }
         }).toList();
       },
@@ -123,6 +137,41 @@ class MusicSearchApi {
   Future<bool> deleteAudio(String audioId) async {
     final res = await apiCall(() => _dio.delete<dynamic>('/api/audio/$audioId'));
     return res.isSuccess;
+  }
+
+  /// Ids of every audio of the album called [albumName], in order. Null when a request failed
+  /// (its error was already shown).
+  Future<List<String>?> albumAudioIds(String albumName) => _allAudioIds('/api/album/audio', {'albumName': albumName});
+
+  /// Ids of every audio of a playlist, in playlist order. Null when a request failed
+  /// (its error was already shown).
+  Future<List<String>?> playlistAudioIds(String playlistId) => _allAudioIds('/api/playlist/audio', {'playlistId': playlistId});
+
+  /// Pages through [path] until the last page. Both endpoints answer `{ status, data: [audio, ...] }`
+  /// (page is 1-based, like the lists above).
+  Future<List<String>?> _allAudioIds(String path, Map<String, dynamic> params) async {
+    final ids = <String>{}; // a set: keeps the order, drops duplicates
+    for (var page = kFirstPage; ; page++) {
+      final res = await apiCall<List<String>>(
+        () => _dio.get<dynamic>(path, queryParameters: {...params, 'page': page, 'pageSize': kQueueFetchPageSize}),
+        fromJson: (data) => List.from(data).map(_audioIdOf).whereType<String>().toList(),
+      );
+      if (res.isFailure) return null;
+
+      final pageIds = res.dataOrNull ?? const <String>[];
+      final before = ids.length;
+      ids.addAll(pageIds);
+
+      // A short page is the last one. No NEW ids means the server ignored `page`: stop instead of looping forever.
+      if (pageIds.length < kQueueFetchPageSize || ids.length == before) return ids.toList();
+    }
+  }
+
+  /// An audio's id: `_id` (audio documents) or `audioId` (playlist / album link records).
+  static String? _audioIdOf(dynamic e) {
+    if (e is! Map) return null;
+    final id = e['_id'] ?? e['audioId'];
+    return id?.toString();
   }
 }
 
@@ -180,7 +229,14 @@ class TabResults {
 }
 
 class SearchState {
-  const SearchState({required this.tab, required this.query, required this.results, this.editMode = false, this.deletingIds = const {}});
+  const SearchState({
+    required this.tab,
+    required this.query,
+    required this.results,
+    this.editMode = false,
+    this.deletingIds = const {},
+    this.queueingIds = const {},
+  });
 
   final SearchTab tab;
   final String query;
@@ -192,14 +248,25 @@ class SearchState {
   /// Audios whose delete request is in flight (their delete button shows a spinner).
   final Set<String> deletingIds;
 
+  /// Albums / playlists whose audios are being fetched to be queued (their queue button shows a spinner).
+  final Set<String> queueingIds;
+
   TabResults of(SearchTab t) => results[t]!;
 
-  SearchState copyWith({SearchTab? tab, String? query, Map<SearchTab, TabResults>? results, bool? editMode, Set<String>? deletingIds}) => SearchState(
+  SearchState copyWith({
+    SearchTab? tab,
+    String? query,
+    Map<SearchTab, TabResults>? results,
+    bool? editMode,
+    Set<String>? deletingIds,
+    Set<String>? queueingIds,
+  }) => SearchState(
     tab: tab ?? this.tab,
     query: query ?? this.query,
     results: results ?? this.results,
     editMode: editMode ?? this.editMode,
     deletingIds: deletingIds ?? this.deletingIds,
+    queueingIds: queueingIds ?? this.queueingIds,
   );
 }
 
@@ -256,6 +323,42 @@ class MusicSearchNotifier extends Notifier<SearchState> {
   Future<void> loadMore(SearchTab tab, {bool retry = false}) => _load(tab, reset: false, retry: retry);
 
   void toggleEditMode() => state = state.copyWith(editMode: !state.editMode);
+
+  /// Adds every audio of an album or a playlist to the player queue (see AudioPlayerService.add):
+  ///  - [play] = true: the first of them starts playing right away, the rest of the queue is kept
+  ///  - [play] = false: they are only appended, the current track keeps playing
+  /// While the audios are fetched the item's id is in [SearchState.queueingIds] (its button spins).
+  Future<void> addToQueue(WithId item, {required bool play}) async {
+    if (state.queueingIds.contains(item.id)) return;
+    state = state.copyWith(queueingIds: {...state.queueingIds, item.id});
+
+    List<String>? ids;
+    try {
+      final api = ref.read(musicSearchApiProvider);
+      ids = switch (item) {
+        Album a => await api.albumAudioIds(a.name),
+        Playlist p => await api.playlistAudioIds(p.id),
+        _ => const <String>[],
+      };
+    } catch (e, st) {
+      talker.error('fetching the audios to queue failed', e, st);
+    }
+
+    // ids == null: a request failed and its error was already shown.
+    if (ids != null) {
+      if (ids.isEmpty) {
+        NotificationService.showError(message: 'There are no audios to add');
+      } else {
+        // The player is global, so this works even if the user already left the page.
+        AudioPlayerService.add(audioIds: ids, play: play);
+        if (!play) {
+          NotificationService.showSuccess(message: ids.length == 1 ? 'Added 1 audio to the queue' : 'Added ${ids.length} audios to the queue');
+        }
+      }
+    }
+
+    if (ref.mounted) state = state.copyWith(queueingIds: {...state.queueingIds}..remove(item.id));
+  }
 
   /// Deletes an audio. While the request runs its id is in [SearchState.deletingIds];
   /// on success it disappears from every tab (and from the floating player if it was playing).
@@ -514,6 +617,9 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
 
     if (item is Audio) {
       AudioPlayerService.add(audioId: item.id);
+    } else if (item is Playlist) {
+      // All of the playlist's audios go into the queue and the first of them starts playing.
+      unawaited(ref.read(musicSearchProvider.notifier).addToQueue(item, play: true));
     }
   }
 
@@ -553,6 +659,7 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
     final notifier = ref.read(musicSearchProvider.notifier);
     final editMode = ref.watch(musicSearchProvider.select((s) => s.editMode));
     final deletingIds = ref.watch(musicSearchProvider.select((s) => s.deletingIds));
+    final queueingIds = ref.watch(musicSearchProvider.select((s) => s.queueingIds));
 
     if (r.items.isEmpty && (r.isLoading || r.loadedQuery == null)) {
       return const Center(child: CircularProgressIndicator());
@@ -586,18 +693,23 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
             itemBuilder: (context, i) {
               if (i < r.items.length) {
                 final item = r.items[i];
-                return _ResultTile(
-                  item: item,
-                  isPlaying: item is Audio && item.id == playingId,
-                  editMode: editMode,
-                  isDeleting: deletingIds.contains(item.id),
-                  onTap: item is Artist
-                      ? () {
-                          context.push(Uri(path: '/artist', queryParameters: {'artistId': item.id}).toString());
-                        }
-                      : ((item is Audio || widget.onItemTap != null) ? () => _onTap(item) : null),
-                  onEdit: item is Audio ? () => _edit(item) : null,
-                  onDelete: item is Audio ? () => _delete(item) : null,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: _ResultTile(
+                    item: item,
+                    isPlaying: item is Audio && item.id == playingId,
+                    editMode: editMode,
+                    isDeleting: deletingIds.contains(item.id),
+                    isQueueing: queueingIds.contains(item.id),
+                    onTap: item is Artist
+                        ? () {
+                            context.push(Uri(path: '/artist', queryParameters: {'artistId': item.id}).toString());
+                          }
+                        : ((item is Audio || item is Playlist || widget.onItemTap != null) ? () => _onTap(item) : null),
+                    onAddToQueue: item is Album || item is Playlist ? () => notifier.addToQueue(item, play: false) : null,
+                    onEdit: item is Audio ? () => _edit(item) : null,
+                    onDelete: item is Audio ? () => _delete(item) : null,
+                  ),
                 );
               }
               return _Footer(isLoadingMore: r.isLoadingMore, hasError: r.error != null, onLoadMore: _loadMore, onRetry: () => _loadMore(retry: true));
@@ -671,7 +783,17 @@ class _Message extends StatelessWidget {
 String _joinParts(List<String?> parts) => parts.whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 
 class _ResultTile extends StatelessWidget {
-  const _ResultTile({required this.item, this.onTap, this.isPlaying = false, this.editMode = false, this.isDeleting = false, this.onEdit, this.onDelete});
+  const _ResultTile({
+    required this.item,
+    this.onTap,
+    this.isPlaying = false,
+    this.editMode = false,
+    this.isDeleting = false,
+    this.isQueueing = false,
+    this.onEdit,
+    this.onDelete,
+    this.onAddToQueue,
+  });
 
   final WithId item;
   final VoidCallback? onTap;
@@ -684,8 +806,14 @@ class _ResultTile extends StatelessWidget {
 
   /// This audio's delete request is in flight.
   final bool isDeleting;
+
+  /// This album's / playlist's audios are being fetched to be queued.
+  final bool isQueueing;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+
+  /// Albums and playlists: appends all their audios to the player queue.
+  final VoidCallback? onAddToQueue;
 
   @override
   Widget build(BuildContext context) {
@@ -701,7 +829,7 @@ class _ResultTile extends StatelessWidget {
         leading: Thumb(url: '/api/album/avatar/${a.id}', icon: Icons.album),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: _subtitle([a.name]),
-        trailing: editMode ? _editActions(context) : null,
+        trailing: editMode ? _editActions(context) : _queueButton(),
       ),
       Audio a => ListTile(
         onTap: isDeleting ? null : onTap,
@@ -710,6 +838,13 @@ class _ResultTile extends StatelessWidget {
         title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: _subtitle([a.tags?.artists.join(', '), a.tags?.album]),
         trailing: editMode ? _editActions(context) : (a.technical?.durationSec == null ? null : Text(_formatDuration(a.technical!.durationSec!.round()))),
+      ),
+      Playlist p => ListTile(
+        // Tapping plays it: all its audios are added to the queue and the first one starts.
+        onTap: isQueueing ? null : onTap,
+        leading: Thumb(url: '/api/playlist/avatar/${p.id}', icon: Icons.queue_music),
+        title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: _queueButton(),
       ),
       WithId() => throw UnimplementedError(),
     };
@@ -734,6 +869,18 @@ class _ResultTile extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  /// "Add to queue" (spinner while the audios are being fetched).
+  Widget? _queueButton() {
+    if (onAddToQueue == null) return null;
+    if (isQueueing) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    return IconButton(tooltip: 'Add to queue', icon: const Icon(Icons.playlist_add), onPressed: onAddToQueue);
   }
 
   static Widget? _subtitle(List<String?> parts) {

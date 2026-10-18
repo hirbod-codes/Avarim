@@ -1,4 +1,3 @@
-import 'package:avarim/pages/test/fabric_texture.dart';
 import 'package:avarim/pages/test/geometric_pattern.dart';
 import 'package:avarim/pages/test/pattern_edge_fade.dart';
 import 'package:flutter/material.dart';

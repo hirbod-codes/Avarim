@@ -126,6 +126,12 @@ export class MeiliCrud<T extends Record<string, any>> {
 
         console.log('prepare album index...')
         await meiliAlbum.ensureIndex();
+
+        console.log('prepare playlist index...')
+        await meiliPlaylist.ensureIndex();
+
+        console.log('prepare playlist audio index...')
+        await meiliPlaylistAudio.ensureIndex();
     }
 
     private readonly index: Index<T>;
