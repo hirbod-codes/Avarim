@@ -1,4 +1,4 @@
-import 'package:avarim/components/contents/players/player_interface.dart';
+import 'package:avarim/components/contents/players/video/player_interface.dart';
 import 'package:flutter/material.dart';
 
 class PlayerControls extends StatelessWidget {

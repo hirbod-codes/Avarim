@@ -1,4 +1,4 @@
-import 'package:avarim/components/contents/players/hlsjs/web_video_player.dart';
+import 'package:avarim/components/contents/players/video/hlsjs/web_video_player.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

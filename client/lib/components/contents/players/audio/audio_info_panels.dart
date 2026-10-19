@@ -151,6 +151,7 @@ class AudioInfoButtons extends StatelessWidget {
           if (_has(audio, panel))
             IconButton(
               tooltip: _icons[panel]!.$3,
+              visualDensity: VisualDensity.compact,
               isSelected: selected == panel,
               icon: Icon(_icons[panel]!.$1),
               selectedIcon: Icon(_icons[panel]!.$2),

@@ -47,6 +47,9 @@ abstract class AppAudioPlayer {
   Stream<AudioPlayerState> get stateStream;
   AudioPlayerState get state;
 
+  /// null when this platform / engine has no equalizer.
+  AppEqualizer? get equalizer;
+
   /// Open a URL with optional headers (e.g. Authorization for Content-Range).
   Future<void> open(String url, {Map<String, String>? headers, String? title, String? artist, String? albumArtUrl});
 
@@ -60,4 +63,36 @@ abstract class AppAudioPlayer {
   Future<void> skipBackward([Duration amount = const Duration(seconds: 15)]);
 
   Future<void> dispose();
+}
+
+// ---------------------------------------------------------------------------
+// Equalizer
+// ---------------------------------------------------------------------------
+
+/// One band of an equalizer: the frequency it is centred on and the gain range it allows.
+class EqualizerBand extends Equatable {
+  const EqualizerBand({required this.centerHz, required this.minDb, required this.maxDb});
+
+  final double centerHz;
+  final double minDb;
+  final double maxDb;
+
+  @override
+  List<Object?> get props => [centerHz, minDb, maxDb];
+}
+
+/// What an audio engine has to offer for equalizing. The bands are chosen by the engine
+/// (Android: the device's; web: 10 octave bands). The user's settings live in [EqualizerStore]
+/// and are applied to the engine whenever a track is opened.
+abstract class AppEqualizer {
+  /// false when the equalizer can't be used for the audio that is loaded
+  /// (e.g. on web when the server doesn't allow cross-origin audio processing).
+  bool get available;
+
+  /// The bands. On Android they are only known once a track has been opened.
+  Future<List<EqualizerBand>> bands();
+
+  Future<void> setEnabled(bool enabled);
+
+  Future<void> setBandGain(int index, double db);
 }

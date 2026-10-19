@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:avarim/components/contents/players/player_interface.dart';
+import 'package:avarim/components/contents/players/video/player_interface.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:media_kit/media_kit.dart' hide PlayerState;
 

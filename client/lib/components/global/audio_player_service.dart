@@ -27,7 +27,7 @@
 //
 // Two states:
 //   - minimized: a mini bar at the bottom (title, play/pause, expand, close)
-//   - expanded:  the player fills the whole screen (queue / minimize / close at the top right)
+//   - expanded:  the player fills the whole screen (minimize / close at the top right, queue next to the speed button)
 //
 // PERSISTENCE
 //   The queue (ids + current index) is saved to shared_preferences (Android, iOS, web, desktop)
@@ -67,7 +67,7 @@ const kDockProgressHeight = 2.0;
 /// Space the minimized dock occupies (excluding the bottom safe-area inset).
 const kDockCollapsedExtent = kDockHeaderHeight + kDockProgressHeight;
 
-/// Height reserved at the top of the full-screen player for the queue / minimize / close buttons
+/// Height reserved at the top of the full-screen player for the minimize / close buttons
 /// (on top of the status-bar inset).
 const kPlayerTopBarHeight = 56.0;
 
@@ -340,11 +340,11 @@ class AudioPlayerService {
   /// already queued. Call it once the user is signed in.
   static Future<void> restore() async {
     try {
-      final preferences = await SharedPreferences.getInstance();
-      final ids = (preferences.getStringList(_kQueueIdsKey) ?? const <String>[]).toSet().toList();
+      final prefs = await SharedPreferences.getInstance();
+      final ids = (prefs.getStringList(_kQueueIdsKey) ?? const <String>[]).toSet().toList();
       if (ids.isEmpty || !_state.value.isEmpty) return;
 
-      final index = math.min(math.max(preferences.getInt(_kQueueIndexKey) ?? 0, 0), ids.length - 1);
+      final index = math.min(math.max(prefs.getInt(_kQueueIndexKey) ?? 0, 0), ids.length - 1);
 
       _persistedIds = ids; // already on disk, no need to write it back
       _persistedIndex = index;
@@ -366,13 +366,13 @@ class AudioPlayerService {
 
   static Future<void> _save(List<String> ids, int index) async {
     try {
-      final preferences = await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
       if (ids.isEmpty) {
-        await preferences.remove(_kQueueIdsKey);
-        await preferences.remove(_kQueueIndexKey);
+        await prefs.remove(_kQueueIdsKey);
+        await prefs.remove(_kQueueIndexKey);
       } else {
-        await preferences.setStringList(_kQueueIdsKey, ids);
-        await preferences.setInt(_kQueueIndexKey, index);
+        await prefs.setStringList(_kQueueIdsKey, ids);
+        await prefs.setInt(_kQueueIndexKey, index);
       }
     } catch (e) {
       debugPrint('AudioPlayerService: saving the queue failed: $e');
@@ -512,6 +512,21 @@ class _DockBody extends StatelessWidget {
                             showQueueControls: state.ids.length > 1,
                             onPrevious: state.hasPrevious ? AudioPlayerService.previous : null,
                             onNext: state.hasNext ? AudioPlayerService.next : null,
+                            // Shown next to the playback speed button.
+                            extraActions: [
+                              IconButton(
+                                tooltip: 'Queue',
+                                visualDensity: VisualDensity.compact,
+                                isSelected: queueOpen,
+                                icon: const Icon(Icons.queue_music_outlined),
+                                selectedIcon: const Icon(Icons.queue_music),
+                                style: IconButton.styleFrom(
+                                  foregroundColor: queueOpen ? theme.colorScheme.onPrimaryContainer : null,
+                                  backgroundColor: queueOpen ? theme.colorScheme.primaryContainer : null,
+                                ),
+                                onPressed: AudioPlayerService.toggleQueueVisible,
+                              ),
+                            ],
                           ),
                         ),
 
@@ -549,17 +564,6 @@ class _DockBody extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                IconButton(
-                                  tooltip: 'Queue',
-                                  isSelected: queueOpen,
-                                  icon: const Icon(Icons.queue_music_outlined),
-                                  selectedIcon: const Icon(Icons.queue_music),
-                                  style: IconButton.styleFrom(
-                                    foregroundColor: queueOpen ? theme.colorScheme.onPrimaryContainer : null,
-                                    backgroundColor: queueOpen ? theme.colorScheme.primaryContainer : null,
-                                  ),
-                                  onPressed: AudioPlayerService.toggleQueueVisible,
-                                ),
                                 IconButton(tooltip: 'Minimize', icon: const Icon(Icons.expand_more), onPressed: AudioPlayerService.toggleMinimized),
                                 IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: AudioPlayerService.close),
                               ],

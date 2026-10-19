@@ -38,6 +38,9 @@ class AudioContainer extends ConsumerStatefulWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
+  /// Extra buttons the player shows next to its playback speed button.
+  final List<Widget> extraActions;
+
   /// When true (default) the container creates its own player (its own Riverpod scope).
   /// The global dock passes false because it provides the scope itself, so that the mini
   /// bar can control the same player.
@@ -55,6 +58,7 @@ class AudioContainer extends ConsumerStatefulWidget {
     this.showQueueControls = false,
     this.onPrevious,
     this.onNext,
+    this.extraActions = const [],
     this.ownPlayerScope = true,
   });
 
@@ -114,6 +118,16 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
     });
   }
 
+  /// "Artist A, Artist B" from the audio's tags (album artists when there are no track artists), or null.
+  String? _artistLabel(Audio audio) {
+    final tags = audio.tags;
+    if (tags == null) return null;
+
+    final names = (tags.artists.isNotEmpty ? tags.artists : tags.albumArtists).where((n) => n.trim().isNotEmpty);
+    final label = names.join(', ');
+    return label.isEmpty ? null : label;
+  }
+
   /// With a fixed height the placeholder states keep their old compact layout;
   /// when asked to fill the parent (infinite height) they are centered in it.
   Widget _placeholder(Widget child) => widget.height.isFinite ? child : SizedBox.expand(child: Center(child: child));
@@ -156,6 +170,7 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
       headers: {'Authorization': 'Bearer ${_token!}'},
       accessToken: _token!,
       title: _audio!.title,
+      artist: _artistLabel(_audio!),
       audio: _audio,
       autoPlay: widget.autoPlay,
       onCompleted: widget.onCompleted,
@@ -163,6 +178,7 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
       showQueueControls: widget.showQueueControls,
       onPrevious: widget.onPrevious,
       onNext: widget.onNext,
+      extraActions: widget.extraActions,
     );
 
     return Container(

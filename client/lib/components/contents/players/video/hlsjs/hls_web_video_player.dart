@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:ui_web' as ui_web;
 
-import 'package:avarim/components/contents/players/player_interface.dart';
+import 'package:avarim/components/contents/players/video/player_interface.dart';
 import 'package:web/web.dart' as web;
 
 import 'interop.dart';

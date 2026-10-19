@@ -4,7 +4,7 @@ import 'package:avarim/api/models/video.dart';
 import 'package:avarim/api/controllers/video_controller.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/auth/token_storage.dart';
-import 'package:avarim/components/contents/players/video_player_screen.dart';
+import 'package:avarim/components/contents/players/video/video_player_screen.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/l10n/app_localizations.dart';
 import 'package:avarim/theme/theme_radius.dart';

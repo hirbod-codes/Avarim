@@ -1,4 +1,4 @@
-import 'package:avarim/components/contents/players/player_interface.dart';
+import 'package:avarim/components/contents/players/video/player_interface.dart';
 
 /// No-op stand-in used on non-web platforms so that dart:js_interop and
 /// package:web are never imported outside web compilation. Never actually

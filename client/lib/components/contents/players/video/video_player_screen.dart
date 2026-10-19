@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:avarim/app_config.dart';
-import 'package:avarim/components/contents/players/media_kit_player.dart';
-import 'package:avarim/components/contents/players/player_control_widgets.dart';
-import 'package:avarim/components/contents/players/player_factory.dart';
-import 'package:avarim/components/contents/players/player_interface.dart';
+import 'package:avarim/components/contents/players/video/media_kit_player.dart';
+import 'package:avarim/components/contents/players/video/player_control_widgets.dart';
+import 'package:avarim/components/contents/players/video/player_factory.dart';
+import 'package:avarim/components/contents/players/video/player_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

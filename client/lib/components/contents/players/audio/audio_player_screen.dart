@@ -5,6 +5,7 @@ import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/components/contents/players/audio/audio_info_panels.dart';
 import 'package:avarim/components/contents/players/audio/audio_player_provider.dart';
+import 'package:avarim/components/contents/players/audio/equalizer_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,11 +14,6 @@ import 'package:avarim/components/contents/players/audio/audio_player_interface.
 /// The background / gradient spans the full width, but the player's controls stay
 /// centered at this width on wide screens instead of stretching edge to edge.
 const kAudioPlayerContentMaxWidth = 560.0;
-
-/// The controls are laid out at this height. When less (after [AudioPlayerScreen.contentPadding])
-/// is available they are scaled down to fit instead of overflowing; when more is available they
-/// are centered vertically while the background keeps filling everything.
-const kPlayerContentDesignHeight = 760.0;
 
 /// How faithful the gradient is to the cover art. `content` keeps the cover's own
 /// saturation; `tonalSpot` (Material You default) is softer / more muted, `vibrant`
@@ -77,6 +73,7 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
     this.showQueueControls = false,
     this.onPrevious,
     this.onNext,
+    this.extraActions = const [],
   });
 
   final String audioId;
@@ -104,6 +101,9 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
+  /// Extra buttons shown next to the playback speed button (the global player puts its queue button here).
+  final List<Widget> extraActions;
+
   @override
   ConsumerState<AudioPlayerScreen> createState() => _AudioPlayerScreenState();
 }
@@ -111,6 +111,7 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
 class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   StreamSubscription<AudioPlayerState>? _completionSub;
   AudioInfoPanel? _panel;
+  bool _equalizerOpen = false;
 
   /// Gradient stops (top -> bottom) derived from the cover art; null until loaded
   /// or when the audio has no cover art.
@@ -184,16 +185,10 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
     final alignment = Alignment(center.dx / size.width * 2 - 1, center.dy / size.height * 2 - 1);
 
     // RadialGradient.radius is a fraction of the shortest side; reach (a share of) the farthest corner.
-    final farthest = [
-      Offset.zero,
-      Offset(size.width, 0),
-      Offset(0, size.height),
-      Offset(size.width, size.height),
-    ].map((c) => (c - center).distance).reduce(math.max);
+    final farthest = [Offset.zero, Offset(size.width, 0), Offset(0, size.height), Offset(size.width, size.height)].map((c) => (c - center).distance).reduce(math.max);
     final radius = farthest * kCoverGradientReach / size.shortestSide;
 
-    final unchanged =
-        (alignment.x - _gradientCenter.x).abs() < 0.002 && (alignment.y - _gradientCenter.y).abs() < 0.002 && (radius - _gradientRadius).abs() < 0.002;
+    final unchanged = (alignment.x - _gradientCenter.x).abs() < 0.002 && (alignment.y - _gradientCenter.y).abs() < 0.002 && (radius - _gradientRadius).abs() < 0.002;
     if (unchanged) return;
 
     setState(() {
@@ -231,6 +226,13 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   Widget build(BuildContext context) {
     final notifier = ref.watch(audioPlayerCommandsProvider.notifier);
 
+    final waveform = widget.audio?.technical?.waveform ?? const <double>[];
+
+    // At most one panel (lyrics / tags / technical / equalizer) replaces the album art at a time.
+    final equalizer = notifier.equalizer; // null on platforms without an equalizer
+    final equalizerOpen = _equalizerOpen && equalizer != null;
+    final infoOpen = _panel != null && widget.audio != null;
+
     final themeScheme = Theme.of(context).colorScheme;
     if (_gradient != null && _fittedFor != themeScheme) {
       _fitted = [for (final c in _gradient!) _fitToTheme(c, themeScheme)];
@@ -253,120 +255,145 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
       child: Material(
         type: MaterialType.transparency,
         child: StreamBuilder<AudioPlayerState>(
-          stream: notifier.stateStream,
-          initialData: notifier.currentState,
-          builder: (context, snapshot) {
-            final state = snapshot.data ?? const AudioPlayerState();
-            if (state.hasError) {
-              return _ErrorView(message: state.error ?? 'Unknown error');
-            }
-            return Padding(
-              padding: widget.contentPadding,
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  // The layout changed -> re-measure where the cover art ended up.
-                  if (_lastLayout != box) {
-                    _lastLayout = box;
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _measureGradientCenter());
-                  }
-                  // Only ever shrinks. The design width is widened by the same factor so the
-                  // scaled content keeps the real width.
-                  final scale = (box.maxHeight / kPlayerContentDesignHeight).clamp(0.05, 1.0);
-                  return Center(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: SizedBox(
-                        width: box.maxWidth / scale,
-                        height: kPlayerContentDesignHeight,
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: kAudioPlayerContentMaxWidth),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    // Album art + track info. An open info panel takes over exactly this area
-                                    // (the original stays laid out underneath so nothing jumps).
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: Stack(
-                                        alignment: Alignment.topCenter,
-                                        children: [
-                                          Visibility(
-                                            visible: _panel == null || widget.audio == null,
-                                            maintainSize: true,
-                                            maintainAnimation: true,
-                                            maintainState: true,
-                                            child: Column(
-                                              children: [
-                                                const SizedBox(height: 24),
-                                                Container(
-                                                  key: _artKey,
-                                                  constraints: BoxConstraints(maxHeight: 300),
-                                                  child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
-                                                ),
-                                                const SizedBox(height: 40),
-                                                _TrackInfo(title: state.title, artist: state.artist),
-                                                const SizedBox(height: 32),
-                                              ],
-                                            ),
-                                          ),
-                                          if (_panel != null && widget.audio != null)
-                                            Positioned.fill(
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                                child: AudioInfoPanelView(
-                                                  key: ValueKey(_panel),
-                                                  audio: widget.audio!,
-                                                  panel: _panel!,
-                                                  onClose: () => setState(() => _panel = null),
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      children: [
-                                        Row(
-                                          children: [
-                                            if (widget.audio != null)
-                                              AudioInfoButtons(audio: widget.audio!, selected: _panel, onSelected: (p) => setState(() => _panel = p)),
-                                            const Spacer(),
-                                            _SpeedControls(state: state),
-                                          ],
-                                        ),
-                                        _SeekBar(state: state),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 24),
-                                    _MainControls(
-                                      state: state,
-                                      showQueueControls: widget.showQueueControls,
-                                      onPrevious: widget.onPrevious,
-                                      onNext: widget.onNext,
-                                    ),
-                                    const SizedBox(height: 24),
-                                    _VolumeControls(state: state),
-                                    const SizedBox(height: 32),
-                                  ],
-                                ),
-                              ),
-                            ),
+      stream: notifier.stateStream,
+      initialData: notifier.currentState,
+      builder: (context, snapshot) {
+        final state = snapshot.data ?? const AudioPlayerState();
+        if (state.hasError) {
+          return _ErrorView(message: state.error ?? 'Unknown error');
+        }
+        return Padding(
+          padding: widget.contentPadding,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              // The layout changed -> re-measure where the cover art ended up.
+              if (_lastLayout != box) {
+                _lastLayout = box;
+                WidgetsBinding.instance.addPostFrameCallback((_) => _measureGradientCenter());
+              }
+              // The controls take the height they need (no fixed layout height to outgrow). If that is
+              // more than is available they are scaled down to fit, never up; if it is less they are
+              // centered vertically. The background / gradient is outside this and always fills everything.
+              return Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: SizedBox(
+                    width: box.maxWidth,
+                    child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kAudioPlayerContentMaxWidth),
+            child: SizedBox(
+              width: double.infinity,
+              child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Album art + track info. An open info panel takes over exactly this area
+              // (the original stays laid out underneath so nothing jumps).
+              SizedBox(
+                width: double.infinity,
+                child: Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+                    Visibility(
+                      visible: !infoOpen && !equalizerOpen,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      maintainState: true,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 24),
+                          Container(
+                            key: _artKey,
+                            constraints: BoxConstraints(maxHeight: 300),
+                            child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
                           ),
-                        ),
+                          const SizedBox(height: 40),
+                          // Full width, so that the text starts at the left edge instead of being centered.
+                          SizedBox(
+                            width: double.infinity,
+                            child: _TrackInfo(title: state.title, artist: state.artist),
+                          ),
+                          const SizedBox(height: 32),
+                        ],
                       ),
                     ),
-                  );
-                },
+                    if (infoOpen)
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: AudioInfoPanelView(key: ValueKey(_panel), audio: widget.audio!, panel: _panel!, onClose: () => setState(() => _panel = null)),
+                        ),
+                      ),
+                    if (equalizerOpen)
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: EqualizerPanel(engine: equalizer!, onClose: () => setState(() => _equalizerOpen = false)),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            );
-          },
-        ),
-      ),
+              Column(
+                children: [
+                  Row(
+                    children: [
+                      if (widget.audio != null)
+                        AudioInfoButtons(
+                          audio: widget.audio!,
+                          selected: _panel,
+                          onSelected: (p) => setState(() {
+                            _panel = p;
+                            if (p != null) _equalizerOpen = false;
+                          }),
+                        ),
+                      if (equalizer != null)
+                        IconButton(
+                          tooltip: 'Equalizer',
+                          visualDensity: VisualDensity.compact,
+                          isSelected: equalizerOpen,
+                          icon: const Icon(Icons.equalizer),
+                          style: IconButton.styleFrom(
+                            foregroundColor: equalizerOpen ? Theme.of(context).colorScheme.onPrimaryContainer : null,
+                            backgroundColor: equalizerOpen ? Theme.of(context).colorScheme.primaryContainer : null,
+                          ),
+                          onPressed: () => setState(() {
+                            _equalizerOpen = !_equalizerOpen;
+                            if (_equalizerOpen) _panel = null;
+                          }),
+                        ),
+                      const Spacer(),
+                      ...widget.extraActions,
+                      _SpeedControls(state: state),
+                    ],
+                  ),
+                  // Waveform when the audio has one, otherwise the plain slider.
+                  if (waveform.isNotEmpty) _WaveformSeekBar(state: state, waveform: waveform) else _SeekBar(state: state),
+                ],
+              ),
+              const SizedBox(height: 24),
+              _MainControls(state: state, showQueueControls: widget.showQueueControls, onPrevious: widget.onPrevious, onNext: widget.onNext),
+              const SizedBox(height: 24),
+              _VolumeControls(state: state),
+              const SizedBox(height: 32),
+            ],
+          ),
+              ),
+            ),
+          ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    ),
+    ),
     );
   }
 }
@@ -495,6 +522,171 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
 }
 
 // ---------------------------------------------------------------------------
+// Waveform seek bar
+// ---------------------------------------------------------------------------
+
+/// How much the quiet / loud difference of the waveform is exaggerated. 1 = as stored (heavily
+/// compressed music then looks like a flat block), 2 = clearer shape, higher = spikier.
+const kWaveformContrast = 2.0;
+
+const kWaveformHeight = 64.0;
+
+String _formatDuration(Duration d) {
+  final h = d.inHours;
+  final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return h > 0 ? '$h:$m:$s' : '$m:$s';
+}
+
+/// Seek bar drawn from `technical.waveform` (values 0..1): played part in the primary colour, the
+/// buffered part and the rest dimmer. Tap or drag anywhere on it to seek.
+class _WaveformSeekBar extends ConsumerStatefulWidget {
+  const _WaveformSeekBar({required this.state, required this.waveform});
+
+  final AudioPlayerState state;
+  final List<double> waveform;
+
+  @override
+  ConsumerState<_WaveformSeekBar> createState() => _WaveformSeekBarState();
+}
+
+class _WaveformSeekBarState extends ConsumerState<_WaveformSeekBar> {
+  /// 0..1 while the user drags (the bar follows the finger before the player catches up).
+  double? _dragFraction;
+
+  double _fractionAt(double dx, double width) => width <= 0 ? 0.0 : (dx / width).clamp(0.0, 1.0);
+
+  void _seek(double fraction) {
+    final target = Duration(milliseconds: (fraction * widget.state.duration.inMilliseconds).round());
+    ref.read(audioPlayerCommandsProvider.notifier).seek(target);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final player = widget.state;
+    final progress = _dragFraction ?? player.progress;
+    final shownPosition = _dragFraction == null ? player.position : Duration(milliseconds: (_dragFraction! * player.duration.inMilliseconds).round());
+
+    return Column(
+      children: [
+        LayoutBuilder(
+          builder: (context, box) {
+            final width = box.maxWidth;
+            return Semantics(
+              slider: true,
+              label: 'Seek',
+              value: '${_formatDuration(shownPosition)} of ${_formatDuration(player.duration)}',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) => _seek(_fractionAt(d.localPosition.dx, width)),
+                onHorizontalDragStart: (d) => setState(() => _dragFraction = _fractionAt(d.localPosition.dx, width)),
+                onHorizontalDragUpdate: (d) => setState(() => _dragFraction = _fractionAt(d.localPosition.dx, width)),
+                onHorizontalDragEnd: (_) {
+                  final fraction = _dragFraction;
+                  setState(() => _dragFraction = null);
+                  if (fraction != null) _seek(fraction);
+                },
+                onHorizontalDragCancel: () => setState(() => _dragFraction = null),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: kWaveformHeight,
+                  child: CustomPaint(
+                    painter: _WaveformPainter(
+                      waveform: widget.waveform,
+                      progress: progress,
+                      buffered: player.bufferedProgress,
+                      playedColor: theme.colorScheme.primary,
+                      bufferedColor: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                      idleColor: theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_formatDuration(shownPosition), style: theme.textTheme.labelMedium),
+              Text(_formatDuration(player.duration), style: theme.textTheme.labelMedium),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WaveformPainter extends CustomPainter {
+  _WaveformPainter({
+    required this.waveform,
+    required this.progress,
+    required this.buffered,
+    required this.playedColor,
+    required this.bufferedColor,
+    required this.idleColor,
+  });
+
+  final List<double> waveform;
+  final double progress;
+  final double buffered;
+  final Color playedColor;
+  final Color bufferedColor;
+  final Color idleColor;
+
+  static const _barWidth = 3.0;
+  static const _barGap = 2.0;
+  static const _minBarHeight = 3.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0 || waveform.isEmpty) return;
+
+    // As many bars as fit; each one shows the loudest sample of its slice of the waveform.
+    final count = math.max(1, ((size.width + _barGap) / (_barWidth + _barGap)).floor());
+    final spacing = count > 1 ? (size.width - _barWidth) / (count - 1) : 0.0;
+    final midY = size.height / 2;
+    final paint = Paint()
+      ..strokeWidth = _barWidth
+      ..strokeCap = StrokeCap.round;
+
+    for (var i = 0; i < count; i++) {
+      final from = (i * waveform.length / count).floor();
+      final to = math.min(waveform.length, math.max(from + 1, ((i + 1) * waveform.length / count).ceil()));
+
+      var peak = 0.0;
+      for (var j = from; j < to; j++) {
+        peak = math.max(peak, waveform[j]);
+      }
+
+      final amplitude = math.pow(peak.clamp(0.0, 1.0), kWaveformContrast).toDouble();
+      final barHeight = math.max(_minBarHeight, amplitude * size.height);
+
+      final x = _barWidth / 2 + i * spacing;
+      final fraction = x / size.width;
+      paint.color = fraction <= progress ? playedColor : (fraction <= buffered ? bufferedColor : idleColor);
+
+      // The round caps add half a bar width at each end.
+      final half = math.max(0.0, barHeight - _barWidth) / 2;
+      canvas.drawLine(Offset(x, midY - half), Offset(x, midY + half), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter old) =>
+      !identical(old.waveform, waveform) ||
+      old.progress != progress ||
+      old.buffered != buffered ||
+      old.playedColor != playedColor ||
+      old.bufferedColor != bufferedColor ||
+      old.idleColor != idleColor;
+}
+
+// ---------------------------------------------------------------------------
 // Main controls
 // ---------------------------------------------------------------------------
 
@@ -579,31 +771,32 @@ class _SpeedControls extends ConsumerWidget {
   const _SpeedControls({required this.state});
   final AudioPlayerState state;
 
+  static const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  static String _label(double speed) => '${speed == speed.roundToDouble() ? speed.toInt() : speed}×';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final commands = ref.watch(audioPlayerCommandsProvider.notifier);
 
-    return Row(
-      children: [
-        const Icon(Icons.speed_rounded, size: 20),
-        const SizedBox(width: 8),
-        DropdownButton<double>(
-          value: state.speed,
-          underline: const SizedBox.shrink(),
-          isDense: true,
-          items: const [
-            DropdownMenuItem(value: 0.5, child: Text('0.5×')),
-            DropdownMenuItem(value: 0.75, child: Text('0.75×')),
-            DropdownMenuItem(value: 1.0, child: Text('1×')),
-            DropdownMenuItem(value: 1.25, child: Text('1.25×')),
-            DropdownMenuItem(value: 1.5, child: Text('1.5×')),
-            DropdownMenuItem(value: 2.0, child: Text('2×')),
-          ],
-          onChanged: (v) {
-            if (v != null) commands.setSpeed(v);
-          },
-        ),
+    // MenuAnchor (not DropdownButton / PopupMenuButton): those open their menu as a route, and routes are
+    // drawn underneath the global player, so the menu would be hidden behind it. MenuAnchor's menu lives
+    // in the overlay, above the player.
+    return MenuAnchor(
+      menuChildren: [
+        for (final speed in _speeds)
+          MenuItemButton(
+            leadingIcon: speed == state.speed ? const Icon(Icons.check, size: 18) : const SizedBox(width: 18),
+            onPressed: () => commands.setSpeed(speed),
+            child: Text(_label(speed)),
+          ),
       ],
+      builder: (context, controller, child) => TextButton.icon(
+        style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: Theme.of(context).colorScheme.onSurface),
+        onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+        icon: const Icon(Icons.speed_rounded, size: 20),
+        label: Text(_label(state.speed)),
+      ),
     );
   }
 }

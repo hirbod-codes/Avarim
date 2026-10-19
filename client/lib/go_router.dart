@@ -9,7 +9,7 @@ import 'package:avarim/pages/artist_page.dart';
 import 'package:avarim/pages/edit_album/edit_album_page.dart';
 import 'package:avarim/pages/edit_artist/edit_artist_page.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_page.dart';
-import 'package:avarim/pages/search_page.dart';
+import 'package:avarim/pages/search/search_page.dart';
 import 'package:avarim/pages/auth/auth_page.dart';
 import 'package:avarim/pages/contact_page.dart';
 import 'package:avarim/pages/on_boarding_page.dart';

@@ -1,14 +1,27 @@
 import 'dart:async';
 import 'package:avarim/components/contents/players/audio/audio_player_interface.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 class JustAudioPlayer implements AppAudioPlayer {
   JustAudioPlayer() {
-    _player = AudioPlayer();
+    // just_audio only has an equalizer on Android (AndroidEqualizer). Elsewhere `equalizer` is null
+    // and the player simply doesn't offer one.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final equalizer = AndroidEqualizer();
+      _equalizer = _AndroidEqualizerAdapter(equalizer);
+      _player = AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [equalizer]));
+    } else {
+      _player = AudioPlayer();
+    }
     _bindStreams();
   }
 
   late final AudioPlayer _player;
+  AppEqualizer? _equalizer;
+
+  @override
+  AppEqualizer? get equalizer => _equalizer;
 
   final _stateController = StreamController<AudioPlayerState>.broadcast();
   AudioPlayerState _state = const AudioPlayerState();
@@ -131,5 +144,31 @@ class JustAudioPlayer implements AppAudioPlayer {
   Future<void> dispose() async {
     await _player.dispose();
     await _stateController.close();
+  }
+}
+
+/// [AppEqualizer] on top of just_audio's [AndroidEqualizer].
+class _AndroidEqualizerAdapter implements AppEqualizer {
+  _AndroidEqualizerAdapter(this._equalizer);
+
+  final AndroidEqualizer _equalizer;
+
+  @override
+  bool get available => true;
+
+  @override
+  Future<List<EqualizerBand>> bands() async {
+    // Completes once an audio source has been set (that is when the device's equalizer exists).
+    final parameters = await _equalizer.parameters;
+    return [for (final band in parameters.bands) EqualizerBand(centerHz: band.centerFrequency, minDb: parameters.minDecibels, maxDb: parameters.maxDecibels)];
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) => _equalizer.setEnabled(enabled);
+
+  @override
+  Future<void> setBandGain(int index, double db) async {
+    final parameters = await _equalizer.parameters;
+    await parameters.bands[index].setGain(db);
   }
 }

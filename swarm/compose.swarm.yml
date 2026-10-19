@@ -103,7 +103,7 @@ services:
       PUSHGATEWAY_URL: http://pushgateway:9091
       HOST: 0.0.0.0
       PORT: 3000
-      APP_URL: avarim.ir
+      APP_URL: avarim.ir:1404
       ALLOWED_ORIGINS: ${AVARIM_ALLOWED_ORIGINS}
       ENV_PREFIX: ${AVARIM_ENV_PREFIX}
       ENV_SUFFIX: ${AVARIM_ENV_SUFFIX}
