@@ -29,5 +29,6 @@ String? _deviceCountryCode() {
 /// Falls back to English + Gregorian for any unlisted country, or web.
 (String locale, CalendarType calendar) defaultLocaleAndCalendarForDevice() {
   final countryCode = _deviceCountryCode() ?? '_';
-  return _countryDefaults[countryCode]!;
+  final d = _countryDefaults['_'];
+  return _countryDefaults.containsKey(countryCode) ? _countryDefaults[countryCode]! : d!;
 }

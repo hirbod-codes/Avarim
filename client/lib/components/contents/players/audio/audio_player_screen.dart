@@ -331,7 +331,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                       Positioned.fill(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: EqualizerPanel(engine: equalizer!, onClose: () => setState(() => _equalizerOpen = false)),
+                          child: EqualizerPanel(engine: equalizer, onClose: () => setState(() => _equalizerOpen = false)),
                         ),
                       ),
                   ],

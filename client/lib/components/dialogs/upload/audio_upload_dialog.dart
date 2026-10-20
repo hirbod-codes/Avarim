@@ -17,6 +17,10 @@ class AudioUploadDialog extends ConsumerStatefulWidget {
   ConsumerState<AudioUploadDialog> createState() => _AudioUploadDialogState();
 }
 
+/// FileType.audio is a fixed list (no .flac) in the desktop dialogs, so desktop gets an explicit one.
+/// Trim it to the formats your server accepts.
+const _audioExtensions = ['mp3', 'flac', 'wav', 'ogg', 'oga', 'opus', 'aac', 'm4a', 'wma', 'aiff', 'aif', 'ape', 'wv', 'mid', 'midi'];
+
 class _AudioUploadDialogState extends ConsumerState<AudioUploadDialog> {
   final titleController = TextEditingController();
   Player? _player;
@@ -36,7 +40,7 @@ class _AudioUploadDialogState extends ConsumerState<AudioUploadDialog> {
 
   Future<void> _pickAudio() async {
     setState(() => _picking = true);
-    final result = await FilePicker.pickFiles(type: FileType.audio, allowMultiple: false, withData: kIsWeb);
+    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: _audioExtensions, allowMultiple: false, withData: kIsWeb);
     if (!mounted) return;
     setState(() => _picking = false);
     if (result == null) return;

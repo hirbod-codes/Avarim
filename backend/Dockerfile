@@ -12,7 +12,7 @@ RUN npm run build
 FROM base AS production-dependencies
 RUN npm ci --omit=dev
 
-# node:24-bookworm-slim is choosen because of ffmpgeg dependencies
+# node:24-bookworm-slim is choosen because of ffmpeg dependencies
 FROM node:24-bookworm-slim AS production
 WORKDIR /app
 

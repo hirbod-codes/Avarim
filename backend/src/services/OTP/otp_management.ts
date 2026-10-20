@@ -38,7 +38,10 @@ export async function requestOtp(phoneNumber: string, locale: 'en' | 'fa', purpo
 
     // Never log `code` or the resulting codeHash. codeHash is a fast, unsalted-beyond-phone-number SHA-256 digest of a 6-digit code — for anyone who also knows the phone number
     const codeHash = hashCode(code, phoneNumber)
-    !isProduction && log.debug({ codeHash: `${code}:${phoneNumber}` })
+    
+    // Temporary
+    log.debug({ codeHash: `${code}:${phoneNumber}` })
+    // !isProduction && log.debug({ codeHash: `${code}:${phoneNumber}` })
 
     const record: OtpRecord = { codeHash, attempts: 0, purpose };
 

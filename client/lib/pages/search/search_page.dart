@@ -27,6 +27,7 @@ import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
+import 'package:avarim/app_config.dart';
 import 'package:avarim/auth/token_storage.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
@@ -836,13 +837,13 @@ class _ResultTile extends StatelessWidget {
     return switch (item) {
       Artist a => ListTile(
         onTap: onTap,
-        leading: Thumb(url: '/api/artist/avatar/${a.id}', icon: Icons.person, circular: true),
+        leading: Thumb(url: '${AppConfig.apiUrl}/api/artist/avatar/${a.id}', icon: Icons.person, circular: true),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: editMode ? _editActions(context) : null,
       ),
       Album a => ListTile(
         onTap: onTap,
-        leading: Thumb(url: '/api/album/avatar/${a.id}', icon: Icons.album),
+        leading: Thumb(url: '${AppConfig.apiUrl}/api/album/avatar/${a.id}', icon: Icons.album),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: _subtitle([a.name]),
         trailing: editMode ? _editActions(context) : _queueButton(),
@@ -850,7 +851,7 @@ class _ResultTile extends StatelessWidget {
       Audio a => ListTile(
         onTap: isDeleting ? null : onTap,
         selected: isPlaying,
-        leading: Thumb(url: '/api/audio/coverArt/${a.id}', icon: Icons.music_note),
+        leading: Thumb(url: '${AppConfig.apiUrl}/api/audio/coverArt/${a.id}', icon: Icons.music_note),
         title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: _subtitle([a.tags?.artists.join(', '), a.tags?.album]),
         trailing: editMode ? _editActions(context) : (a.technical?.durationSec == null ? null : Text(_formatDuration(a.technical!.durationSec!.round()))),
@@ -858,7 +859,7 @@ class _ResultTile extends StatelessWidget {
       Playlist p => ListTile(
         // Tapping plays it: all its audios are added to the queue and the first one starts.
         onTap: isQueueing ? null : onTap,
-        leading: Thumb(url: '/api/playlist/avatar/${p.id}', icon: Icons.queue_music),
+        leading: Thumb(url: '${AppConfig.apiUrl}/api/playlist/avatar/${p.id}', icon: Icons.queue_music),
         title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: _queueButton(),
       ),
@@ -937,7 +938,7 @@ class _Thumb extends ConsumerState<Thumb> {
 
   void _init() async {
     try {
-      final s = ref.watch(tokenStorageProvider);
+      final s = ref.read(tokenStorageProvider);
       final token = await s.getAccessToken();
       if (!mounted) return;
 
@@ -959,11 +960,10 @@ class _Thumb extends ConsumerState<Thumb> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    if (_loading) {
-      return CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary);
-    }
-
+    final radius = BorderRadius.circular(widget.circular ? _size / 2 : 8);
     final placeholder = Container(width: _size, height: _size, color: theme.colorScheme.surfaceContainerHighest, child: Icon(widget.icon));
+
+    if (_loading) return ClipRRect(borderRadius: radius, child: placeholder);
 
     final image = widget.url == null
         ? placeholder
