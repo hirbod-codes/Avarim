@@ -1,6 +1,6 @@
 import { type Index, type Task, type Settings, type SearchParams, type SearchResponse, type DocumentsQuery, type Filter, Meilisearch } from 'meilisearch';
 import { collectionName as audioCollection, AudioSearch } from "./models/Audio";
-import { meilisearchHost, meilisearchKey, meilisearchPort } from '../configs';
+import { isProduction, meilisearchHost, meilisearchKey, meilisearchPort } from '../configs';
 import { ArtistSearch, collectionName as artistCollection } from './models/Artist';
 import { AlbumSearch, collectionName as albumCollection } from './models/Album';
 import { collectionName as playlistCollection, PlaylistSearch } from './models/Playlist';
@@ -381,32 +381,32 @@ export class MeiliCrud<T extends Record<string, any>> {
     }
 }
 
-export const meiliAudio = new MeiliCrud<AudioSearch>(meili, audioCollection, {
+export const meiliAudio = new MeiliCrud<AudioSearch>(meili, isProduction ? audioCollection : `dev_${audioCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'title', 'lyrics'], sortableAttributes: ['_id', 'title', 'lyrics'], searchableAttributes: ['title', 'lyrics'] },
     waitByDefault: true
 });
 
-export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, artistCollection, {
+export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, isProduction ? artistCollection : `dev_${artistCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
-export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, albumCollection, {
+export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, isProduction ? albumCollection : `dev_${albumCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
-export const meiliPlaylist = new MeiliCrud<PlaylistSearch>(meili, playlistCollection, {
+export const meiliPlaylist = new MeiliCrud<PlaylistSearch>(meili, isProduction ? playlistCollection : `dev_${playlistCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
 // to be able to search for audios in a playlist
-export const meiliPlaylistAudio = new MeiliCrud<PlaylistAudioSearch>(meili, playlistAudioCollection, {
+export const meiliPlaylistAudio = new MeiliCrud<PlaylistAudioSearch>(meili, isProduction ? playlistAudioCollection : `dev_${playlistAudioCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'playlistId', 'audioId'], sortableAttributes: ['_id', 'playlistId', 'audioTitle'], searchableAttributes: ['audioTitle'] },
     waitByDefault: true

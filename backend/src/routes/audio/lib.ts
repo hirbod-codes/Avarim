@@ -609,14 +609,21 @@ export async function extractMetadata(filePath: string, originalName: string, op
     log.info('Merged tags from embedded tags, ffprobe and filename');
 
     /* ---- covers ---- */
-    const pics = md?.common.picture ?? [];
-    const best = selectCover(pics);
-    const covers: ExtractedCover[] = pics.map((p, index) => ({
-        index, mime: p.format, kind: p.type ?? undefined, description: p.description ?? undefined, sizeBytes: p.data.byteLength, data: p.data,
-    }));
-    const suggestedCoverIndex = best ? pics.indexOf(best) : undefined;
-    log.debug({ covers: covers.map(({ data: _data, ...c }) => c), suggestedCoverIndex });
-    log.info('Collected embedded covers');
+    let covers: ExtractedCover[] = [], suggestedCoverIndex = undefined
+    try {
+        const pics = md?.common.picture ?? [];
+
+        const best = selectCover(pics);
+
+        covers = pics.map((p, index) => ({
+            index, mime: p.format, kind: p.type ?? undefined, description: p.description ?? undefined, sizeBytes: p.data.byteLength, data: p.data,
+        }));
+        if (best) suggestedCoverIndex = pics.indexOf(best)
+        log.debug({ covers: covers.map(({ data: _data, ...c }) => c), suggestedCoverIndex });
+        log.info('Collected embedded covers');
+    } catch (err) {
+        log.warn({ err }, 'failed to extract cover art')
+    }
 
     /* ---- technical ---- */
     const f = md?.format;

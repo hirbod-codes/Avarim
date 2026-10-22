@@ -125,7 +125,7 @@ const streams: pino.StreamEntry[] = [
                 host: lokiPushUrl,
                 silenceErrors: false,
                 labels: {
-                    service: 'avarim-backend',
+                    service: isProduction ? 'avarim-backend' : 'dev-avarim-backend',
                     env: 'development',
                 },
             },
@@ -140,7 +140,7 @@ export const logger = pino(
         serializers: { err: pino.stdSerializers.err },
         level: logLevel ?? 'info',
         redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
-        base: { service: 'avarim-backend', env: nodeEnv ?? 'development' },
+        base: { service: isProduction ? 'avarim-backend' : 'dev-avarim-backend', env: nodeEnv ?? 'development' },
         timestamp: pino.stdTimeFunctions.epochTime, // ms epoch — matches the loki.process timestamp stage
         formatters: {
             level(label) {
