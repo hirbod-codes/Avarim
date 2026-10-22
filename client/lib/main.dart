@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:avarim/go_router.dart';
 import 'package:avarim/auth/auth_controller.dart';
 import 'package:avarim/auth/auth_state.dart';
@@ -16,18 +19,37 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 final container = ProviderContainer();
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+Future<void> main() async {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    FlutterError.onError = (d) {
+      FlutterError.presentError(d);
+      _log('FlutterError: ${d.exception}\n${d.stack}');
+    };
+    PlatformDispatcher.instance.onError = (e, s) {
+      _log('Platform: $e\n$s');
+      return true;
+    };
 
-  if (!kIsWeb) {
-    MediaKit.ensureInitialized();
-    JustAudioMediaKit.ensureInitialized();
-  }
+    if (!kIsWeb) {
+      MediaKit.ensureInitialized();
+      JustAudioMediaKit.ensureInitialized();
+    }
 
-  themeModeNotifier.value = await loadThemeMode();
-  themeModeNotifier.addListener(() => saveThemeMode(themeModeNotifier.value));
+    TimezoneService.initialize(); // remove from build()
+    themeModeNotifier.value = await loadThemeMode();
+    themeModeNotifier.addListener(() => saveThemeMode(themeModeNotifier.value));
 
-  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
+    runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
+  }, (e, s) => _log('Zone: $e\n$s'));
+}
+
+void _log(String m) {
+  debugPrint(m);
+  if (kIsWeb) return;
+  try {
+    File('${Directory.systemTemp.path}${Platform.pathSeparator}client_crash.log').writeAsStringSync('$m\n', mode: FileMode.append);
+  } catch (_) {}
 }
 
 class MyApp extends ConsumerWidget {
