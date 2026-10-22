@@ -1121,7 +1121,7 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
             await db.abortTransaction()
             return
         }
-        log.info('Marked audio temporary before delete');
+        log.info('Marked audio before delete');
 
         const promises = []
         if (audio?.bucketKey) {

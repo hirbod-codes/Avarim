@@ -239,7 +239,11 @@ jobs:
           flutter pub get
 
       - name: Create SSL files
-        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+        shell: bash
+        env:
+          SSL_CERT: ${{ secrets.SSL_CERT }}
+        run: |
+          printf '%s' "$SSL_CERT" > ./client/lib/api/dio/fullchain.pem
 
       - name: Build windows app
         run: |
@@ -415,7 +419,11 @@ jobs:
           flutter pub get
 
       - name: Create SSL files
-        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+        shell: bash
+        env:
+          SSL_CERT: ${{ secrets.SSL_CERT }}
+        run: |
+          printf '%s' "$SSL_CERT" > ./client/lib/api/dio/fullchain.pem
 
       - name: Build macOS app
         run: |
@@ -469,7 +477,11 @@ jobs:
           flutter pub get
 
       - name: Create SSL files
-        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+        shell: bash
+        env:
+          SSL_CERT: ${{ secrets.SSL_CERT }}
+        run: |
+          printf '%s' "$SSL_CERT" > ./client/lib/api/dio/fullchain.pem
 
       - name: Build ios app
         run: |
