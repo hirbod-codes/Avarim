@@ -183,11 +183,14 @@ jobs:
           cd client
           flutter pub get
 
+      - name: Create SSL files
+        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+
       - name: Build android app
         run: |
           cd client
-          flutter build apk --release --dart-define=API_URL=https://avarim.ir:1417 --dart-define=ENV=prod
-          flutter build appbundle --release --dart-define=API_URL=https://avarim.ir:1417 --dart-define=ENV=prod
+          flutter build apk --release --dart-define=API_URL=https://avarim.ir:1404 --dart-define=ENV=prod
+          flutter build appbundle --release --dart-define=API_URL=https://avarim.ir:1404 --dart-define=ENV=prod
 
       - name: Rename app release
         run: |
@@ -235,10 +238,13 @@ jobs:
           cd client
           flutter pub get
 
+      - name: Create SSL files
+        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+
       - name: Build windows app
         run: |
           cd client
-          flutter build windows --release --dart-define=API_URL=https://avarim.ir:1417 --dart-define=ENV=prod
+          flutter build windows --release --dart-define=API_URL=https://avarim.ir:1404 --dart-define=ENV=prod
 
       - name: Package Windows
         run: |
@@ -285,10 +291,13 @@ jobs:
           cd client
           flutter pub get
 
+      - name: Create SSL files
+        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+
       - name: Build linux app
         run: |
           cd client
-          flutter build linux --release --dart-define=API_URL=https://avarim.ir:1417 --dart-define=ENV=prod
+          flutter build linux --release --dart-define=API_URL=https://avarim.ir:1404 --dart-define=ENV=prod
 
       - name: Package Linux
         run: |
@@ -405,10 +414,13 @@ jobs:
           cd client
           flutter pub get
 
+      - name: Create SSL files
+        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+
       - name: Build macOS app
         run: |
           cd client
-          flutter build macos --release --dart-define=API_URL=https://avarim.ir:1417 --dart-define=ENV=prod
+          flutter build macos --release --dart-define=API_URL=https://avarim.ir:1404 --dart-define=ENV=prod
 
       - name: Package macOS
         run: |
@@ -456,10 +468,13 @@ jobs:
           cd client
           flutter pub get
 
+      - name: Create SSL files
+        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+
       - name: Build ios app
         run: |
           cd client
-          flutter build ios --release --no-codesign --dart-define=API_URL=https://avarim.ir:1417 --dart-define=ENV=prod
+          flutter build ios --release --no-codesign --dart-define=API_URL=https://avarim.ir:1404 --dart-define=ENV=prod
 
       - name: Create the unsigned ipa
         run: |

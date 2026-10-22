@@ -8,9 +8,12 @@ import 'package:avarim/api/dio/global_error_interceptor.dart';
 import 'package:avarim/auth/token_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:avarim/api/dio/configure_ssl.dart' if (dart.library.js_interop) 'package:avarim/api/dio/configure_ssl_stub.dart';
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
+
+  trustExtraRoot(dio);
 
   // Added last: onError handlers run in interceptor-registration order,
   // so anything that can silently recover from a failure (token refresh,
@@ -27,6 +30,8 @@ final authDioProvider = Provider<Dio>((ref) {
   final storage = ref.read(tokenStorageProvider);
 
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
+
+  trustExtraRoot(dio);
 
   configureDioForWeb(dio);
 
