@@ -15,13 +15,13 @@ final dioProvider = Provider<Dio>((ref) {
 
   trustExtraRoot(dio, ref);
 
+  configureDioForWeb(dio);
+
   // Added last: onError handlers run in interceptor-registration order,
   // so anything that can silently recover from a failure (token refresh,
   // retries) needs to run before this one, or the user sees an error
   // toast for something that was actually handled transparently.
   dio.interceptors.add(GlobalErrorInterceptor());
-
-  configureDioForWeb(dio);
 
   return dio;
 });
