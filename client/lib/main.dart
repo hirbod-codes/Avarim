@@ -11,17 +11,28 @@ import 'package:avarim/theme/app_theme.dart';
 import 'package:avarim/theme/theme_mode_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
-final container = ProviderContainer();
+ProviderContainer container = ProviderContainer();
+
+final rootPemBytesProvider = Provider<Uint8List>((_) => throw UnimplementedError());
 
 Future<void> main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+
+    if (!kDebugMode) {
+      final data = await rootBundle.load('assets/certs/fullchain.pem');
+      final pem = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+
+      container = ProviderContainer(overrides: [rootPemBytesProvider.overrideWithValue(pem)]);
+    }
+
     FlutterError.onError = (d) {
       FlutterError.presentError(d);
       _log('FlutterError: ${d.exception}\n${d.stack}');
@@ -36,7 +47,7 @@ Future<void> main() async {
       JustAudioMediaKit.ensureInitialized();
     }
 
-    TimezoneService.initialize(); // remove from build()
+    TimezoneService.initialize();
     themeModeNotifier.value = await loadThemeMode();
     themeModeNotifier.addListener(() => saveThemeMode(themeModeNotifier.value));
 
@@ -44,11 +55,11 @@ Future<void> main() async {
   }, (e, s) => _log('Zone: $e\n$s'));
 }
 
-void _log(String m) {
-  debugPrint(m);
+void _log(String message) {
+  debugPrint(message);
   if (kIsWeb) return;
   try {
-    File('${Directory.systemTemp.path}${Platform.pathSeparator}client_crash.log').writeAsStringSync('$m\n', mode: FileMode.append);
+    File('${Directory.systemTemp.path}${Platform.pathSeparator}avarim_crash.log').writeAsStringSync('$message\n', mode: FileMode.append);
   } catch (_) {}
 }
 
@@ -57,8 +68,6 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    TimezoneService.initialize();
-
     // Read (not built until now) since the loading branch above already
     // guarantees the initial session check has resolved by this point —
     // goRouterProvider's redirect logic depends on that being settled.

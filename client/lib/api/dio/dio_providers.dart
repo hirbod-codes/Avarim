@@ -13,7 +13,7 @@ import 'package:avarim/api/dio/configure_ssl.dart' if (dart.library.js_interop) 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
 
-  trustExtraRoot(dio);
+  trustExtraRoot(dio, ref);
 
   // Added last: onError handlers run in interceptor-registration order,
   // so anything that can silently recover from a failure (token refresh,
@@ -31,7 +31,7 @@ final authDioProvider = Provider<Dio>((ref) {
 
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
 
-  trustExtraRoot(dio);
+  trustExtraRoot(dio, ref);
 
   configureDioForWeb(dio);
 
