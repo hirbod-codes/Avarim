@@ -74,6 +74,7 @@
         "mongorestore",
         "mongosh",
         "mpegurl",
+        "multistream",
         "nodenext",
         "noeviction",
         "noopener",

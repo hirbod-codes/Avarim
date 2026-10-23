@@ -184,7 +184,7 @@ jobs:
           flutter pub get
 
       - name: Create SSL files
-        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+        run: mkdir -p ./client/assets/certs && echo "${{ secrets.SSL_CERT }}" > ./client/assets/certs/fullchain.pem
 
       - name: Build android app
         run: |
@@ -243,7 +243,9 @@ jobs:
         env:
           SSL_CERT: ${{ secrets.SSL_CERT }}
         run: |
-          printf '%s' "$SSL_CERT" > ./client/lib/api/dio/fullchain.pem
+          mkdir -p client/assets/certs
+          printf '%s\n' "$SSL_CERT" > client/assets/certs/fullchain.pem
+          grep -q 'BEGIN CERTIFICATE' client/assets/certs/fullchain.pem
 
       - name: Build windows app
         run: |
@@ -423,7 +425,9 @@ jobs:
         env:
           SSL_CERT: ${{ secrets.SSL_CERT }}
         run: |
-          printf '%s' "$SSL_CERT" > ./client/lib/api/dio/fullchain.pem
+          mkdir -p client/assets/certs
+          printf '%s\n' "$SSL_CERT" > client/assets/certs/fullchain.pem
+          grep -q 'BEGIN CERTIFICATE' client/assets/certs/fullchain.pem
 
       - name: Build macOS app
         run: |
@@ -481,7 +485,9 @@ jobs:
         env:
           SSL_CERT: ${{ secrets.SSL_CERT }}
         run: |
-          printf '%s' "$SSL_CERT" > ./client/lib/api/dio/fullchain.pem
+          mkdir -p client/assets/certs
+          printf '%s\n' "$SSL_CERT" > client/assets/certs/fullchain.pem
+          grep -q 'BEGIN CERTIFICATE' client/assets/certs/fullchain.pem
 
       - name: Build ios app
         run: |

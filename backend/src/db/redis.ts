@@ -1,5 +1,5 @@
 import RedisClient, { Redis as RedisInstance } from 'ioredis';
-import { isProduction, redisConfig } from '../configs';
+import { redisConfig } from '../configs';
 
 export class Redis {
     private static client: RedisInstance | undefined = undefined;
@@ -11,7 +11,7 @@ export class Redis {
             host: redisConfig.host,
             port: redisConfig.port,
             password: redisConfig.auth.password,
-            db: isProduction ? redisConfig.databaseIndex : 10,
+            db: redisConfig.databaseIndex,
             maxRetriesPerRequest: 3,
             retryStrategy: (attempts: number) => Math.min(attempts * 100, 3000),
             lazyConnect: true,
