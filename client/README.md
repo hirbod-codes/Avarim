@@ -1,5 +1,7 @@
 # Avarim
 
+To manage your favorite audio files
+
 ## To develop
 
 ### Run after change in video_player_provider.dart file run

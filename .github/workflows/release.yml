@@ -298,7 +298,7 @@ jobs:
           flutter pub get
 
       - name: Create SSL files
-        run: echo "${{ secrets.SSL_CERT }}" > ./client/lib/api/dio/fullchain.pem
+        run: mkdir -p ./client/assets/certs && echo "${{ secrets.SSL_CERT }}" > ./client/assets/certs/fullchain.pem
 
       - name: Build linux app
         run: |
@@ -347,6 +347,9 @@ jobs:
         run: |
           cd client
           flutter pub get
+
+      - name: Create SSL files
+        run: mkdir -p ./client/assets/certs && echo "" > ./client/assets/certs/fullchain.pem
 
       - name: Build web app
         run: |
