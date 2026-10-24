@@ -920,4 +920,40 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get checkout_free_purchase_message => 'Dieser Kauf ist für Sie kostenlos. Das verbleibende Guthaben wird für zukünftige Käufe gespeichert.';
+
+  @override
+  String get request_bad_certificate => 'Es konnte keine sichere Verbindung zum Server hergestellt werden.';
+
+  @override
+  String get request_unexpected_response => 'Die App konnte die Serverantwort nicht lesen. Bitte aktualisiere die App oder versuche es erneut.';
+
+  @override
+  String get request_client_error => 'Die Anfrage konnte nicht abgeschlossen werden. Bitte versuche es erneut.';
+
+  @override
+  String get request_rate_limited => 'Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.';
+
+  @override
+  String get request_server_unavailable => 'Der Server ist vorübergehend nicht verfügbar. Bitte versuche es in ein paar Minuten erneut.';
+
+  @override
+  String get request_server_error => 'Auf dem Server ist ein Problem aufgetreten. Bitte versuche es später erneut.';
+
+  @override
+  String get error_http_bad_request => 'Die Anfrage ist ungültig. Bitte überprüfe deine Eingaben und versuche es erneut.';
+
+  @override
+  String get error_http_forbidden => 'Du bist nicht berechtigt, diese Aktion auszuführen.';
+
+  @override
+  String get error_http_not_found => 'Das angeforderte Element wurde nicht gefunden.';
+
+  @override
+  String get error_http_conflict => 'Dies steht im Konflikt mit vorhandenen Daten. Bitte aktualisiere die Seite und versuche es erneut.';
+
+  @override
+  String get error_http_payload_too_large => 'Die Datei oder Anfrage ist zu groß.';
+
+  @override
+  String get error_http_unsupported_media => 'Dieser Dateityp wird nicht unterstützt.';
 }

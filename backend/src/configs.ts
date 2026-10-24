@@ -43,6 +43,7 @@ export const meilisearchKey = getStringEnv('MEILISEARCH_KEY', 'The MEILISEARCH_K
 export const meilisearchHost = getStringEnv('MEILISEARCH_HOST', 'The MEILISEARCH_HOST environment variable is not provided')!;
 export const meilisearchPort = getIntegerEnv('MEILISEARCH_PORT', 'The MEILISEARCH_PORT environment variable is not provided')!;
 
+export const s3RootName = getStringEnv('S3_ROOT_NAME', 'The S3_ROOT_NAME environment variable is not provided')!;
 export const BUCKET_NAME = getStringEnv('BUCKET_NAME', 'The BUCKET_NAME environment variable is not provided')!;
 export const s3Endpoint = getStringEnv('S3_STORAGE_ENDPOINT', 'The S3_STORAGE_ENDPOINT environment variable is not provided')!;
 export const s3AccessKey = getStringEnv('S3_STORAGE_ACCESS_KEY', 'The S3_STORAGE_ACCESS_KEY key environment variable is not provided')!;

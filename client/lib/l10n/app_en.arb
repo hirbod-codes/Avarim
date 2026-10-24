@@ -320,5 +320,17 @@
   "checkout_upgrade_requirement_title": "At least one of the following must be satisfied:",
   "checkout_upgrade_duration_requirement": "Plan duration must be changed by more than 3 days.",
   "checkout_upgrade_storage_requirement": "Storage must be changed by more than 10 GB.",
-  "checkout_free_purchase_message": "This purchase is free for you. The remaining balance will be saved for future purchases."
+  "checkout_free_purchase_message": "This purchase is free for you. The remaining balance will be saved for future purchases.",
+  "request_bad_certificate": "Couldn't establish a secure connection to the server.",
+  "request_unexpected_response": "The app couldn't read the server's response. Please update the app or try again.",
+  "request_client_error": "The request couldn't be completed. Please try again.",
+  "request_rate_limited": "Too many requests. Please wait a moment and try again.",
+  "request_server_unavailable": "The server is temporarily unavailable. Please try again in a few minutes.",
+  "request_server_error": "The server ran into a problem. Please try again later.",
+  "error_http_bad_request": "The request was invalid. Please check your input and try again.",
+  "error_http_forbidden": "You don't have permission to do that.",
+  "error_http_not_found": "The requested item was not found.",
+  "error_http_conflict": "This conflicts with existing data. Refresh and try again.",
+  "error_http_payload_too_large": "That file or request is too large.",
+  "error_http_unsupported_media": "That file type isn't supported."
 }

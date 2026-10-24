@@ -62,9 +62,14 @@ class RefreshInterceptor extends Interceptor {
 
       requestOptions.headers['Authorization'] = 'Bearer $accessToken';
 
-      final retryResponse = await dio.fetch(requestOptions);
-
-      handler.resolve(retryResponse);
+      try {
+        final retryResponse = await dio.fetch(requestOptions);
+        handler.resolve(retryResponse);
+      } on DioException catch (retryErr) {
+        // The retry already ran the full interceptor chain (toast included),
+        // so pass its real error up without running error interceptors again.
+        handler.reject(retryErr);
+      }
     } catch (e) {
       talker.error('error caught in RefreshInterceptor, onError', e);
 

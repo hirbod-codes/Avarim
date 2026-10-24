@@ -918,4 +918,40 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get checkout_free_purchase_message => 'این خرید برای شما رایگان است. مبلغ باقی‌مانده برای خریدهای آینده ذخیره خواهد شد.';
+
+  @override
+  String get request_bad_certificate => 'برقراری اتصال امن با سرور امکان‌پذیر نبود.';
+
+  @override
+  String get request_unexpected_response => 'برنامه نتوانست پاسخ سرور را بخواند. لطفاً برنامه را به‌روزرسانی کنید یا دوباره تلاش کنید.';
+
+  @override
+  String get request_client_error => 'انجام درخواست امکان‌پذیر نبود. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get request_rate_limited => 'تعداد درخواست‌ها بیش از حد مجاز است. لطفاً کمی صبر کنید و دوباره تلاش کنید.';
+
+  @override
+  String get request_server_unavailable => 'سرور موقتاً در دسترس نیست. لطفاً چند دقیقه دیگر دوباره تلاش کنید.';
+
+  @override
+  String get request_server_error => 'مشکلی در سرور رخ داده است. لطفاً بعداً دوباره تلاش کنید.';
+
+  @override
+  String get error_http_bad_request => 'درخواست نامعتبر است. لطفاً ورودی خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get error_http_forbidden => 'شما اجازه انجام این کار را ندارید.';
+
+  @override
+  String get error_http_not_found => 'مورد درخواستی پیدا نشد.';
+
+  @override
+  String get error_http_conflict => 'این درخواست با داده‌های موجود تداخل دارد. لطفاً صفحه را تازه‌سازی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get error_http_payload_too_large => 'حجم فایل یا درخواست بیش از حد مجاز است.';
+
+  @override
+  String get error_http_unsupported_media => 'این نوع فایل پشتیبانی نمی‌شود.';
 }

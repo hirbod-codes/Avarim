@@ -1,10 +1,11 @@
-import { array, boolean, InferType, number, object, string } from 'yup';
+import { boolean, InferType, number, object, string } from 'yup';
+import { s3RootName } from '../../configs';
 
 export const collectionName = 'album'
 
 export const schemaVersion = 'v1.0.0'
 
-export const getAvatarKey = (albumId: string) => `avarim/album/avatar/${albumId}`
+export const getAvatarKey = (albumId: string) => `${s3RootName}/album/avatar/${albumId}`
 
 const shape = {
     schemaVersion: string().optional().min(6).max(20),

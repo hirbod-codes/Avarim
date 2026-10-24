@@ -1,5 +1,6 @@
 import { boolean, InferType, number, object, string } from "yup";
 import { likeObjectId } from "../common_schemas";
+import { s3RootName } from "../../configs";
 
 export const collectionName = 'user'
 
@@ -8,6 +9,8 @@ export const schemaVersion = 'v1.0.0'
 export const languageSchema = string().oneOf(['en', 'fa', 'de'])
 export const calendarSchema = string().oneOf(['persian', 'gregorian'])
 export const timezoneSchema = string()
+
+export const getAvatarKey = (userId: string) => `${s3RootName}/user/avatar/${userId}`
 
 const update = {
     schemaVersion: string().optional().min(6).max(20),

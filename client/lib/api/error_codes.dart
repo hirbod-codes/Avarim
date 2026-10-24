@@ -62,11 +62,10 @@ Map<String, String Function(AppLocalizations? l10n)> errorCodeMessages = {
   'TITLE_NOT_UNIQUE': (l10n) => 'An audio with this title already exists.',
 };
 
-String messageForErrorCode(String code) {
+String? tryMessageForErrorCode(String code) {
   final m = errorCodeMessages[code];
-  if (m != null) {
-    return m(rootContext == null ? null : AppLocalizations.of(rootContext!));
-  } else {
-    return 'Something went wrong. Please try again.';
-  }
+  if (m == null) return null;
+  return m(rootContext == null ? null : AppLocalizations.of(rootContext!));
 }
+
+String messageForErrorCode(String code) => tryMessageForErrorCode(code) ?? 'Something went wrong. Please try again.';

@@ -28,6 +28,9 @@ import 'dart:async';
 
 import 'package:avarim/components/dialogs/upload/audio_upload_dialog.dart';
 import 'package:avarim/components/global/notification_service.dart';
+import 'package:avarim/pages/edit_audio/batch_upload/batch_upload_notifier.dart';
+import 'package:avarim/pages/edit_audio/batch_upload/batch_upload_view.dart';
+import 'package:avarim/pages/edit_audio/batch_upload/picked_audio.dart';
 import 'package:avarim/pages/edit_audio/cover_art_section.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_form.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_notifier.dart';
@@ -82,22 +85,30 @@ class _EditAudioPageState extends ConsumerState<EditAudioPage> {
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(audioUploadProvider);
+    final batch = ref.watch(batchUploadProvider);
 
-    final Widget body = switch (s.phase) {
-      // With an id, `idle` is only the frame before loading starts.
-      UploadPhase.idle => _hasId ? const _LoadingStep() : const _StartStep(),
-      UploadPhase.processing => _ProcessingStep(state: s),
-      UploadPhase.loading => const _LoadingStep(),
-      UploadPhase.failed => _FailedStep(state: s),
-      UploadPhase.editing => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CoverArtSection(key: ValueKey('${s.audio!['_id']}'), audioId: '${s.audio!['_id']}'),
-          const SizedBox(height: 24),
-          EditAudioForm(key: ValueKey(s.revision), audio: s.audio!, isSaving: s.isSaving, isExisting: s.existing),
-        ],
-      ),
-    };
+    // A batch upload (batch_upload_notifier.dart) owns the page until the user opens one of its audios
+    // with "Edit"; "Back to uploads" returns to it.
+    final batchActive = !_hasId && batch.isActive;
+    final showBatch = batchActive && s.phase == UploadPhase.idle;
+
+    final Widget body = showBatch
+        ? const BatchUploadView()
+        : switch (s.phase) {
+            // With an id, `idle` is only the frame before loading starts.
+            UploadPhase.idle => _hasId ? const _LoadingStep() : const _StartStep(),
+            UploadPhase.processing => _ProcessingStep(state: s),
+            UploadPhase.loading => const _LoadingStep(),
+            UploadPhase.failed => _FailedStep(state: s),
+            UploadPhase.editing => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CoverArtSection(key: ValueKey('${s.audio!['_id']}'), audioId: '${s.audio!['_id']}'),
+                const SizedBox(height: 24),
+                EditAudioForm(key: ValueKey(s.revision), audio: s.audio!, isSaving: s.isSaving, isExisting: s.existing),
+              ],
+            ),
+          };
 
     return Scaffold(
       appBar: AppBar(title: Text(_hasId ? 'Edit audio' : 'Upload audio')),
@@ -107,7 +118,25 @@ class _EditAudioPageState extends ConsumerState<EditAudioPage> {
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: c.maxHeight > 48 ? c.maxHeight - 48 : 0),
             child: Center(
-              child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 760), child: body),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (batchActive && !showBatch)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: ref.read(audioUploadProvider.notifier).reset,
+                          icon: const Icon(Icons.arrow_back),
+                          label: const Text('Back to uploads'),
+                        ),
+                      ),
+                    body,
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -141,6 +170,13 @@ class _StartStep extends ConsumerWidget {
     ref.read(audioUploadProvider.notifier).startProcessing(id);
   }
 
+  /// Pick several files and upload them one after the other.
+  Future<void> _uploadMany(BuildContext context, WidgetRef ref) async {
+    final files = await pickAudioFiles();
+    if (!context.mounted || files.isEmpty) return;
+    unawaited(ref.read(batchUploadProvider.notifier).start(files));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -158,6 +194,12 @@ class _StartStep extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
         FilledButton.icon(onPressed: () => _openDialog(context, ref), icon: const Icon(Icons.upload), label: const Text('Upload audio')),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => _uploadMany(context, ref),
+          icon: const Icon(Icons.library_music_outlined),
+          label: const Text('Upload multiple audios'),
+        ),
       ],
     );
   }

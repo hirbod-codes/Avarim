@@ -1,8 +1,9 @@
+import 'dart:async';
+
+import 'package:avarim/api/api_error_resolver.dart';
 import 'package:avarim/api/api_response.dart';
-import 'package:avarim/api/error_codes.dart';
 import 'package:avarim/api/root_navigator_key.dart';
 import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/l10n/app_localizations.dart';
 import 'package:dio/dio.dart';
 import 'package:avarim/lib/talker.dart';
 
@@ -16,6 +17,8 @@ import 'package:avarim/lib/talker.dart';
 ///     case ApiCallSuccess(:final data):
 ///       // data may itself be null (204) — that's fine, this branch
 ///       // only runs on genuine success either way.
+///     case ApiCallQueued(:final data):
+///       // accepted, will be processed later
 ///     case ApiCallFailure(:final message):
 ///       // request failed; message is already shown as a toast too.
 ///   }
@@ -59,17 +62,19 @@ class ApiCallFailure<T> extends ApiCallResult<T> {
 /// automatic error-toast handling across every failure shape, plus
 /// automatic `data` unwrapping on success.
 ///
-/// Failure handling covers:
-///  1. Non-2xx HTTP, OR a 2xx response whose body isn't a recognized
-///     `{status:'success', data:...}` envelope — extracts message/
-///     error_code/error from the body if present, generic otherwise.
-///  2. Anything else thrown that isn't even a DioException — generic
-///     toast, since nothing else in the pipeline would show one.
+/// Every failure message comes from [ApiErrorResolver], the same place
+/// GlobalErrorInterceptor uses, so what the user sees and what
+/// `ApiCallFailure.message` holds are always identical.
+///
+/// Toasts:
+///  - DioException: shown by GlobalErrorInterceptor (not here, to avoid
+///    two toasts for one failure).
+///  - Everything that never reaches the interceptor (a 2xx with a body
+///    that isn't our envelope, a failed `fromJson`, any other thrown
+///    error): shown here.
 ///
 /// A 204 (or any 2xx with a genuinely empty body) is treated as success
-/// with `data: null` directly — it never reaches the envelope parser at
-/// all, since there's nothing to parse and an empty body would
-/// otherwise look identical to a malformed response.
+/// with `data: null` directly — it never reaches the envelope parser.
 ///
 /// Success messaging is NOT automatic. Chain `.notifyOnSuccess('...')`
 /// onto the request future yourself when you want one:
@@ -78,92 +83,65 @@ class ApiCallFailure<T> extends ApiCallResult<T> {
 ///     () => authDio.post('/api/auth/login', data: {...}).notifyOnSuccess('Welcome back!'),
 ///   );
 ///
-/// Overlaps with GlobalErrorInterceptor for the non-2xx HTTP case — if
-/// you adopt apiCall broadly, consider stripping the toast call out of
-/// GlobalErrorInterceptor (keep it for logging only) so a single
-/// failure can't show two toasts.
-Future<ApiCallResult<T>> apiCall<T>(Future<Response> Function() request, {T Function(dynamic data)? fromJson}) async {
+/// [defaultMessage] replaces the generic "Something went wrong. Please try
+/// again." — which is only used for a server 500 without a usable
+/// error_code, or for `INTERNAL_ERROR`. It does NOT override timeouts,
+/// connection errors, rate limits, other HTTP statuses or specific
+/// error_codes. It is applied to both the returned `ApiCallFailure.message`
+/// and the interceptor's toast (via a Zone value), so pass a localized string:
+///
+///   apiCall<void>(() => authDio.post('/api/upload'), defaultMessage: l10n.upload_failed);
+Future<ApiCallResult<T>> apiCall<T>(Future<Response> Function() request, {T Function(dynamic data)? fromJson, String? defaultMessage}) async {
   try {
-    final response = await request();
+    final response = await (defaultMessage == null ? request() : runZoned(request, zoneValues: {ApiErrorResolver.zoneKey: defaultMessage}));
 
     talker.debug('api call data: ', response.data);
-    if (response.statusCode != null && response.statusCode! >= 200 && response.statusCode! < 300 && (response.data == null || response.data == '')) {
+
+    final status = response.statusCode;
+    final isSuccessStatus = status != null && status >= 200 && status < 300;
+    if (isSuccessStatus && (response.data == null || response.data == '')) {
       return ApiCallSuccess<T>(null);
     }
 
     final parsed = ApiResponse.tryParse(response.data);
-    talker.debug('api call data: ', parsed);
 
-    if (parsed is ApiSuccess) {
-      ApiCallSuccess<T> result;
-      if (fromJson != null && parsed.data != null) {
-        try {
-          result = ApiCallSuccess<T>(fromJson(parsed.data));
-        } catch (e) {
-          talker.error('apiCall, failed parse data, error caught in apiCall method', e);
-          String message = rootContext == null ? 'Something went wrong.' : AppLocalizations.of(rootContext!)!.uncaughtError;
-          return ApiCallFailure(message);
-        }
-      } else {
-        result = ApiCallSuccess<T>(parsed.data as T?);
-      }
-      return result;
-    }
+    if (parsed is ApiSuccess) return _fromEnvelope<T>(parsed.data, fromJson, queued: false);
+    if (parsed is ApiQueued) return _fromEnvelope<T>(parsed.data, fromJson, queued: true);
 
-    if (parsed is ApiQueued) {
-      ApiCallQueued<T> result;
-      if (fromJson != null && parsed.data != null) {
-        try {
-          result = ApiCallQueued<T>(fromJson(parsed.data));
-        } catch (e) {
-          talker.error('apiCall, failed parse data, error caught in apiCall method', e);
-          String message = rootContext == null ? 'Something went wrong.' : AppLocalizations.of(rootContext!)!.uncaughtError;
-          return ApiCallFailure(message);
-        }
-      } else {
-        result = ApiCallQueued<T>(parsed.data as T?);
-      }
-      return result;
-    }
-
-    final message = _extractMessage(parsed, response.data, url: response.requestOptions.path);
-    _showError(message);
-    return ApiCallFailure<T>(message, errorCode: parsed is ApiErrorCode ? parsed.code : null);
+    final error = ApiErrorResolver.fromResponse(response, defaultMessage: defaultMessage);
+    _showError(error.message);
+    return ApiCallFailure<T>(error.message, errorCode: error.errorCode);
   } on DioException catch (e) {
-    final parsed = ApiResponse.tryParse(e.response?.data);
-    final message = _extractMessage(parsed, e.response?.data, url: e.response?.requestOptions.path);
-    // message is already shown by dio GlobalErrorInterceptor
-    // _showError(message);
+    final error = ApiErrorResolver.fromDio(e, defaultMessage: defaultMessage);
+    // The toast is already shown by GlobalErrorInterceptor.
     // errorCode lets callers branch on the backend's `error_code` (e.g. TITLE_NOT_UNIQUE).
-    return ApiCallFailure<T>(message, errorCode: parsed is ApiErrorCode ? parsed.code : null);
+    return ApiCallFailure<T>(error.message, errorCode: error.errorCode);
   } catch (e) {
     talker.error('apiCall: unexpected error', e);
-    String message = rootContext == null ? 'Something went wrong.' : AppLocalizations.of(rootContext!)!.uncaughtError;
+    final message = ApiErrorResolver.fromUnexpected(e);
     _showError(message);
     return ApiCallFailure<T>(message);
   }
 }
 
-String _extractMessage(ApiResponse? parsed, dynamic rawBody, {String? url}) {
-  switch (parsed) {
-    case ApiErrorCode(:final code):
-      return messageForErrorCode(code);
-    case ApiErrorMessage(:final message):
-      return message;
-    case ApiErrorMessages(:final messages):
-      return messages.join('\n');
-    default:
-      if (rawBody is Map) {
-        final fallback = rawBody['message'] ?? rawBody['error'];
-        if (fallback is String && fallback.isNotEmpty) return fallback;
-      }
-      return 'Something went wrong.';
+/// Builds the success/queued result, running `fromJson` if given.
+/// A throwing `fromJson` (or a failed `as T?` cast) is a client-side
+/// problem — the request itself worked — so it's reported as an
+/// unreadable response rather than a server error.
+ApiCallResult<T> _fromEnvelope<T>(dynamic data, T Function(dynamic data)? fromJson, {required bool queued}) {
+  try {
+    final T? value = (fromJson != null && data != null) ? fromJson(data) : data as T?;
+    return queued ? ApiCallQueued<T>(value) : ApiCallSuccess<T>(value);
+  } catch (e) {
+    talker.error('apiCall: failed to parse response data', e);
+    final message = ApiErrorResolver.unexpectedResponse;
+    _showError(message);
+    return ApiCallFailure<T>(message);
   }
 }
 
 void _showError(String message) {
-  final context = rootContext;
-  if (context != null) {
+  if (rootContext != null) {
     NotificationService.showError(message: message);
   }
 }

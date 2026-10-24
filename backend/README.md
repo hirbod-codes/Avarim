@@ -104,3 +104,8 @@ Ctrl + C DOES NOT work to terminate the app, run `taskkill /IM node.exe /F` on w
 ## To do
 
 1. fix cron jobs
+2. fix small screen audio player bug
+3. fix authentication refresh
+4. fix error messages
+5. fix localization
+6. fix delete buttons

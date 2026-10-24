@@ -1,10 +1,9 @@
 import { boolean, InferType, number, object, string } from 'yup';
+import { s3RootName } from '../../configs';
 
 export const collectionName = 'playlistAudio'
 
 export const schemaVersion = 'v1.0.0'
-
-export const getAvatarKey = (playlistAudioId: string) => `avarim/playlistAudio/avatar/${playlistAudioId}`
 
 const shape = {
     schemaVersion: string().optional().min(6).max(20),

@@ -321,5 +321,17 @@
   "checkout_upgrade_requirement_title": "Mindestens eine der folgenden Bedingungen muss erfüllt sein:",
   "checkout_upgrade_duration_requirement": "Die Tarifdauer muss um mehr als 3 Tage geändert werden.",
   "checkout_upgrade_storage_requirement": "Der Speicherplatz muss um mehr als 10 GB geändert werden.",
-  "checkout_free_purchase_message": "Dieser Kauf ist für Sie kostenlos. Das verbleibende Guthaben wird für zukünftige Käufe gespeichert."
+  "checkout_free_purchase_message": "Dieser Kauf ist für Sie kostenlos. Das verbleibende Guthaben wird für zukünftige Käufe gespeichert.",
+  "request_bad_certificate": "Es konnte keine sichere Verbindung zum Server hergestellt werden.",
+  "request_unexpected_response": "Die App konnte die Serverantwort nicht lesen. Bitte aktualisiere die App oder versuche es erneut.",
+  "request_client_error": "Die Anfrage konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
+  "request_rate_limited": "Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.",
+  "request_server_unavailable": "Der Server ist vorübergehend nicht verfügbar. Bitte versuche es in ein paar Minuten erneut.",
+  "request_server_error": "Auf dem Server ist ein Problem aufgetreten. Bitte versuche es später erneut.",
+  "error_http_bad_request": "Die Anfrage ist ungültig. Bitte überprüfe deine Eingaben und versuche es erneut.",
+  "error_http_forbidden": "Du bist nicht berechtigt, diese Aktion auszuführen.",
+  "error_http_not_found": "Das angeforderte Element wurde nicht gefunden.",
+  "error_http_conflict": "Dies steht im Konflikt mit vorhandenen Daten. Bitte aktualisiere die Seite und versuche es erneut.",
+  "error_http_payload_too_large": "Die Datei oder Anfrage ist zu groß.",
+  "error_http_unsupported_media": "Dieser Dateityp wird nicht unterstützt."
 }

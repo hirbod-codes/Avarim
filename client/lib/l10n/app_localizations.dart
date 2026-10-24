@@ -1892,6 +1892,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This purchase is free for you. The remaining balance will be saved for future purchases.'**
   String get checkout_free_purchase_message;
+
+  /// No description provided for @request_bad_certificate.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t establish a secure connection to the server.'**
+  String get request_bad_certificate;
+
+  /// No description provided for @request_unexpected_response.
+  ///
+  /// In en, this message translates to:
+  /// **'The app couldn\'t read the server\'s response. Please update the app or try again.'**
+  String get request_unexpected_response;
+
+  /// No description provided for @request_client_error.
+  ///
+  /// In en, this message translates to:
+  /// **'The request couldn\'t be completed. Please try again.'**
+  String get request_client_error;
+
+  /// No description provided for @request_rate_limited.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many requests. Please wait a moment and try again.'**
+  String get request_rate_limited;
+
+  /// No description provided for @request_server_unavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The server is temporarily unavailable. Please try again in a few minutes.'**
+  String get request_server_unavailable;
+
+  /// No description provided for @request_server_error.
+  ///
+  /// In en, this message translates to:
+  /// **'The server ran into a problem. Please try again later.'**
+  String get request_server_error;
+
+  /// No description provided for @error_http_bad_request.
+  ///
+  /// In en, this message translates to:
+  /// **'The request was invalid. Please check your input and try again.'**
+  String get error_http_bad_request;
+
+  /// No description provided for @error_http_forbidden.
+  ///
+  /// In en, this message translates to:
+  /// **'You don\'t have permission to do that.'**
+  String get error_http_forbidden;
+
+  /// No description provided for @error_http_not_found.
+  ///
+  /// In en, this message translates to:
+  /// **'The requested item was not found.'**
+  String get error_http_not_found;
+
+  /// No description provided for @error_http_conflict.
+  ///
+  /// In en, this message translates to:
+  /// **'This conflicts with existing data. Refresh and try again.'**
+  String get error_http_conflict;
+
+  /// No description provided for @error_http_payload_too_large.
+  ///
+  /// In en, this message translates to:
+  /// **'That file or request is too large.'**
+  String get error_http_payload_too_large;
+
+  /// No description provided for @error_http_unsupported_media.
+  ///
+  /// In en, this message translates to:
+  /// **'That file type isn\'t supported.'**
+  String get error_http_unsupported_media;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

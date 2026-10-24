@@ -136,13 +136,13 @@ export async function streamAudioFile(audioId: string, userId: string, req: Requ
     const audio = await runWithLogger(log, () => audioRepository.get(audioId));
     log.debug({ audio });
     log.info('Checked audio ownership');
-    if (!audio || !audio.contentType || (isWeb && !audio.webBucketKey) || (!isWeb && !audio.bucketKey)) {
+    if (!audio || !audio.contentType || (!audio.webBucketKey && !audio.bucketKey)) {
         log.info('Rejected audio file request: audio not found or missing expected bucket key');
         return res.status(404).json({ status: 'error', message: 'Audio not found' });
     }
 
     const range = req.headers.range;
-    const key = isWeb ? audio.webBucketKey! : audio.bucketKey!;
+    const key = isWeb ? (audio.webBucketKey ?? audio.bucketKey!) : audio.bucketKey!;
     log.debug({ key, range, download });
 
     const result = await getS3ObjectStream(key, { range })

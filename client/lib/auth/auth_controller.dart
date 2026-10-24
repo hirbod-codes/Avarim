@@ -117,14 +117,14 @@ class AuthController extends Notifier<AuthState> implements AuthApi {
   Future<void> _onAuthenticated() async {
     try {
       await Future.wait([
-        ref.read(userUsageProvider.notifier).refresh().catchError((e) {
-          talker.error('error caught in _onAuthenticated method of AuthController class', e);
-          return false;
-        }),
-        ref.read(subscriptionProvider.notifier).refresh().catchError((e) {
-          talker.error('error caught in _onAuthenticated method of AuthController class', e);
-          return false;
-        }),
+        // ref.read(userUsageProvider.notifier).refresh().catchError((e) {
+        //   talker.error('error caught in _onAuthenticated method of AuthController class', e);
+        //   return false;
+        // }),
+        // ref.read(subscriptionProvider.notifier).refresh().catchError((e) {
+        //   talker.error('error caught in _onAuthenticated method of AuthController class', e);
+        //   return false;
+        // }),
         ref.read(userInfoProvider.notifier).refresh().catchError((e) {
           talker.error('error caught in _onAuthenticated method of AuthController class', e);
           return false;

@@ -10,6 +10,7 @@
 import 'package:avarim/api/api_call.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/api/dio/global_error_interceptor.dart';
+import 'package:avarim/pages/edit_audio/batch_upload/picked_audio.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -29,6 +30,11 @@ const kAudioArtistPath = '/api/audio/artist';
 const kAudioAlbumPath = '/api/audio/album';
 const kAudioLyricsPath = '/api/audio/lyrics';
 const kAudioTagPath = '/api/audio/tag';
+
+// Upload (ASSUMPTION - copy the real values from AudioUploadDialog): multipart POST, the file sent
+// under this field name. Answers { status: 'queued', data: { id } }.
+const kUploadAudioPath = '/api/audio/';
+const kUploadFileField = 'file';
 
 /// `error_code` the backend answers with (HTTP 400) when a title is already taken.
 const kTitleNotUniqueCode = 'TITLE_NOT_UNIQUE';
@@ -64,6 +70,17 @@ class AudioUploadApi {
   }
 
   // ── updates (not silent: a failure is toasted by GlobalErrorInterceptor) ───
+
+  /// POST /api/audio/ (multipart) => { status: 'queued', data: { id } }
+  ///
+  /// success / queued carry `{ id }`; follow it with [isUploadFinished]. Not silent: a failure is toasted by
+  /// GlobalErrorInterceptor (the batch upload also shows it on the page).
+  Future<ApiCallResult<Map<String, dynamic>>> uploadAudio(PickedAudio audio, {CancelToken? cancelToken, ProgressCallback? onProgress}) {
+    return apiCall<Map<String, dynamic>>(() async {
+      final form = FormData.fromMap({kUploadFileField: await audio.toMultipart()});
+      return _dio.post<dynamic>(kUploadAudioPath, data: form, cancelToken: cancelToken, onSendProgress: onProgress);
+    }, fromJson: (data) => Map<String, dynamic>.from(data as Map));
+  }
 
   /// PATCH /api/audio/title  { audioId, title }
   Future<ApiCallResult<dynamic>> updateTitle({required String audioId, required String title}) {

@@ -917,4 +917,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get checkout_free_purchase_message => 'This purchase is free for you. The remaining balance will be saved for future purchases.';
+
+  @override
+  String get request_bad_certificate => 'Couldn\'t establish a secure connection to the server.';
+
+  @override
+  String get request_unexpected_response => 'The app couldn\'t read the server\'s response. Please update the app or try again.';
+
+  @override
+  String get request_client_error => 'The request couldn\'t be completed. Please try again.';
+
+  @override
+  String get request_rate_limited => 'Too many requests. Please wait a moment and try again.';
+
+  @override
+  String get request_server_unavailable => 'The server is temporarily unavailable. Please try again in a few minutes.';
+
+  @override
+  String get request_server_error => 'The server ran into a problem. Please try again later.';
+
+  @override
+  String get error_http_bad_request => 'The request was invalid. Please check your input and try again.';
+
+  @override
+  String get error_http_forbidden => 'You don\'t have permission to do that.';
+
+  @override
+  String get error_http_not_found => 'The requested item was not found.';
+
+  @override
+  String get error_http_conflict => 'This conflicts with existing data. Refresh and try again.';
+
+  @override
+  String get error_http_payload_too_large => 'That file or request is too large.';
+
+  @override
+  String get error_http_unsupported_media => 'That file type isn\'t supported.';
 }
