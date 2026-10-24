@@ -28,7 +28,7 @@ const router = express.Router();
 
 const ALLOWED_AUDIO_CODECS = new Set([
     'aac', 'mp3', 'opus', 'vorbis', 'flac', 'alac',
-    'pcm_s16le', 'pcm_s24le', 'pcm_f32le',
+    'pcm_s16le', 'pcm_s24le', 'pcm_f32le', 'wav'
 ]);
 
 const AUDIO_TITLE_SEPARATOR = '__AUDIO_TITLE_SEPARATOR__'
@@ -183,7 +183,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             // ------------------------------------------------------------------------- checking whether title or sha256 already exists
             log.info('checking whether title or sha256 already exists')
 
-            const uniquenessCheck = await runWithLogger(log, () => audioRepository.getByTitleByAudioSha256(title, metadata.technical.audioSha256));
+            const uniquenessCheck = await runWithLogger(log, () => audioRepository.getByAudioSha256(metadata.technical.audioSha256));
             log.debug({ uniquenessCheck });
             if (uniquenessCheck) {
                 log.info('Rejected audio upload: audio already exists');
@@ -421,17 +421,6 @@ router.patch('/title', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
         artistAlbumAudioRepository.setTransactionSession(session)
-
-        // ------------------------------------------------------------------------- check if same title already exists
-        log.info('check if same title already exists')
-
-        const titleUniquenessCheck = await runWithLogger(log, () => audioRepository.getByTitle(updates.title));
-        log.debug({ titleUniquenessCheck });
-        if (titleUniquenessCheck) {
-            log.info('title is not unique');
-            await db.abortTransaction()
-            return res.status(400).json({ status: 'error', error_code: 'TITLE_NOT_UNIQUE' });
-        }
 
         // ------------------------------------------------------------------------- fetch the requested audio
         log.info('fetch the requested audio')
@@ -1083,7 +1072,6 @@ router.put('/coverArt/:audioId', auth, isAdminIfAuthenticated, async (req, res) 
 router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'DELETE /api/audio/:audioId' });
 
-    let db: MongoDB | undefined = undefined
     try {
         log.info('Audio delete request received');
 
@@ -1092,16 +1080,7 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         log.info('Input validated');
         log.debug({ audioId });
 
-        const userId = req.user!.userId;
-        log = log.child({ userId, audioId });
-
-        db = MongoDB.getDbInstance()
-
-        // sessions are set after in case s3 storage deletion process gets interrupted
-        const session = await db.startTransaction()
-
         const audioRepository = new AudioRepository();
-        audioRepository.setTransactionSession(session)
 
         const audio = await runWithLogger(log, () => audioRepository.get(audioId));
         log.debug({ audio });
@@ -1109,7 +1088,6 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         if (!audio) {
             log.info('Rejected audio delete request: audio not found');
             res.status(404).json({ status: 'error', message: 'Audio not found' });
-            await db.abortTransaction()
             return
         }
 
@@ -1118,10 +1096,27 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         if (!r.acknowledged || r.matchedCount) {
             log.error({ updateResult: r }, 'Failed to mark audio temporary before delete');
             res.status(500).json({ status: 'error', message: 'Error deleting audio' });
-            await db.abortTransaction()
             return
         }
         log.info('Marked audio before delete');
+
+        const meiliAudioDeleteResult = await runWithLogger(log, () => meiliAudio.delete(audioId));
+        log.debug({ meiliAudioDeleteResult });
+        if (meiliAudioDeleteResult.status !== 'succeeded') {
+            log.error({ meiliAudioDeleteResult }, 'Failed to delete audio record from Meilisearch audio collection');
+            res.status(500).json({ status: 'error', message: 'Error deleting audio' });
+            return
+        }
+        log.info('Deleted audio record in Meilisearch audio collection')
+
+        const meiliPlaylistAudioDeleteResult = await runWithLogger(log, () => meiliPlaylistAudio.deleteBy({ audioId }));
+        log.debug({ meiliPlaylistAudioDeleteResult });
+        if (meiliPlaylistAudioDeleteResult.status !== 'succeeded') {
+            log.error({ meiliPlaylistAudioDeleteResult }, 'Failed to delete audio record from Meilisearch playlist audio collection');
+            res.status(500).json({ status: 'error', message: 'Error deleting audio' });
+            return
+        }
+        log.info('Deleted audio record in Meilisearch playlist audio collection')
 
         const promises = []
         if (audio?.bucketKey) {
@@ -1157,37 +1152,22 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         if (rejected.length > 0) {
             log.info({ rejectedLength: rejected.length }, `failed to delete objects in s3 storage`)
             res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-            await db.abortTransaction()
             return
         }
-
-        // if (audio.totalFilesBytes) {
-        //     if (!(await runWithLogger(log, () => rollbackStorageQuota(userId, audio.totalFilesBytes!, usageRepository)))) {
-        //         log.info(`failed to decrease user storage bytes usage by ${audio.totalFilesBytes}`)
-        //         await db.abortTransaction()
-        //         res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-        //         return
-        //     }
-        //     log.info(`decreased user storage bytes usage by ${audio.totalFilesBytes}`)
-        // }
 
         const rr = await runWithLogger(log, () => audioRepository.delete(audioId));
         log.debug({ deleteResult: rr });
         if (!rr.acknowledged) {
             log.error({ deleteResult: rr }, 'Failed to delete audio record from DB');
-            await db.abortTransaction()
             res.status(500).json({ status: 'error', message: 'Error deleting audio' });
             return
         }
         log.info('Deleted audio record in DB')
 
-        await db.commitTransaction()
-
         log.info('audio deleted successfully');
         res.status(204).json({ status: 'success' });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
-        await db?.abortTransaction()
     }
 });
 

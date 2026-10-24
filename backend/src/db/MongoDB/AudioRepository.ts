@@ -32,7 +32,7 @@ class AudioRepository implements IRepository, ISeedable, IDropable {
         const indexes = await db.collection(collectionName).indexes()
 
         if (indexes.find(i => i.name === 'title') === undefined)
-            await db.createIndex(collectionName, { title: 1 }, { unique: true, name: 'title' })
+            await db.createIndex(collectionName, { title: 1 }, { name: 'title' })
 
         if (indexes.find(i => i.name === 'audioSha256') === undefined)
             await db.createIndex(collectionName, { 'technical.audioSha256': 1 }, { unique: true, name: 'audioSha256' })
@@ -100,8 +100,8 @@ class AudioRepository implements IRepository, ISeedable, IDropable {
         return AudioRepository.collection!.find({ temporary: false, updatedAt: { $gte: fromTsMs } }, { session: this.session })
     }
 
-    getTemporariesFromCursor(fromTsMs: number) {
-        return AudioRepository.collection!.find({ $and: [{ updatedAt: { $gte: fromTsMs } }, { $or: [{ temporaryAvatar: true }, { deletionQueued: true }] }] }, { session: this.session })
+    getDeletablesFromCursor(fromTsMs: number) {
+        return AudioRepository.collection!.find({ $and: [{ updatedAt: { $gte: fromTsMs } }, { $or: [{ temporary: true }, { temporaryAvatar: true }, { deletionQueued: true }] }] }, { session: this.session })
     }
 
     async updateArtistName(oldValue: string, newValue: string) {

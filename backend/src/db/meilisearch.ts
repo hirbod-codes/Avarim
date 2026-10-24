@@ -408,6 +408,6 @@ export const meiliPlaylist = new MeiliCrud<PlaylistSearch>(meili, isProduction ?
 // to be able to search for audios in a playlist
 export const meiliPlaylistAudio = new MeiliCrud<PlaylistAudioSearch>(meili, isProduction ? playlistAudioCollection : `dev_${playlistAudioCollection}`, {
     primaryKey: '_id',
-    settings: { filterableAttributes: ['_id', 'playlistId', 'audioId'], sortableAttributes: ['_id', 'playlistId', 'audioTitle'], searchableAttributes: ['audioTitle'] },
+    settings: { filterableAttributes: ['_id', 'playlistId', 'audioId', 'audioTitle'], sortableAttributes: ['_id', 'playlistId', 'audioTitle'], searchableAttributes: ['audioTitle'] },
     waitByDefault: true
 });

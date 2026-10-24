@@ -135,7 +135,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .toArray() as WithId<Artist>[]
     }
 
-    async getManyAudioByAlbumName(albumName: string, skip: number, limit: number): Promise<WithId<Artist>[]> {
+    async getManyAudioByAlbumName(albumName: string, skip: number, limit: number): Promise<WithId<Audio>[]> {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { albumName } },
@@ -155,7 +155,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $skip: skip },
                 { $limit: limit },
             ])
-            .toArray() as WithId<Artist>[]
+            .toArray() as WithId<Audio>[]
     }
 
     async getManyByAlbumNameByAudioTitle(albumName: string, audioTitle: string): Promise<WithId<ArtistAlbumAudio>[]> {

@@ -116,7 +116,7 @@ export class UserRepository implements IRepository, ISeedable {
         }
     }
 
-    getTemporaryAvatarFromCursor(fromTsMs: number) {
+    getDeletablesAvatarFromCursor(fromTsMs: number) {
         return UserRepository.collection!.find({ $and: [{ updatedAt: { $gte: fromTsMs } }, { $or: [{ temporaryAvatar: true }, { deletionQueued: true }] }] }, { session: this.session })
     }
 

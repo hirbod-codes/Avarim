@@ -67,6 +67,10 @@ class AlbumRepository implements IRepository, ISeedable, IDropable {
         return await AlbumRepository.collection!.find({}, { session: this.session }).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray()
     }
 
+    getDeletablesAvatarFromCursor(fromTsMs: number) {
+        return AlbumRepository.collection!.find({ $and: [{ updatedAt: { $gte: fromTsMs } }, { $or: [{ temporaryAvatar: true }, { deletionQueued: true }] }] }, { session: this.session })
+    }
+
     async unsafeUpdate(albumId: string, updates: AlbumUpdate) {
         return await AlbumRepository.collection!.updateOne({ _id: ObjectId.createFromHexString(albumId) }, { $set: { ...updates, updatedAt: Date.now() } }, { session: this.session })
     }

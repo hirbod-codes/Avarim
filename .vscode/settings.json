@@ -35,6 +35,7 @@
         "datasources",
         "Dbtp",
         "debouncer",
+        "Deletables",
         "dotenv",
         "dropables",
         "Enamad",
