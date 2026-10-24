@@ -97,7 +97,7 @@ class AudioRepository implements IRepository, ISeedable, IDropable {
     }
 
     getFromCursor(fromTsMs: number) {
-        return AudioRepository.collection!.find({ temporary: false, updatedAt: { $gte: fromTsMs } }, { session: this.session })
+        return AudioRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false, updatedAt: { $gte: fromTsMs } }, { session: this.session })
     }
 
     getDeletablesFromCursor(fromTsMs: number) {
@@ -126,7 +126,7 @@ class AudioRepository implements IRepository, ISeedable, IDropable {
     }
 
     async updateTitle(audioId: string, title: string) {
-        return await AudioRepository.collection!.updateOne({ temporary: false, _id: ObjectId.createFromHexString(audioId) }, { $set: { title, updatedAt: Date.now() } }, { session: this.session })
+        return await AudioRepository.collection!.updateOne({ deletionQueued: { $ne: true }, temporary: false, _id: ObjectId.createFromHexString(audioId) }, { $set: { title, updatedAt: Date.now() } }, { session: this.session })
     }
 
     async unsafeUpdate(audioId: string, updates: AudioUpdate) {

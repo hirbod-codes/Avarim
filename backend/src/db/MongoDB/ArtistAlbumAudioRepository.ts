@@ -1,4 +1,4 @@
-import { AnyBulkWriteOperation, BulkWriteResult, ClientSession, Collection, Db, DeleteResult, InsertOneResult, ObjectId, WithId } from 'mongodb';
+import { AnyBulkWriteOperation, BulkWriteResult, ClientSession, Collection, Db, DeleteResult, Filter, InsertOneResult, ObjectId, WithId } from 'mongodb';
 import { IDropable } from '../IDropable';
 import { IRepository } from '../IRepository';
 import { ISeedable } from '../ISeedable';
@@ -56,6 +56,10 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
 
     async get(id: string): Promise<WithId<ArtistAlbumAudio>> {
         return (await ArtistAlbumAudioRepository.collection!.find({ _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
+    }
+
+    async getBy(filter: Filter<WithId<ArtistAlbumAudio>>): Promise<WithId<ArtistAlbumAudio>[]> {
+        return await ArtistAlbumAudioRepository.collection!.find(filter, { session: this.session }).toArray()
     }
 
     async getManyByAlbumName(albumName: string): Promise<WithId<ArtistAlbumAudio>[]> {
@@ -192,6 +196,10 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
 
     async updateAudioName(oldValue: string, newValue: string) {
         return await ArtistAlbumAudioRepository.collection!.updateMany({ audioTitle: oldValue }, { $set: { audioTitle: newValue, updatedAt: Date.now() } }, { session: this.session })
+    }
+
+    async deleteBy(filter: ArtistAlbumAudioUpdate): Promise<DeleteResult> {
+        return await ArtistAlbumAudioRepository.collection!.deleteMany(filter, { session: this.session })
     }
 
     async delete(id: string): Promise<DeleteResult> {

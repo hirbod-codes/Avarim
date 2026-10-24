@@ -55,6 +55,10 @@ class AlbumRepository implements IRepository, ISeedable, IDropable {
         return (await AlbumRepository.collection!.find({ _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
     }
 
+    getFromCursor(fromTsMs: number) {
+        return AlbumRepository.collection!.find({ deletionQueued: { $ne: true }, temporary: false, updatedAt: { $gte: fromTsMs } }, { session: this.session })
+    }
+
     async getByName(name: string): Promise<WithId<Album>> {
         return (await AlbumRepository.collection!.find({ name }, { session: this.session }).toArray())[0]
     }

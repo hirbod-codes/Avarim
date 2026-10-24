@@ -1,20 +1,17 @@
 import cron from 'node-cron'
 import { Audio } from './db/models/Audio'
 import AudioRepository from './db/MongoDB/AudioRepository'
-import { User } from './db/models/User'
 import { UserRepository } from './db/MongoDB/UserRepository'
-import { payments, s3 } from '.'
-import SubscriptionRepository from './db/MongoDB/SubscriptionRepository'
 import { getLogger, runWithLogger } from './observability/requestLoggerContext'
-import { Subscription } from './db/models/Subscription'
 import { WithId } from 'mongodb'
 import { deleteFromS3 } from './lib/file_management'
-import AppSettingsRepository from './db/MongoDB/AppSettingsRepository'
-import UsageRepository from './db/MongoDB/UsageRepository'
-import { MongoDB } from './db/MongoDB/mongodb'
 import { meiliAlbum, meiliAudio, meiliPlaylistAudio } from './db/meilisearch'
 import AlbumRepository from './db/MongoDB/AlbumRepository'
 import ArtistAlbumAudioRepository from './db/MongoDB/ArtistAlbumAudioRepository'
+import { Controller } from './routes/contorller'
+import ArtistRepository from './db/MongoDB/ArtistRepository'
+import { ArtistUpdate } from './db/models/Artist'
+import { AlbumUpdate } from './db/models/Album'
 
 export const runCronjobs = async () => {
     const cronLog = getLogger()
@@ -22,12 +19,13 @@ export const runCronjobs = async () => {
     cronLog.info('scheduling jobs...')
 
     // Schedule: every 12 hours
+    // Delete temporary or deletion queued contents
     // "0 0 */12 * * *" => second, minute, hour, day, month, weekday
     cron.schedule('0 0 */12 * * *', async () => {
-        const log = getLogger().child({ module: 'cronjob', job: 'delete temporary contents' });
+        const log = getLogger().child({ module: 'cronjob', job: 'delete dangling, temporary or deletion queued contents' });
 
         try {
-            log.info('Sending delete requests for temporary contents...');
+            log.info('deleting dangling, temporary or deletion queued contents...');
 
             const from = Date.now() - (14 * 60 * 60 * 1000)
 
@@ -60,94 +58,25 @@ export const runCronjobs = async () => {
                     }
                 })())
 
+            await Promise.allSettled(userDeleteAvatarPromises)
+
             log.info('Deleting dangling audio files...');
             const audioRepo = new AudioRepository()
-            const deleteAudio = async (audio: WithId<Audio>) => {
-                log.info(`Deleting audio id: ${audio._id?.toString()} ...`);
 
-                const audioId = audio._id?.toString()
-
-                const audioRepository = new AudioRepository();
-
-                const meiliAudioDeleteResult = await runWithLogger(log, () => meiliAudio.delete(audioId));
-                log.debug({ meiliAudioDeleteResult });
-                if (meiliAudioDeleteResult.status !== 'succeeded') {
-                    log.error({ meiliAudioDeleteResult }, 'Failed to delete audio record from Meilisearch audio collection');
-                    return
-                }
-                log.info('Deleted audio record in Meilisearch audio collection')
-
-                const meiliPlaylistAudioDeleteResult = await runWithLogger(log, () => meiliPlaylistAudio.deleteBy({ audioId }));
-                log.debug({ meiliPlaylistAudioDeleteResult });
-                if (meiliPlaylistAudioDeleteResult.status !== 'succeeded') {
-                    log.error({ meiliPlaylistAudioDeleteResult }, 'Failed to delete audio record from Meilisearch playlist audio collection');
-                    return
-                }
-                log.info('Deleted audio record in Meilisearch playlist audio collection')
-
-                const promises = []
-                if (audio?.bucketKey) {
-                    log.info('Deleting audio file from storage');
-                    promises.push(runWithLogger(log, () => deleteFromS3(audio.bucketKey!)))
-                    log.debug({ key: audio.bucketKey });
-                }
-
-                if (audio?.webBucketKey) {
-                    log.info('Deleting web audio file from storage');
-                    promises.push(runWithLogger(log, () => deleteFromS3(audio.webBucketKey!)))
-                    log.debug({ key: audio.webBucketKey });
-                }
-
-                if (audio?.coverArtKey) {
-                    log.info('Deleting cover art from storage');
-                    promises.push(runWithLogger(log, () => deleteFromS3(audio.coverArtKey!)))
-                    log.debug({ key: audio.coverArtKey });
-                }
-
-                const results = await Promise.allSettled(promises)
-                log.debug({ results })
-                const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-                log.info(
-                    {
-                        fulfilledCount: results.length - rejected.length,
-                        rejectedCount: rejected.length,
-                        ...(rejected.length > 0 && { errors: rejected.map(r => r.reason instanceof Error ? r.reason.message : r.reason) }),
-                    },
-                    'handled all the object deletions from s3 storage'
-                );
-
-                if (rejected.length > 0) {
-                    log.info({ rejectedLength: rejected.length }, `failed to delete objects in s3 storage`)
-                    return
-                }
-
-                const rr = await runWithLogger(log, () => audioRepository.delete(audioId));
-                log.debug({ deleteResult: rr });
-                if (!rr.acknowledged) {
-                    log.error({ deleteResult: rr }, 'Failed to delete audio record from DB');
-                    return
-                }
-                log.info('Deleted audio record in DB')
-            }
-
-            const handleAudioRemove = async (audio: WithId<Audio>) => {
-                if (audio.bucketKey)
-                    await deleteFromS3(audio.bucketKey)
-                if (audio.webBucketKey)
-                    await deleteFromS3(audio.webBucketKey)
-                if (audio.coverArtKey)
-                    await deleteFromS3(audio.coverArtKey)
-                await deleteAudio(audio)
-            }
+            const audioDeletePromises = []
             let audioCursor = audioRepo.getDeletablesFromCursor(from)
             for await (const audio of audioCursor)
-                handleAudioRemove(audio)
+                audioDeletePromises.push((async () => {
+                    if (audio.temporaryAvatar === true && audio.coverArtKey)
+                        await deleteFromS3(audio.coverArtKey)
+                    if (audio.deletionQueued === true || audio.temporary === true)
+                        await new Controller().deleteAudio(audio)
+                })())
 
-            await Promise.allSettled(userDeleteAvatarPromises)
+            await Promise.allSettled(audioDeletePromises)
 
             log.info('Deleting dangling album avatars...');
             const albumRepo = new AlbumRepository()
-            const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
 
             const albumDeleteAvatarPromises = []
             let albumCursor = albumRepo.getDeletablesAvatarFromCursor(from)
@@ -156,45 +85,23 @@ export const runCronjobs = async () => {
                     try {
                         log.info(`Deleting user id: ${album._id!.toString()} ...`);
 
-                        const albumId = album._id!.toString()
-
                         log.info({ album })
 
-                        if (album.avatarKey)
+                        if (album.temporaryAvatar === true && album.avatarKey)
                             await deleteFromS3(album.avatarKey)
 
                         if (album.deletionQueued === true) {
-                            const meiliAlbumDeleteResult = await runWithLogger(log, () => meiliAlbum.delete(albumId))
-                            log.debug({ meiliAlbumDeleteResult })
-                            if (meiliAlbumDeleteResult.status !== 'succeeded') {
-                                log.error({ meiliAlbumDeleteResult }, 'Failed to delete album record from Meilisearch album collection');
-                                return
-                            }
-
-                            let audios: WithId<Audio>[] = [], skip = 0
-                            do {
-                                audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumName(album.name, skip, 10))
-                                const promises = []
-                                for (const audio of audios) {
-                                    log.debug({ audio })
-                                    promises.push(deleteAudio(audio))
-                                }
-
-                                skip += audios.length
-                            } while (audios.length !== 0);
-
-                            const deleteResult = await runWithLogger(log, () => albumRepo.delete(albumId));
-                            log.info({ deleteResult });
-                            if (!deleteResult) {
-                                log.error({ deleteResult }, 'Failed to delete album record from DB');
-                                return
-                            }
-                            log.info('Deleted album avatar in DB')
-
+                            await new Controller().deleteAlbum(album)
                             return
                         }
 
-                        const updateResult = await runWithLogger(log, () => albumRepo.unsafeUpdate(album._id!.toString(), { deletionQueued: false, avatarKey: undefined, temporaryAvatar: false }));
+                        const albumId = album._id!.toString()
+
+                        const update: AlbumUpdate = { deletionQueued: false, temporaryAvatar: false }
+                        if (album.temporaryAvatar === true)
+                            update.avatarKey = undefined
+
+                        const updateResult = await runWithLogger(log, () => albumRepo.unsafeUpdate(albumId, update));
                         log.info({ updateResult });
                         if (!updateResult) {
                             log.error({ updateResult }, 'Failed to delete album record from DB');
@@ -207,6 +114,80 @@ export const runCronjobs = async () => {
                 })())
 
             await Promise.allSettled(albumDeleteAvatarPromises)
+
+            log.info('Deleting dangling album avatars...');
+            const artistRepo = new ArtistRepository()
+
+            const artistDeleteAvatarPromises = []
+            let artistCursor = artistRepo.getDeletablesAvatarFromCursor(from)
+            for await (const artist of artistCursor)
+                artistDeleteAvatarPromises.push((async () => {
+                    try {
+                        log.info(`Deleting user id: ${artist._id!.toString()} ...`);
+
+                        log.info({ artist })
+
+                        if (artist.deletionQueued === true) {
+                            await new Controller().deleteArtist(artist)
+                            return
+                        }
+
+                        if (artist.temporaryAvatar && artist.avatarKey)
+                            await deleteFromS3(artist.avatarKey)
+
+                        if (artist.temporaryBanner && artist.bannerKey)
+                            await deleteFromS3(artist.bannerKey)
+
+                        const artistId = artist._id!.toString()
+
+                        const update: ArtistUpdate = { deletionQueued: false, temporaryAvatar: false, temporaryBanner: false }
+                        if (artist.temporaryAvatar)
+                            update.avatarKey = undefined
+                        if (artist.temporaryBanner)
+                            update.bannerKey = undefined
+
+                        const updateResult = await runWithLogger(log, () => artistRepo.unsafeUpdate(artistId, update));
+                        log.info({ updateResult });
+                        if (!updateResult) {
+                            log.error({ updateResult }, 'Failed to delete artist record from DB');
+                            return
+                        }
+                        log.info('Deleted artist avatar in DB')
+                    } catch (err) {
+                        log.error({ err }, 'caught error in cleanAlbum function')
+                    }
+                })())
+
+            await Promise.allSettled(artistDeleteAvatarPromises)
+
+            log.info('Deleting dangling albums...');
+            const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
+
+            const danglingAlbumsPromises = []
+            let danglingAlbumCursor = albumRepo.getFromCursor(from)
+            for await (const danglingAlbum of danglingAlbumCursor)
+                danglingAlbumsPromises.push((async () => {
+                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ albumName: danglingAlbum.name }))
+                    if (artistAlbumAlbumDeleteResult.length === 0) {
+                        await new Controller().deleteAlbum(danglingAlbum)
+                    }
+                })())
+
+            await Promise.allSettled(danglingAlbumsPromises)
+
+            log.info('Deleting dangling artists...');
+
+            const danglingArtistsPromises = []
+            let danglingArtistCursor = artistRepo.getFromCursor(from)
+            for await (const danglingArtist of danglingArtistCursor)
+                danglingArtistsPromises.push((async () => {
+                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ artistName: danglingArtist.name }))
+                    if (artistAlbumAlbumDeleteResult.length === 0) {
+                        await new Controller().deleteArtist(danglingArtist)
+                    }
+                })())
+
+            await Promise.allSettled(danglingArtistsPromises)
 
             log.info('done');
         } catch (err) {
