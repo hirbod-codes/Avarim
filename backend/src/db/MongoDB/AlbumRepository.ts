@@ -31,8 +31,8 @@ class AlbumRepository implements IRepository, ISeedable, IDropable {
 
         const indexes = await db.collection(collectionName).indexes()
 
-        if (indexes.find(i => i.name === 'name') === undefined)
-            await db.createIndex(collectionName, { name: 1 }, { unique: true, name: 'name' })
+        if (indexes.find(i => i.name === 'artistIdName') === undefined)
+            await db.createIndex(collectionName, { name: 1, artistId: 1 }, { unique: true, name: 'artistIdName' })
 
         if (indexes.find(i => i.name === 'createdAt') === undefined)
             await db.createIndex(collectionName, { createdAt: -1 }, { name: 'createdAt' })
@@ -53,6 +53,10 @@ class AlbumRepository implements IRepository, ISeedable, IDropable {
 
     async get(id: string): Promise<WithId<Album>> {
         return (await AlbumRepository.collection!.find({ _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
+    }
+
+    async getByNameByArtistId(name: string, artistId?: string): Promise<WithId<Album>> {
+        return (await AlbumRepository.collection!.find({ name, artistId }, { session: this.session }).toArray())[0]
     }
 
     getFromCursor(fromTsMs: number) {

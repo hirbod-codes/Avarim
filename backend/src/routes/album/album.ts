@@ -14,6 +14,10 @@ import { createReadStream } from 'node:fs';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 import AudioRepository from '../../db/MongoDB/AudioRepository';
+import { WithId } from '../../db/common_schemas';
+import { Artist } from '../../db/models/Artist';
+import { Controller } from '../controller';
+import { Audio } from '../../db/models/Audio';
 
 const ALBUM_NAME_SEPARATOR = '__ALBUM_NAME_SEPARATOR__'
 
@@ -26,28 +30,15 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
         log.info('album list request received');
 
         log.debug({ query: req.query });
-        const { name } = await runWithLogger(log, () => validate(postSchema, req.query));
+        const { name, artistId } = await runWithLogger(log, () => validate(postSchema, req.query));
+        log.debug({ name, artistId });
         log.info('Input validated');
-        log.debug({ name });
 
-        const albumRepository = new AlbumRepository();
-
-        const duplicateNameCheck = await runWithLogger(log, () => albumRepository.getByName(name))
-        log.debug({ duplicateNameCheck })
-        if (duplicateNameCheck) {
-            log.info('provided name already exists')
-            return res.status(400).json({ status: 'error', error_code: 'NAME_NOT_UNIQUE' })
-        }
-
-        const result = await runWithLogger(log, () => albumRepository.insert({ name }))
-        log.debug({ result })
-        if (!result.acknowledged) {
-            log.info('failed to create album')
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-        }
+        const albumId = await runWithLogger(log, () => new Controller().createAlbum(name, artistId))
+        log.debug({ albumId });
 
         log.info('album created');
-        res.status(201).json({ status: 'success' });
+        res.status(201).json({ status: 'success', data: { albumId } });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -103,9 +94,9 @@ router.get('/info', auth, async (req, res) => {
         log.info('album info request received');
 
         log.debug({ query: req.query });
-        const { albumId, name } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
+        const { albumId, name, artistId } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
         log.info('Input validated');
-        log.debug({ albumId, name });
+        log.debug({ albumId, name, artistId });
 
         const userId = req.user!.userId;
         log = log.child({ userId });
@@ -118,7 +109,7 @@ router.get('/info', auth, async (req, res) => {
         if (albumId)
             album = await runWithLogger(log, () => albumRepository.get(albumId))
         else
-            album = await runWithLogger(log, () => albumRepository.getByName(name!))
+            album = await runWithLogger(log, () => albumRepository.getByNameByArtistId(name!, artistId!))
 
         log.debug({ album });
 
@@ -140,17 +131,28 @@ router.get('/artist', auth, async (req, res) => {
         log.info('album artist list request received');
 
         log.debug({ query: req.query });
-        const { albumName, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
+        const { albumId, albumName, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
+        log.debug({ albumId, albumName, page, pageSize });
         log.info('Input validated');
-        log.debug({ albumName, page, pageSize });
 
-        const userId = req.user!.userId;
-        log = log.child({ userId });
-
+        const albumRepository = new AlbumRepository();
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumName(albumName, page - 1, pageSize))
-        log.debug({ artists });
+        let artists: WithId<Artist>[] = []
+        if (!albumId) {
+            const album = await runWithLogger(log, () => albumRepository.getByName(albumName))
+            log.debug({ album })
+            if (!album) {
+                log.info('album not found');
+                return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' })
+            }
+
+            artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumId(albumId, page - 1, pageSize))
+            log.debug({ artists });
+        } else {
+            artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumId(albumId, page - 1, pageSize))
+            log.debug({ artists });
+        }
 
         res.status(200).json({ status: 'success', data: artists });
     } catch (err) {
@@ -158,6 +160,9 @@ router.get('/artist', auth, async (req, res) => {
     }
 });
 
+/**
+ * if albumName is provided instead of albumId, audios that have an album name in common is returned, they might belong to different artists
+ */
 router.get('/audio', auth, async (req, res) => {
     let log = getLogger().child({ module: 'album', route: 'GET /api/album/audio' });
 
@@ -165,16 +170,30 @@ router.get('/audio', auth, async (req, res) => {
         log.info('album audio list request received');
 
         log.debug({ query: req.query });
-        const { albumName, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
+        const { albumId, albumName, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
         log.info('Input validated');
-        log.debug({ albumName, page, pageSize });
+        log.debug({ albumId, albumName, page, pageSize });
 
         const userId = req.user!.userId;
         log = log.child({ userId });
 
-        const audioAlbumAudioRepository = new ArtistAlbumAudioRepository();
+        const albumRepository = new AlbumRepository();
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let audios = await runWithLogger(log, () => audioAlbumAudioRepository.getManyAudioByAlbumName(albumName, page - 1, pageSize))
+        let audios: WithId<Audio>[] = []
+        if (!albumId) {
+            const album = await runWithLogger(log, () => albumRepository.getByName(albumName))
+            log.debug({ album })
+            if (!album) {
+                log.info('album not found');
+                return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' })
+            }
+
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(albumId, page - 1, pageSize))
+        } else {
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(albumId, page - 1, pageSize))
+        }
+
         log.debug({ audios });
 
         res.status(200).json({ status: 'success', data: audios });
@@ -222,13 +241,6 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
             return res.status(200).json({ status: 'success' })
         }
 
-        const albumNameUniqueness = await runWithLogger(log, () => albumRepository.getByName(albumName));
-        log.debug({ albumNameUniqueness });
-        if (albumNameUniqueness) {
-            log.info('name already exists');
-            return res.status(400).json({ status: 'error', error_code: 'NAME_NOT_UNIQUE' });
-        }
-
         const updateAlbumResult = await runWithLogger(log, () => albumRepository.unsafeUpdate(album._id.toString(), { name: albumName }));
         log.debug({ updateAlbumResult });
         if (updateAlbumResult) {
@@ -236,23 +248,7 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
         }
 
-        const updateAudioResult = await runWithLogger(log, () => audioRepository.updateAlbumName(album.name, albumName))
-        log.debug({ updateAudioResult });
-        if (updateAudioResult) {
-            log.info("failed to update artist's audios");
-            await db?.abortTransaction()
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
-        }
-
-        const updateAlbumAlbumAudioResult = await runWithLogger(log, () => artistAlbumAudioRepository.updateAlbumName(album.name, albumName))
-        log.debug({ updateAlbumAlbumAudioResult });
-        if (updateAlbumAlbumAudioResult) {
-            log.info("failed to update artistAlbumAudio artist names");
-            await db?.abortTransaction()
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
-        }
-
-        const updateMeiliAlbumResult = await runWithLogger(log, () => meiliAlbum.updateBy({ name: album.name }, { name: albumName }))
+        const updateMeiliAlbumResult = await runWithLogger(log, () => meiliAlbum.updateBy({ _id: albumId }, { name: albumName }))
         log.debug({ updateMeiliAlbumResult });
         if (updateMeiliAlbumResult.task?.status !== 'succeeded') {
             log.info("failed to update albumNames in meilisearch in album collection");
@@ -412,74 +408,31 @@ router.delete('/:albumId', auth, isAdminIfAuthenticated, async (req, res) => {
         log.info('Album delete request received');
 
         log.debug({ params: req.params });
-        const { albumId } = await runWithLogger(log, () => validate(deleteParamsSchema, req.params));
+        const { albumId, shouldDeleteAudios } = await runWithLogger(log, () => validate(deleteParamsSchema, req.params));
         log.info('Input validated');
-        log.debug({ albumId });
+        log.debug({ albumId, shouldDeleteAudios });
 
         db = MongoDB.getDbInstance()
-
-        // sessions are set after in case s3 storage deletion process gets interrupted
         const session = await db.startTransaction()
 
-        const albumRepository = new AlbumRepository();
-        albumRepository.setTransactionSession(session)
+        const artistAlbumAudio = new ArtistAlbumAudioRepository()
+        const audioRepository = new AudioRepository()
+        audioRepository.setTransactionSession(session)
 
-        const album = await runWithLogger(log, () => albumRepository.get(albumId));
-        log.debug({ album });
-        if (!album) {
-            log.info('Rejected album delete request: album not found');
-            res.status(404).json({ status: 'error', message: 'Album not found' });
-            await db.abortTransaction()
-            return
+        if (shouldDeleteAudios === true) {
+            let audios: WithId<Audio>[] = [], skip = 0
+            do {
+                audios = await runWithLogger(log, () => artistAlbumAudio.getManyAudioByAlbumId(albumId, skip, 10))
+                if (audios.length === 0) break;
+
+                for (const audio of audios)
+                    await runWithLogger(log, () => new Controller().deleteAudio(audio, audioRepository))
+
+                skip += audios.length
+            } while (audios.length !== 0);
         }
 
-        const r = await runWithLogger(log, () => albumRepository.unsafeUpdate(albumId, { name: `deletionQueued${ALBUM_NAME_SEPARATOR}${album.name}`, deletionQueued: true }));
-        log.debug({ updateResult: r });
-        if (!r.acknowledged || r.matchedCount) {
-            log.error({ updateResult: r }, 'Failed to mark album temporary before delete');
-            res.status(500).json({ status: 'error', message: 'Error deleting album' });
-            await db.abortTransaction()
-            return
-        }
-        log.info('Marked album temporary before delete');
-
-        const promises = []
-        if (album?.avatarKey) {
-            log.info('Deleting album file from storage');
-            promises.push(runWithLogger(log, () => deleteFromS3(album.avatarKey!)))
-            log.debug({ key: album.avatarKey });
-        }
-
-        const results = await Promise.allSettled(promises)
-        log.debug({ results })
-        const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-        log.info(
-            {
-                fulfilledCount: results.length - rejected.length,
-                rejectedCount: rejected.length,
-                ...(rejected.length > 0 && { errors: rejected.map(r => r.reason instanceof Error ? r.reason.message : r.reason) }),
-            },
-            'handled all the object deletions from s3 storage'
-        );
-
-        if (rejected.length > 0) {
-            log.info({ rejectedLength: rejected.length }, `failed to delete objects in s3 storage`)
-            res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-            await db.abortTransaction()
-            return
-        }
-
-        const rr = await runWithLogger(log, () => albumRepository.delete(albumId));
-        log.debug({ deleteResult: rr });
-        if (!rr.acknowledged) {
-            log.error({ deleteResult: rr }, 'Failed to delete album record from DB');
-            await db.abortTransaction()
-            res.status(500).json({ status: 'error', message: 'Error deleting album' });
-            return
-        }
-        log.info('Deleted album record in DB')
-
-        await db.commitTransaction()
+        await runWithLogger(log, () => new Controller().deleteAlbum(albumId));
 
         log.info('album deleted successfully');
         res.status(204).json({ status: 'success' });

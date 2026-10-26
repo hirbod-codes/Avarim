@@ -16,8 +16,18 @@ import ArtistRepository from "../../db/MongoDB/ArtistRepository";
 import AlbumRepository from "../../db/MongoDB/AlbumRepository";
 import ArtistAlbumAudioRepository from "../../db/MongoDB/ArtistAlbumAudioRepository";
 import { meiliAlbum, meiliArtist } from "../../db/meilisearch";
+import { Controller } from "../controller";
 
-export async function prepareAudioInDb(metadata: ExtractionResult) {
+/**
+ * if album provided
+ *      create the artist(s), if no artists found(soundtrack) use composers or producers
+ *      create meilisearch artist(s)
+ * if artist provided
+ *      create the album
+ *      create meilisearch album
+ * create ArtistAlbumAudio records
+ */
+export async function prepareAudioInDb(audioId: string, metadata: ExtractionResult) {
     let log = getLogger().child({ step: 'prepareAudioInDb' });
 
     let db;
@@ -39,84 +49,46 @@ export async function prepareAudioInDb(metadata: ExtractionResult) {
 
         let artistNames: string[] = []
 
+        // ------------------------------------------------------------------------- create the artist(s), if no artists found(soundtrack) use composers or producers
         if (tags.artists && tags.artists.length > 0)
             artistNames = tags.artists
         else
             artistNames = tags.composers ?? tags.producers ?? []
 
         if (artistNames && artistNames.length > 0) {
-            // ------------------------------------------------------------------------- create the artist(s), if no artists found(soundtrack) use composers or producers
             log.info('create the artist(s), if no artists found(soundtrack) use composers or producers')
 
             const promises = []
-            for (const name of artistNames)
+            for (const name of artistNames) {
                 promises.push((async () => {
-                    const artist = await runWithLogger(log, () => artistRepository.getByName(name))
-                    log.debug({ artist })
-                    if (!artist) {
-                        const createResult = await runWithLogger(log, () => artistRepository.insert({ name }))
-                        log.debug({ createResult })
-                        if (!createResult.acknowledged) {
-                            log.warn('Failed to create artist')
-                            throw new Error('Failed to create artist')
-                        }
+                    const artistId = await runWithLogger(log, () => new Controller().createArtist(name));
 
-                        // ------------------------------------------------------------------------- create meilisearch artist(s)
-                        log.info('create meilisearch artist(s)')
-
-                        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
-                        log.debug({ meiliResult })
-                        if (meiliResult.status !== 'succeeded') {
-                            log.warn('Failed to create artist')
-                            throw new Error('Failed to create artist')
-                        }
+                    let albumId: string | undefined = undefined
+                    if (tags && tags.album) {
+                        albumId = await runWithLogger(log, () => new Controller().createAlbum(tags.album!, artistId))
                     }
-                })())
 
-            const result = await Promise.all(promises)
-            log.debug({ result })
-        }
-
-        if (tags && tags.album) {
-            // ------------------------------------------------------------------------- create the album
-            log.info('create the album')
-
-            const album = await runWithLogger(log, () => albumRepository.getByName(tags.album!));
-            log.debug({ album })
-            if (!album) {
-                const createResult = await runWithLogger(log, () => albumRepository.insert({ name: tags.album! }));
-                log.debug({ createResult })
-                if (!createResult.acknowledged) {
-                    log.warn('Failed to create album')
-                    throw new Error('Failed to create album')
-                }
-
-                // ------------------------------------------------------------------------- create meilisearch album
-                log.info('create meilisearch album')
-
-                const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ _id: createResult.insertedId.toString(), name: tags.album! }))
-                log.debug({ meiliResult })
-                if (meiliResult.status !== 'succeeded') {
-                    log.warn('Failed to create album')
-                    throw new Error('Failed to create album')
-                }
-            }
-
-            // ------------------------------------------------------------------------- create ArtistAlbumAudio records
-            log.info('create ArtistAlbumAudio records')
-
-            const promises = []
-            for (const artistName of artistNames)
-                promises.push((async () => {
-                    const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistName, albumName: tags.album!, audioTitle: tags.audioTitle! }));
+                    const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId, audioId }));
                     if (!createResult.acknowledged) {
                         log.warn('Failed to create artistAlbumAudio')
                         throw new Error('Failed to create artistAlbumAudio')
                     }
                 })())
+            }
 
             const result = await Promise.all(promises)
             log.debug({ result })
+        } else {
+            let albumId: string | undefined = undefined
+            if (tags && tags.album) {
+                albumId = await runWithLogger(log, () => new Controller().createAlbum(tags.album!))
+            }
+
+            const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId: undefined, albumId, audioId }));
+            if (!createResult.acknowledged) {
+                log.warn('Failed to create artistAlbumAudio')
+                throw new Error('Failed to create artistAlbumAudio')
+            }
         }
 
         await db.commitTransaction()

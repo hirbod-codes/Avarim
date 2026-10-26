@@ -16,8 +16,8 @@ export const artistIdArtistNameSchema = object().required().shape({
     artistName: string().required().label('Artist Name'),
 })
 
-export const artistNamePagePageSizeSchema = object().required().shape({
-    artistName: string().required().label('Artist Name'),
+export const artistIdPagePageSizeSchema = object().required().shape({
+    artistId: string().required().label('Artist Id'),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
     pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
 })

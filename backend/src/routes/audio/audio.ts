@@ -5,7 +5,7 @@ import AudioRepository from '../../db/MongoDB/AudioRepository';
 import { generateStreamToken, verifyStreamToken } from '../../lib/signed_urls';
 import { pipeline } from 'stream/promises';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
-import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, isUploadFinished, isTitleUnique, titleUpdateSchema, lyricsUpdateSchema, albumUpdateSchema, artistUpdateSchema, tagUpdateSchema } from './schemas';
+import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, isUploadFinished, isTitleUnique, titleUpdateSchema, lyricsUpdateSchema, albumUpdateSchema, artistUpdateSchema, tagUpdateSchema, audioAlbumSchema, audioArtistSchema, postAudioAlbumSchema, postAudioArtistSchema, deleteAudioAlbumSchema, deleteAudioArtistSchema, audioArtistAlbumSchema, audioAlbumArtistSchema } from './schemas';
 import { handleError, validate } from '../../lib';
 import { deleteFromS3, detectContentType, getS3ObjectStream, receiveUpload, uploadToS3 } from '../../lib/file_management';
 import { generateWebCompatibleCopy, isWebCompatible } from '../../ffmpeg';
@@ -17,12 +17,16 @@ import { createWriteStream, createReadStream } from 'fs';
 import { ExtractedCover, extractMetadata, prepareAudioInDb, streamAudioFile } from './lib';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import { randomUUID } from 'crypto';
-import { meiliAlbum, meiliArtist, meiliAudio, meiliPlaylistAudio } from '../../db/meilisearch';
+import { meiliAudio, meiliPlaylistAudio } from '../../db/meilisearch';
 import { Audio } from '../../db/models/Audio';
 import { Readable } from 'stream';
 import ArtistRepository from '../../db/MongoDB/ArtistRepository';
 import AlbumRepository from '../../db/MongoDB/AlbumRepository';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
+import { Controller } from '../controller';
+import { WithId } from '../../db/common_schemas';
+import { Album } from '../../db/models/Album';
+import { Artist } from '../../db/models/Artist';
 
 const router = express.Router();
 
@@ -95,6 +99,22 @@ router.get('/is_upload_finished', auth, isAdminIfAuthenticated, async (req, res)
     }
 })
 
+/**
+ * make the temporary directory
+ * store upload stream on disk
+ * extract metadata from received file @see extractMetadata
+ * resolving cover art
+ * resolving title (first priority is extracted metadata, then user input, then filename)
+ * checking whether sha256 already exists
+ * inserting audio
+ * set bucket keys
+ * set file paths
+ * generate web copy, extract cover art, detect content type
+ * upload files to the S3 compatible object storage
+ * create audio in meilisearch
+ * prepare audio in db @see prepareAudioInDb
+ * update audio info in DB, make it permanent and set content type
+ */
 router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'POST /api/audio/' });
 
@@ -110,18 +130,6 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
         log = log.child({ userId });
 
         const audioRepository = new AudioRepository()
-
-        if (userTitle) {
-            // ------------------------------------------------------------------------- checking whether title already exists
-            log.info('checking whether title already exists')
-
-            const sameTitleCheck = await runWithLogger(log, () => audioRepository.getByTitle(userTitle));
-            log.debug({ sameTitleCheck });
-            if (sameTitleCheck) {
-                log.info('Rejected audio upload: audio title already exists');
-                return res.status(400).json({ status: 'error', error_code: 'AUDIO_TITLE_NOT_UNIQUE' });
-            }
-        }
 
         // ------------------------------------------------------------------------- make the temporary directory
         log.info('make the temporary directory')
@@ -180,8 +188,8 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             const title = metadata.tags.audioTitle ?? userTitle ?? fileNameSegments[fileNameSegments.length - 1]
             log.debug({ title })
 
-            // ------------------------------------------------------------------------- checking whether title or sha256 already exists
-            log.info('checking whether title or sha256 already exists')
+            // ------------------------------------------------------------------------- checking whether sha256 already exists
+            log.info('checking whether sha256 already exists')
 
             const uniquenessCheck = await runWithLogger(log, () => audioRepository.getByAudioSha256(metadata.technical.audioSha256));
             log.debug({ uniquenessCheck });
@@ -263,7 +271,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
                 // ------------------------------------------------------------------------- create audio in meilisearch
                 log.info('create audio in meilisearch')
 
-                const meiliCreateResult = await runWithLogger(log, () => meiliAudio.create({ _id: temporaryAudio._id.toString(), title, lyrics: metadata.tags.lyrics }))
+                const meiliCreateResult = await runWithLogger(log, () => meiliAudio.create({ _id: temporaryAudio._id.toString(), title, lyrics: metadata.tags?.lyrics }))
                 log.debug({ meiliCreateResult })
                 if (meiliCreateResult.status !== 'succeeded') {
                     log.error('failed to audio in meilisearch')
@@ -272,10 +280,14 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
                 // ------------------------------------------------------------------------- prepare audio in db
                 log.info('prepare audio in db')
-                await runWithLogger(log, () => prepareAudioInDb(metadata))
+                await runWithLogger(log, () => prepareAudioInDb(audioId, metadata))
 
                 // ------------------------------------------------------------------------- update audio info in DB, make it permanent and set content type
                 log.info('update audio info in DB, make it permanent and set content type')
+
+                delete metadata.tags.album
+                delete metadata.tags.artists
+                delete metadata.tags.albumArtists
 
                 const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(
                     audioId,
@@ -344,9 +356,6 @@ router.patch('/tag', auth, isAdminIfAuthenticated, async (req, res) => {
         const updates = await runWithLogger(log, () => validate(tagUpdateSchema, req.body))
         log.debug({ updates });
 
-        delete updates.tags?.audioTitle
-        delete updates.tags?.lyrics
-
         if (!updates.tags || Object.keys(updates.tags).length < 1) {
             log.info('invalid update tags field provided')
             return res.status(400).json({ status: 'error', error_code: 'INVALID_UPDATE_PARAMETER' })
@@ -398,6 +407,12 @@ router.patch('/tag', auth, isAdminIfAuthenticated, async (req, res) => {
     }
 })
 
+/**
+ * fetch the requested audio
+ * update audio
+ * update audio title in meilisearch
+ * update audio title in meilisearch playlist audio
+ */
 router.patch('/title', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'PATCH /api/audio/title' });
 
@@ -419,9 +434,6 @@ router.patch('/title', auth, isAdminIfAuthenticated, async (req, res) => {
         const audioRepository = new AudioRepository()
         audioRepository.setTransactionSession(session)
 
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
-        artistAlbumAudioRepository.setTransactionSession(session)
-
         // ------------------------------------------------------------------------- fetch the requested audio
         log.info('fetch the requested audio')
 
@@ -442,17 +454,6 @@ router.patch('/title', auth, isAdminIfAuthenticated, async (req, res) => {
             log.warn('failed to update audio record in db');
             await db.abortTransaction()
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
-        }
-
-        // ------------------------------------------------------------------------- update audio title in ArtistAlbumAudio repository
-        log.info('update audio title in ArtistAlbumAudio repository')
-
-        const updateTitlesResult = await runWithLogger(log, () => artistAlbumAudioRepository.updateManyByAudioTitle(audio.title, { audioTitle: updates.title }));
-        log.debug({ updateTitlesResult })
-        if (!updateTitlesResult.acknowledged) {
-            log.warn('failed to update audio record in db');
-            await db.abortTransaction()
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
         }
 
         // ------------------------------------------------------------------------- update audio title in meilisearch
@@ -489,6 +490,11 @@ router.patch('/title', auth, isAdminIfAuthenticated, async (req, res) => {
     }
 })
 
+/**
+ * fetch the requested audio
+ * update audio
+ * update audio lyrics in meilisearch
+ */
 router.patch('/lyrics', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'PATCH /api/audio/lyrics' });
 
@@ -547,228 +553,6 @@ router.patch('/lyrics', auth, isAdminIfAuthenticated, async (req, res) => {
         await db.commitTransaction()
 
         res.status(204).send();
-    } catch (err) {
-        try { await db?.abortTransaction() } catch (_) { }
-
-        runWithLogger(log, () => handleError(res, err))
-    }
-})
-
-router.patch('/album', auth, isAdminIfAuthenticated, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'PATCH /api/audio/album' });
-
-    let db
-    try {
-        log.info('audio approve request received');
-
-        log.debug({ body: req.body });
-        const updates = await runWithLogger(log, () => validate(albumUpdateSchema, req.body))
-        log.debug({ updates });
-        log.info('input validated');
-
-        const userId = req.user!.userId
-        log.debug({ userId });
-
-        db = MongoDB.getDbInstance()
-        const session = await db.startTransaction()
-
-        const audioRepository = new AudioRepository()
-        audioRepository.setTransactionSession(session)
-
-        const albumRepository = new AlbumRepository()
-        albumRepository.setTransactionSession(session)
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
-        artistAlbumAudioRepository.setTransactionSession(session)
-
-        // ------------------------------------------------------------------------- fetch the requested audio
-        log.info('fetch the requested audio')
-
-        const audio = await runWithLogger(log, () => audioRepository.get(updates.audioId));
-        log.debug({ audio });
-        if (!audio) {
-            log.info('audio not found');
-            await db.abortTransaction()
-            return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_FOUND' });
-        }
-
-        // ------------------------------------------------------------------------- update audio
-        log.info('update audio')
-
-        const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(updates.audioId, { tags: { ...audio.tags, album: updates.album } }));
-        log.debug({ updateResult })
-        if (!updateResult.acknowledged) {
-            log.warn('failed to update audio record in db');
-            await db.abortTransaction()
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
-        }
-
-        // ------------------------------------------------------------------------- create the album if doesn't exist
-        log.info("create the album if doesn't exist")
-
-        const albumExistenceCheck = await runWithLogger(log, () => albumRepository.getByName(updates.album!));
-        log.debug({ albumExistenceCheck })
-        if (!albumExistenceCheck) {
-            const createResult = await runWithLogger(log, () => albumRepository.insert({ name: updates.album! }));
-            log.debug({ createResult })
-            if (!createResult.acknowledged) {
-                log.warn('failed to create new album');
-                await db.abortTransaction()
-                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-            }
-        }
-
-        // ------------------------------------------------------------------------- update album name in ArtistAlbumAudio repository
-        log.info('update album name in ArtistAlbumAudio repository')
-
-        const updateTitlesResult = await runWithLogger(log, () => artistAlbumAudioRepository.updateManyByAudioTitle(audio.title!, { albumName: updates.album }));
-        log.debug({ updateTitlesResult })
-        if (!updateTitlesResult.acknowledged) {
-            log.warn('failed to update audio record in db');
-            await db.abortTransaction()
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-        }
-
-
-        // ------------------------------------------------------------------------- update audio album in meilisearch
-        log.info('update audio album in meilisearch audio')
-
-        const meiliAudioUpsertResult = await meiliAlbum.updateBy({ name: audio.tags?.album }, { name: updates.album }, { wait: true })
-        log.debug({ meiliAudioUpsertResult })
-        if (meiliAudioUpsertResult.task?.status !== 'succeeded') {
-            log.warn('failed to create audio album in meilisearch')
-            await db.abortTransaction()
-            res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-            throw new Error('failed to create artist in meilisearch')
-        }
-
-        await db.commitTransaction()
-
-        res.status(204).send();
-    } catch (err) {
-        try { await db?.abortTransaction() } catch (_) { }
-
-        runWithLogger(log, () => handleError(res, err))
-    }
-})
-
-router.patch('/artist', auth, isAdminIfAuthenticated, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'PATCH /api/audio/artist' });
-
-    let db
-    try {
-        log.info('audio approve request received');
-
-        log.debug({ body: req.body });
-        const updates = await runWithLogger(log, () => validate(artistUpdateSchema, req.body))
-        log.debug({ updates });
-        log.info('input validated');
-
-        const userId = req.user!.userId
-        log.debug({ userId });
-
-        db = MongoDB.getDbInstance()
-        const session = await db.startTransaction()
-
-        const audioRepository = new AudioRepository()
-        audioRepository.setTransactionSession(session)
-
-        const albumRepository = new AlbumRepository()
-        albumRepository.setTransactionSession(session)
-
-        const artistRepository = new ArtistRepository()
-        artistRepository.setTransactionSession(session)
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
-        artistAlbumAudioRepository.setTransactionSession(session)
-
-        // ------------------------------------------------------------------------- fetch the requested audio
-        log.info('fetch the requested audio')
-
-        const audio = await runWithLogger(log, () => audioRepository.get(updates.audioId));
-        log.debug({ audio });
-        if (!audio) {
-            log.info('audio not found');
-            await db.abortTransaction()
-            return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_FOUND' });
-        }
-
-        // ------------------------------------------------------------------------- update audio
-        log.info('update audio')
-
-        const updateResult = await runWithLogger(log, () => audioRepository.unsafeUpdate(updates.audioId, { tags: { ...audio.tags, artists: updates.artists } }));
-        log.debug({ updateResult })
-        if (!updateResult.acknowledged) {
-            log.warn('failed to update audio record in db');
-            await db.abortTransaction()
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
-        }
-
-        // ------------------------------------------------------------------------- create the artist if doesn't exist
-        log.info("create the artist if doesn't exist")
-
-        let artistCreatePromises: Promise<void>[] = []
-        for (const artist of updates.artists) {
-            artistCreatePromises.push((async () => {
-                const artistExistenceCheck = await runWithLogger(log, () => artistRepository.getByName(artist));
-                log.debug({ artistExistenceCheck })
-                if (!artistExistenceCheck) {
-                    const createResult = await runWithLogger(log, () => artistRepository.insert({ name: artist }));
-                    log.debug({ createResult })
-                    if (!createResult.acknowledged) {
-                        log.warn('failed to create new artist');
-                        await db.abortTransaction()
-                        throw new Error('failed to create new artist')
-                    }
-                }
-            })().catch((err) => { log.error({ err }, 'caught error in promise in audio update artist route') }))
-        }
-
-        await Promise.all(artistCreatePromises)
-
-        // ------------------------------------------------------------------------- update audio artist in meilisearch
-        log.info('update audio artist in meilisearch audio')
-
-        let meiliArtistCreatePromises: Promise<void>[] = []
-        for (const artist of updates.artists) {
-            meiliArtistCreatePromises.push((async () => {
-                const meiliAudioUpsertResult = await meiliArtist.upsert({ name: artist })
-                log.debug({ meiliAudioUpsertResult })
-                if (meiliAudioUpsertResult.status !== 'succeeded') {
-                    log.warn('failed to create audio artist in meilisearch')
-                    await db.abortTransaction()
-                    throw new Error('failed to create artist in meilisearch')
-                }
-            })())
-        }
-
-        await Promise.all(meiliArtistCreatePromises)
-
-        if (!audio.tags?.album) {
-            await db.commitTransaction()
-
-            return res.status(204).send();
-        }
-
-        // ------------------------------------------------------------------------- update artist name in ArtistAlbumAudio repository
-        log.info('update artist name in ArtistAlbumAudio repository')
-
-        let promises = []
-        for (const artist of updates.artists) {
-            promises.push((async () => {
-                const updateTitlesResult = await runWithLogger(log, () => artistAlbumAudioRepository.upsertManyByAlbumNameByAudioTitle(audio.tags!.album!, audio.title, { artistName: artist }));
-                log.debug({ updateTitlesResult })
-                if (!updateTitlesResult.acknowledged) {
-                    log.warn('failed to update audio record in db');
-                    await db.abortTransaction()
-                    return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-                }
-            })().catch((err) => { log.error({ err }, 'caught error in promise in audio update artist route') }))
-        }
-
-        await db.commitTransaction()
-
-        return res.status(204).send();
     } catch (err) {
         try { await db?.abortTransaction() } catch (_) { }
 
@@ -1081,6 +865,7 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         log.debug({ audioId });
 
         const audioRepository = new AudioRepository();
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
         const audio = await runWithLogger(log, () => audioRepository.get(audioId));
         log.debug({ audio });
@@ -1155,10 +940,19 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
             return
         }
 
-        const rr = await runWithLogger(log, () => audioRepository.delete(audioId));
-        log.debug({ deleteResult: rr });
-        if (!rr.acknowledged) {
-            log.error({ deleteResult: rr }, 'Failed to delete audio record from DB');
+        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId }));
+        log.debug({ artistAlbumAudioDeleteResult });
+        if (!artistAlbumAudioDeleteResult.acknowledged) {
+            log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio record from DB');
+            res.status(500).json({ status: 'error', message: 'Error deleting artistAlbumAudio' });
+            return
+        }
+        log.info('Deleted artistAlbumAudio record in DB')
+
+        const audioDeleteResult = await runWithLogger(log, () => audioRepository.delete(audioId));
+        log.debug({ audioDeleteResult });
+        if (!audioDeleteResult.acknowledged) {
+            log.error({ audioDeleteResult }, 'Failed to delete audio record from DB');
             res.status(500).json({ status: 'error', message: 'Error deleting audio' });
             return
         }
@@ -1170,5 +964,225 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         runWithLogger(log, () => handleError(res, err));
     }
 });
+
+/**
+ * to fetch a list of albums that the audio and the artist belongs to.
+ * the artist can be undefined, some audios don't have an artist
+ */
+router.get('/album/artist', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/album/artist' });
+
+    try {
+        log.info('Audio album artist request received');
+
+        log.debug({ params: req.params });
+        const { audioId, artistId, page, pageSize } = await runWithLogger(log, () => validate(audioAlbumArtistSchema, req.params));
+        log.debug({ audioId, artistId, page, pageSize });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const albums: WithId<Album>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByAudioIdByArtistId(audioId, artistId, (page - 1) * pageSize, pageSize))
+        log.debug({ albums })
+
+        log.info('albums successfully fetched');
+        res.status(204).json({ status: 'success', data: albums });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+/**
+ * to fetch a list of albums that the audio belongs to. 
+ */
+router.get('/album', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/album' });
+
+    try {
+        log.info('Audio album request received');
+
+        log.debug({ params: req.params });
+        const { audioId, page, pageSize } = await runWithLogger(log, () => validate(audioAlbumSchema, req.params));
+        log.debug({ audioId, page, pageSize });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const albums: WithId<Album>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByAudioId(audioId, (page - 1) * pageSize, pageSize))
+        log.debug({ albums })
+
+        log.info('albums successfully fetched');
+        res.status(204).json({ status: 'success', data: albums });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+/**
+ * to fetch a list of artists that the audio and the album belongs to.
+ * the album can be undefined, some audios don't have an album
+ */
+router.get('/artist/album', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/artist/album' });
+
+    try {
+        log.info('Audio artist album request received');
+
+        log.debug({ params: req.params });
+        const { audioId, albumId, page, pageSize } = await runWithLogger(log, () => validate(audioArtistAlbumSchema, req.params));
+        log.debug({ audioId, albumId, page, pageSize });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const artists: WithId<Artist>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAudioIdByAlbumId(audioId, albumId, (page - 1) * pageSize, pageSize))
+        log.debug({ artists })
+
+        log.info('artists successfully fetched');
+        res.status(204).json({ status: 'success', data: artists });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+/**
+ * to fetch a list of albums that the audio belongs to. 
+ */
+router.get('/artist', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/artist' });
+
+    try {
+        log.info('Audio artist request received');
+
+        log.debug({ params: req.params });
+        const { audioId, page, pageSize } = await runWithLogger(log, () => validate(audioArtistSchema, req.params));
+        log.debug({ audioId, page, pageSize });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const artists: WithId<Artist>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAudioId(audioId, (page - 1) * pageSize, pageSize))
+        log.debug({ artists })
+
+        log.info('artists successfully fetched');
+        res.status(204).json({ status: 'success', data: artists });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+/**
+ * adds an already existing album to the audio
+ */
+router.post('/album', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'POST /api/audio/album' });
+
+    try {
+        log.info('Audio album add request received');
+
+        log.debug({ params: req.params });
+        const { audioId, artistId, albumId } = await runWithLogger(log, () => validate(postAudioAlbumSchema, req.params));
+        log.debug({ audioId, artistId, albumId });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const result = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ audioId, albumId, artistId }))
+        log.debug({ result })
+        if (!result.acknowledged) {
+            log.info('failed to add album')
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+        }
+
+        log.info('added album for audio successfully');
+        res.status(201).json({ status: 'success' });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+/**
+ * adds an already existing artist to the audio
+ */
+router.post('/artist', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'POST /api/audio/artist' });
+
+    try {
+        log.info('Audio artist add request received');
+
+        log.debug({ params: req.params });
+        const { audioId, artistId, albumId } = await runWithLogger(log, () => validate(postAudioArtistSchema, req.params));
+        log.debug({ audioId, artistId, albumId });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const result = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ audioId, albumId, artistId }))
+        log.debug({ result })
+        if (!result.acknowledged) {
+            log.info('failed to add artist')
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+        }
+
+        log.info('added artist for audio successfully');
+        res.status(201).json({ status: 'success' });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+router.delete('/album', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'DELETE /api/audio/album' });
+
+    try {
+        log.info('Audio album remove request received');
+
+        log.debug({ params: req.params });
+        const { audioId, artistId, albumId } = await runWithLogger(log, () => validate(deleteAudioAlbumSchema, req.params));
+        log.debug({ audioId, artistId, albumId });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const result = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId, albumId, artistId }))
+        log.debug({ result })
+        if (!result.acknowledged) {
+            log.info('failed to remove album')
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+        }
+
+        log.info('audio deleted successfully');
+        res.status(201).json({ status: 'success' });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+router.delete('/artist', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'audio', route: 'DELETE /api/audio/artist' });
+
+    try {
+        log.info('Audio artist remove request received');
+
+        log.debug({ params: req.params });
+        const { audioId, artistId, albumId } = await runWithLogger(log, () => validate(deleteAudioArtistSchema, req.params));
+        log.debug({ audioId, artistId, albumId });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const result = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId, albumId, artistId }))
+        log.debug({ result })
+        if (!result.acknowledged) {
+            log.info('failed to remove artist')
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
+        }
+
+        log.info('audio deleted successfully');
+        res.status(201).json({ status: 'success' });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
 
 export { router as audioRoutes };

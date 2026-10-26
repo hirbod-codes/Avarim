@@ -1,14 +1,11 @@
 import cron from 'node-cron'
-import { Audio } from './db/models/Audio'
 import AudioRepository from './db/MongoDB/AudioRepository'
 import { UserRepository } from './db/MongoDB/UserRepository'
 import { getLogger, runWithLogger } from './observability/requestLoggerContext'
-import { WithId } from 'mongodb'
 import { deleteFromS3 } from './lib/file_management'
-import { meiliAlbum, meiliAudio, meiliPlaylistAudio } from './db/meilisearch'
 import AlbumRepository from './db/MongoDB/AlbumRepository'
 import ArtistAlbumAudioRepository from './db/MongoDB/ArtistAlbumAudioRepository'
-import { Controller } from './routes/contorller'
+import { Controller } from './routes/controller'
 import ArtistRepository from './db/MongoDB/ArtistRepository'
 import { ArtistUpdate } from './db/models/Artist'
 import { AlbumUpdate } from './db/models/Album'
@@ -67,10 +64,11 @@ export const runCronjobs = async () => {
             let audioCursor = audioRepo.getDeletablesFromCursor(from)
             for await (const audio of audioCursor)
                 audioDeletePromises.push((async () => {
+                    if (audio.deletionQueued === true || audio.temporary === true)
+                        return await new Controller().deleteAudio(audio)
+
                     if (audio.temporaryAvatar === true && audio.coverArtKey)
                         await deleteFromS3(audio.coverArtKey)
-                    if (audio.deletionQueued === true || audio.temporary === true)
-                        await new Controller().deleteAudio(audio)
                 })())
 
             await Promise.allSettled(audioDeletePromises)
@@ -87,13 +85,11 @@ export const runCronjobs = async () => {
 
                         log.info({ album })
 
+                        if (album.deletionQueued === true)
+                            return await runWithLogger(log, () => new Controller().deleteAlbum(album))
+
                         if (album.temporaryAvatar === true && album.avatarKey)
                             await deleteFromS3(album.avatarKey)
-
-                        if (album.deletionQueued === true) {
-                            await new Controller().deleteAlbum(album)
-                            return
-                        }
 
                         const albumId = album._id!.toString()
 
@@ -115,7 +111,7 @@ export const runCronjobs = async () => {
 
             await Promise.allSettled(albumDeleteAvatarPromises)
 
-            log.info('Deleting dangling album avatars...');
+            log.info('Deleting dangling artist avatars...');
             const artistRepo = new ArtistRepository()
 
             const artistDeleteAvatarPromises = []
@@ -127,10 +123,8 @@ export const runCronjobs = async () => {
 
                         log.info({ artist })
 
-                        if (artist.deletionQueued === true) {
-                            await new Controller().deleteArtist(artist)
-                            return
-                        }
+                        if (artist.deletionQueued === true)
+                            return await new Controller().deleteArtist(artist)
 
                         if (artist.temporaryAvatar && artist.avatarKey)
                             await deleteFromS3(artist.avatarKey)
@@ -167,10 +161,9 @@ export const runCronjobs = async () => {
             let danglingAlbumCursor = albumRepo.getFromCursor(from)
             for await (const danglingAlbum of danglingAlbumCursor)
                 danglingAlbumsPromises.push((async () => {
-                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ albumName: danglingAlbum.name }))
-                    if (artistAlbumAlbumDeleteResult.length === 0) {
+                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ albumId: danglingAlbum._id.toString() }))
+                    if (artistAlbumAlbumDeleteResult.length === 0)
                         await new Controller().deleteAlbum(danglingAlbum)
-                    }
                 })())
 
             await Promise.allSettled(danglingAlbumsPromises)
@@ -181,10 +174,9 @@ export const runCronjobs = async () => {
             let danglingArtistCursor = artistRepo.getFromCursor(from)
             for await (const danglingArtist of danglingArtistCursor)
                 danglingArtistsPromises.push((async () => {
-                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ artistName: danglingArtist.name }))
-                    if (artistAlbumAlbumDeleteResult.length === 0) {
+                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ artistId: danglingArtist._id.toString() }))
+                    if (artistAlbumAlbumDeleteResult.length === 0)
                         await new Controller().deleteArtist(danglingArtist)
-                    }
                 })())
 
             await Promise.allSettled(danglingArtistsPromises)

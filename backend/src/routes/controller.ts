@@ -34,21 +34,95 @@ const ARTIST_TITLE_SEPARATOR = '__ARTIST_TITLE_SEPARATOR__'
 
 export class Controller {
     /**
+     * if doesn't exist
+     * create artist in db
+     * create artist in meilisearch
+     */
+    async createArtist(name: string, artistRepository?: ArtistRepository): Promise<string> {
+        let log = getLogger().child({ class: 'controller', method: 'createArtist' });
+
+        artistRepository ??= new ArtistRepository()
+
+        log.info('creating the artist')
+
+        const artist = await runWithLogger(log, () => artistRepository.getByName(name))
+        log.debug({ artist })
+        if (!artist) {
+            const createResult = await runWithLogger(log, () => artistRepository.insert({ name }))
+            log.debug({ createResult })
+            if (!createResult.acknowledged) {
+                log.warn('Failed to create artist')
+                throw new Error('Failed to create artist')
+            }
+
+            log.info('create meilisearch artist')
+
+            const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
+            log.debug({ meiliResult })
+            if (meiliResult.status !== 'succeeded') {
+                log.warn('Failed to create artist')
+                throw new Error('Failed to create artist')
+            }
+
+            return createResult.insertedId.toString()
+        }
+
+        return artist._id.toString()
+    }
+
+    /**
+     * if doesn't exist
+     * create album in db
+     * create album in meilisearch
+     */
+    async createAlbum(name: string,artistId?:string, albumRepository?: AlbumRepository): Promise<string> {
+        let log = getLogger().child({ class: 'controller', method: 'createAlbum' });
+
+        albumRepository ??= new AlbumRepository()
+
+        log.info('creating the album')
+
+        const album = await runWithLogger(log, () => albumRepository.getByName(name))
+        log.debug({ album })
+        if (!album) {
+            const createResult = await runWithLogger(log, () => albumRepository.insert({artistId, name }))
+            log.debug({ createResult })
+            if (!createResult.acknowledged) {
+                log.warn('Failed to create album')
+                throw new Error('Failed to create album')
+            }
+
+            log.info('create meilisearch album')
+
+            const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ name }))
+            log.debug({ meiliResult })
+            if (meiliResult.status !== 'succeeded') {
+                log.warn('Failed to create album')
+                throw new Error('Failed to create album')
+            }
+
+            return createResult.insertedId.toString()
+        }
+
+        return album._id.toString()
+    }
+
+    /**
      * marks(updates) artist record in db ( {name: `deletionQueued${ALBUM_TITLE_SEPARATOR}${artist.name}`, deletionQueued: true} )
      * deletes artist record in meilisearch artist collection
      * delete related artistAlbumAudio records (another cron job will handle deleting dangling audios; audios that belong to no artist)
      * deletes artist avatar in s3 storage
      * deletes artist record in db
      */
-    deleteArtist(artist: WithId<Artist>): Promise<void>
-    deleteArtist(artistId: string): Promise<void>
-    async deleteArtist(arg: WithId<Artist> | string): Promise<void> {
+    deleteArtist(artist: WithId<Artist>, artistRepository?: ArtistRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    deleteArtist(artistId: string, artistRepository?: ArtistRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    async deleteArtist(arg: WithId<Artist> | string, artistRepository?: ArtistRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void> {
         let log = getLogger().child({ class: 'controller', method: 'deleteArtist' });
 
         log.info('deleting artist');
 
-        const artistRepository = new ArtistRepository();
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+        artistRepository ??= new ArtistRepository();
+        artistAlbumAudioRepository ??= new ArtistAlbumAudioRepository();
 
         let artist: WithId<Artist> = undefined!
         let artistId: string = undefined!
@@ -83,7 +157,7 @@ export class Controller {
         log.info('Deleted artist record in Meilisearch artist collection')
 
         // a cron job will handle dangling albums
-        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ artistName: artist.name }))
+        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ artistId }))
         log.debug({ artistAlbumAudioDeleteResult })
         if (!artistAlbumAudioDeleteResult.acknowledged) {
             log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio records from db');
@@ -130,15 +204,15 @@ export class Controller {
      * deletes album avatar in s3 storage
      * deletes album record in db
      */
-    deleteAlbum(album: WithId<Album>): Promise<void>
-    deleteAlbum(albumId: string): Promise<void>
-    async deleteAlbum(arg: WithId<Album> | string): Promise<void> {
+    deleteAlbum(album: WithId<Album>, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    deleteAlbum(albumId: string, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    async deleteAlbum(arg: WithId<Album> | string, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void> {
         let log = getLogger().child({ class: 'controller', method: 'deleteAlbum' });
 
         log.info('deleting album');
 
-        const albumRepository = new AlbumRepository();
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+        albumRepository ??= new AlbumRepository();
+        artistAlbumAudioRepository ??= new ArtistAlbumAudioRepository();
 
         let album: WithId<Album> = undefined!
         let albumId: string = undefined!
@@ -173,7 +247,7 @@ export class Controller {
         log.info('Deleted album record in Meilisearch album collection')
 
         // a cron job will handle dangling audios
-        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ albumName: album.name }))
+        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ albumId }))
         log.debug({ artistAlbumAudioDeleteResult })
         if (!artistAlbumAudioDeleteResult.acknowledged) {
             log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio records from db');
@@ -221,15 +295,15 @@ export class Controller {
      * deletes audio files and cover art in s3 storage
      * deletes audio record in db
      */
-    deleteAudio(audio: WithId<Audio>): Promise<void>
-    deleteAudio(audioId: string): Promise<void>
-    async deleteAudio(arg: WithId<Audio> | string): Promise<void> {
+    deleteAudio(audio: WithId<Audio>, audioRepository?: AudioRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    deleteAudio(audioId: string, audioRepository?: AudioRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    async deleteAudio(arg: WithId<Audio> | string, audioRepository?: AudioRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void> {
         let log = getLogger().child({ class: 'controller', method: 'deleteAudio' });
 
         log.info('deleting audio');
 
-        const audioRepository = new AudioRepository();
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+        audioRepository ??= new AudioRepository();
+        artistAlbumAudioRepository ??= new ArtistAlbumAudioRepository();
 
         let audio: WithId<Audio> = undefined!
         let audioId: string = undefined!
@@ -271,7 +345,7 @@ export class Controller {
         }
         log.info('Deleted audio record in Meilisearch playlist audio collection')
 
-        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioTitle: audio.title }))
+        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId }))
         log.debug({ artistAlbumAudioDeleteResult })
         if (!artistAlbumAudioDeleteResult.acknowledged) {
             log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio records from db');

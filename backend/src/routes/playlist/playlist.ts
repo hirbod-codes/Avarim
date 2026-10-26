@@ -180,7 +180,6 @@ router.post('/audio', auth, async (req, res) => {
         const audioRepository = new AudioRepository();
         const playlistRepository = new PlaylistRepository();
 
-
         const playlist = await runWithLogger(log, playlistRepository.getForUser(userId, playlistId))
         log.debug({ playlist })
         if (!playlist) {

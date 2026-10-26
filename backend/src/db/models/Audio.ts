@@ -10,34 +10,34 @@ const strList = array(str.strict().required()).max(50);
 const posInt = number().integer().positive();
 
 const audioTags = {
-    audioTitle: str.optional(), // extracted from audio file, might be different
-    artists: strList.optional(),
-    albumArtists: strList.optional(),
-    album: str.optional(),
-    trackNumber: posInt.optional(),
-    trackTotal: posInt.optional(),
-    discNumber: posInt.optional(),
-    discTotal: posInt.optional(),
+    audioTitle: str.nullable().optional(), // extracted from audio file, might be different
+    artists: strList.nullable().optional(),
+    albumArtists: strList.nullable().optional(),
+    album: str.nullable().optional(),
+    trackNumber: posInt.nullable().optional(),
+    trackTotal: posInt.nullable().optional(),
+    discNumber: posInt.nullable().optional(),
+    discTotal: posInt.nullable().optional(),
 
-    year: number().integer().min(1000).max(9999).optional(),
+    year: number().integer().min(1000).max(9999).nullable().optional(),
     /** ISO-8601 partial date: YYYY, YYYY-MM or YYYY-MM-DD */
-    releaseDate: string().matches(/^\d{4}(-\d{2}(-\d{2})?)?$/).optional(),
+    releaseDate: string().matches(/^\d{4}(-\d{2}(-\d{2})?)?$/).nullable().optional(),
 
     genres: strList,
     composers: strList,
     lyricists: strList,
     producers: strList,
-    label: str.optional(),
-    catalogNumber: str.optional(),
+    label: str.nullable().optional(),
+    catalogNumber: str.nullable().optional(),
     /** normalised: upper-case, no hyphens */
     isrc: array(string().matches(/^[A-Z]{2}[A-Z0-9]{3}\d{7}$/)).max(10),
-    bpm: number().positive().max(400).optional(),
-    key: str.optional(),
+    bpm: number().positive().max(400).nullable().optional(),
+    key: str.nullable().optional(),
     compilation: boolean(),
-    language: str.optional(),
-    copyright: str.optional(),
-    comment: string().max(20_000).optional(),
-    lyrics: string().max(200_000).optional(),
+    language: str.nullable().optional(),
+    copyright: str.nullable().optional(),
+    comment: string().max(20_000).nullable().optional(),
+    lyrics: string().max(200_000).nullable().optional(),
 }
 
 export const audioTagsSchema = object(audioTags).strict();
@@ -89,14 +89,14 @@ const shape = {
     createdAt: number().optional(),
     updatedAt: number().optional(),
 
-    tags: audioTagsSchema.optional(),
+    tags: audioTagsSchema.omit(['album', 'albumArtists', 'artists']).optional(),
     technical: audioTechnicalSchema.optional(),
 };
 
 const search = {
     _id: string().required(),
     title: str.required(),
-    lyrics: str.optional(),
+    lyrics: audioTags.lyrics,
 }
 
 export const audioSearchSchema = object(search).strict();

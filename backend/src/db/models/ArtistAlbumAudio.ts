@@ -12,9 +12,9 @@ export const schemaVersion = 'v1.0.0'
 const shape = {
     schemaVersion: string().optional().min(6).max(20),
 
-    artistName: string().required(),
-    albumName: string().required(),
-    audioTitle: string().required(),
+    artistId: string().nullable().optional(),
+    albumId: string().nullable().optional(),
+    audioId: string().required(),
 
     createdAt: number().optional(),
     updatedAt: number().optional(),
@@ -23,5 +23,5 @@ const shape = {
 export const artistAlbumAudioSchema = object(shape).strict();
 export type ArtistAlbumAudio = InferType<typeof artistAlbumAudioSchema>
 
-export const artistAlbumAudioUpdateSchema = artistAlbumAudioSchema.pick(['albumName', 'artistName', 'audioTitle']).partial().strict();
+export const artistAlbumAudioUpdateSchema = artistAlbumAudioSchema.pick(['albumId', 'artistId', 'audioId']).partial().strict();
 export type ArtistAlbumAudioUpdate = InferType<typeof artistAlbumAudioUpdateSchema>
