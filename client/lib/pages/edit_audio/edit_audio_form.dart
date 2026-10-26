@@ -138,25 +138,50 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
   // ── what changed ───────────────────────────────────────────────────────────
 
   /// Only fields that differ from the loaded values are returned.
+  ///
+  /// A tag the user EMPTIED is returned as `null`: that is the "clear this tag" signal (JSON has no `undefined`),
+  /// and the backend unsets it. A tag that was empty and still is, is not returned at all.
+  /// The title is required, so it is never cleared.
   ({String? title, Map<String, dynamic>? tags}) _collect() {
     final t = _title.text.trim();
     final title = t.isNotEmpty && t != _baseTitle ? t : null;
 
     final tags = <String, dynamic>{};
     for (final s in kAllTagSpecs) {
+      final hadValue = s.kind == TagKind.list ? (_baseLists[s.key] ?? const []).isNotEmpty : (_baseText[s.key] ?? '').isNotEmpty;
+
       switch (s.kind) {
         case TagKind.text:
         case TagKind.multiline:
           final v = _text[s.key]!.text.trim();
-          if (v.isNotEmpty && v != _baseText[s.key]) tags[s.key] = v;
+          if (v.isEmpty) {
+            if (hadValue) tags[s.key] = null;
+          } else if (v != _baseText[s.key]) {
+            tags[s.key] = v;
+          }
         case TagKind.integer:
-          final n = int.tryParse(_text[s.key]!.text.trim());
-          if (n != null && n != int.tryParse(_baseText[s.key] ?? '')) tags[s.key] = n;
+          final raw = _text[s.key]!.text.trim();
+          final n = int.tryParse(raw);
+          if (raw.isEmpty) {
+            if (hadValue) tags[s.key] = null;
+          } else if (n != null && n != int.tryParse(_baseText[s.key] ?? '')) {
+            tags[s.key] = n;
+          }
         case TagKind.decimal:
-          final n = double.tryParse(_text[s.key]!.text.trim());
-          if (n != null && n != double.tryParse(_baseText[s.key] ?? '')) tags[s.key] = n;
+          final raw = _text[s.key]!.text.trim();
+          final n = double.tryParse(raw);
+          if (raw.isEmpty) {
+            if (hadValue) tags[s.key] = null;
+          } else if (n != null && n != double.tryParse(_baseText[s.key] ?? '')) {
+            tags[s.key] = n;
+          }
         case TagKind.list:
-          if (!listEquals(_lists[s.key], _baseLists[s.key])) tags[s.key] = List<String>.of(_lists[s.key]!);
+          final items = _lists[s.key]!;
+          if (items.isEmpty) {
+            if (hadValue) tags[s.key] = null;
+          } else if (!listEquals(items, _baseLists[s.key])) {
+            tags[s.key] = List<String>.of(items);
+          }
         case TagKind.flag:
           if (_flags[s.key] != _baseFlags[s.key]) tags[s.key] = _flags[s.key];
       }
@@ -175,10 +200,8 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
 
   String? _validateSpec(TagSpec s, String? value) {
     final v = (value ?? '').trim();
-    if (v.isEmpty) {
-      // The PATCH routes can only set values, not clear them.
-      return (_baseText[s.key] ?? '').isNotEmpty ? "Can't be cleared once set" : null;
-    }
+    // Every tag is optional: emptying one is allowed and clears it (sent as null, see _collect).
+    if (v.isEmpty) return null;
 
     switch (s.kind) {
       case TagKind.integer:

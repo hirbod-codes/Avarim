@@ -147,6 +147,7 @@ class AudioUploadNotifier extends Notifier<UploadState> {
 
   /// Sends only what changed: one PATCH each for the title, artists, album and lyrics (they have their own
   /// routes), plus one PATCH /tag for all the other changed tags.
+  /// In [tags], a key with a `null` value means "clear this tag" (the user emptied the field).
   /// Returns true when every change was saved; on failure the error was already shown.
   ///
   /// Calls run one after another and stop at the first failure. Whatever was saved before it is kept,
@@ -159,9 +160,11 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     final saved = Map<String, dynamic>.of(audio);
     final savedTags = Map<String, dynamic>.of((audio['tags'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{});
 
-    final artists = (tags?['artists'] as List?)?.cast<String>();
-    final album = tags?['album'] as String?;
-    final lyrics = tags?['lyrics'] as String?;
+    // `containsKey` matters here: a present key with a null value is a CLEAR, an absent key is "unchanged".
+    final changed = tags ?? const <String, dynamic>{};
+    final artists = (changed['artists'] as List?)?.cast<String>();
+    final album = changed['album'] as String?;
+    final lyrics = changed['lyrics'] as String?;
     // Everything else goes through the generic /tag route. Artists and album must NOT: their routes also
     // create the artist / album records and update the search index, /tag only rewrites the audio's tags.
     final others = <String, dynamic>{
@@ -173,10 +176,11 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     // so when it fails nothing has been changed yet.
     final steps = <({Future<ApiCallResult<dynamic>> Function() send, void Function() apply})>[
       if (title != null) (send: () => _api.updateTitle(audioId: id, title: title), apply: () => saved['title'] = title),
-      if (others.isNotEmpty) (send: () => _api.updateTags(audioId: id, tags: others), apply: () => savedTags.addAll(others)),
-      if (artists != null) (send: () => _api.updateArtists(audioId: id, artists: artists), apply: () => savedTags['artists'] = artists),
-      if (album != null) (send: () => _api.updateAlbum(audioId: id, album: album), apply: () => savedTags['album'] = album),
-      if (lyrics != null) (send: () => _api.updateLyrics(audioId: id, lyrics: lyrics), apply: () => savedTags['lyrics'] = lyrics),
+      if (others.isNotEmpty) (send: () => _api.updateTags(audioId: id, tags: others), apply: () => _applyTags(savedTags, others)),
+      if (changed.containsKey('artists'))
+        (send: () => _api.updateArtists(audioId: id, artists: artists), apply: () => _applyTags(savedTags, {'artists': artists})),
+      if (changed.containsKey('album')) (send: () => _api.updateAlbum(audioId: id, album: album), apply: () => _applyTags(savedTags, {'album': album})),
+      if (changed.containsKey('lyrics')) (send: () => _api.updateLyrics(audioId: id, lyrics: lyrics), apply: () => _applyTags(savedTags, {'lyrics': lyrics})),
     ];
 
     state = state.copyWith(isSaving: true);
@@ -202,6 +206,18 @@ class AudioUploadNotifier extends Notifier<UploadState> {
       audio: applied ? {...saved, 'tags': savedTags} : null,
     );
     return ok;
+  }
+}
+
+/// Merges saved changes into the local tags: a null value was a clear, so the key is removed
+/// (the form then shows the field empty, like an audio that never had it).
+void _applyTags(Map<String, dynamic> into, Map<String, dynamic> changes) {
+  for (final e in changes.entries) {
+    if (e.value == null) {
+      into.remove(e.key);
+    } else {
+      into[e.key] = e.value;
+    }
   }
 }
 

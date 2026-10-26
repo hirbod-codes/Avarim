@@ -4,6 +4,7 @@
 // This is the ONLY place that depends on file_picker: if your AudioUploadDialog picks files differently,
 // adapt `pickAudioFiles` (the rest of the batch upload only sees PickedAudio).
 
+import 'package:avarim/components/dialogs/upload/audio_upload_dialog.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -23,7 +24,7 @@ class PickedAudio {
 /// Native: streams from the file path (no whole-file copy in memory).
 /// Web: there is no path, so the bytes are loaded (`withData`).
 Future<List<PickedAudio>> pickAudioFiles() async {
-  final result = await FilePicker.pickFiles(type: FileType.audio, allowMultiple: true, withData: kIsWeb);
+  final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: audioExtensions, allowMultiple: true, withData: kIsWeb);
   if (result == null) return const [];
 
   return [

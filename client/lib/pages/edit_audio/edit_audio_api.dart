@@ -25,6 +25,7 @@ const kIsTitleUniquePath = '/api/audio/is_title_unique';
 // PATCH routes (updates no longer go through `POST /api/audio/`): title, artists, album and lyrics
 // each have their own; every other editable tag goes through /tag.
 // Each answers 204 on success and 400 with an `error_code` (AUDIO_NOT_FOUND, TITLE_NOT_UNIQUE, ...) on failure.
+// A tag sent as `null` is CLEARED (unset). Absent = unchanged. (The title is required and can't be cleared.)
 const kAudioTitlePath = '/api/audio/title';
 const kAudioArtistPath = '/api/audio/artist';
 const kAudioAlbumPath = '/api/audio/album';
@@ -87,22 +88,22 @@ class AudioUploadApi {
     return _patch(kAudioTitlePath, {'audioId': audioId, 'title': title});
   }
 
-  /// PATCH /api/audio/artist  { audioId, artists }
-  Future<ApiCallResult<dynamic>> updateArtists({required String audioId, required List<String> artists}) {
+  /// PATCH /api/audio/artist  { audioId, artists }  (artists == null clears them)
+  Future<ApiCallResult<dynamic>> updateArtists({required String audioId, required List<String>? artists}) {
     return _patch(kAudioArtistPath, {'audioId': audioId, 'artists': artists});
   }
 
-  /// PATCH /api/audio/album  { audioId, album }
-  Future<ApiCallResult<dynamic>> updateAlbum({required String audioId, required String album}) {
+  /// PATCH /api/audio/album  { audioId, album }  (album == null clears it)
+  Future<ApiCallResult<dynamic>> updateAlbum({required String audioId, required String? album}) {
     return _patch(kAudioAlbumPath, {'audioId': audioId, 'album': album});
   }
 
-  /// PATCH /api/audio/lyrics  { audioId, lyrics }
-  Future<ApiCallResult<dynamic>> updateLyrics({required String audioId, required String lyrics}) {
+  /// PATCH /api/audio/lyrics  { audioId, lyrics }  (lyrics == null clears them)
+  Future<ApiCallResult<dynamic>> updateLyrics({required String audioId, required String? lyrics}) {
     return _patch(kAudioLyricsPath, {'audioId': audioId, 'lyrics': lyrics});
   }
 
-  /// PATCH /api/audio/tag  { audioId, tags }
+  /// PATCH /api/audio/tag  { audioId, tags }   (a tag with a null value is cleared)
   ///
   /// For every editable tag EXCEPT artists, album and lyrics. The backend drops `audioTitle` and `lyrics`
   /// from this request, and the artist / album routes also keep the artist, album and search data in
