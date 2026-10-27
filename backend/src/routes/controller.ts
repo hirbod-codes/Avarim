@@ -75,17 +75,17 @@ export class Controller {
      * create album in db
      * create album in meilisearch
      */
-    async createAlbum(name: string,artistId?:string, albumRepository?: AlbumRepository): Promise<string> {
+    async createAlbum(name: string, artistId?: string, albumRepository?: AlbumRepository): Promise<string> {
         let log = getLogger().child({ class: 'controller', method: 'createAlbum' });
 
         albumRepository ??= new AlbumRepository()
 
         log.info('creating the album')
 
-        const album = await runWithLogger(log, () => albumRepository.getByName(name))
+        const album = await runWithLogger(log, () => albumRepository.getByNameByArtistId(name, artistId))
         log.debug({ album })
         if (!album) {
-            const createResult = await runWithLogger(log, () => albumRepository.insert({artistId, name }))
+            const createResult = await runWithLogger(log, () => albumRepository.insert({ artistId, name }))
             log.debug({ createResult })
             if (!createResult.acknowledged) {
                 log.warn('Failed to create album')

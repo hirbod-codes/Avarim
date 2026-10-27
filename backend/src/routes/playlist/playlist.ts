@@ -21,7 +21,7 @@ const PLAYLIST_NAME_SEPARATOR = '__PLAYLIST_NAME_SEPARATOR__'
 
 const router = express.Router();
 
-router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) => {
+router.get('/is_title_unique', auth, async (req, res) => {
     let log = getLogger().child({ module: 'playlist', route: 'Get /api/playlist/is_title_unique' });
 
     try {
@@ -33,12 +33,12 @@ router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) =>
         log.debug({ name });
 
         const userId = req.user!.userId
-        log = log.child({ userId });
+        log.debug({ userId });
 
         const playlistRepository = new PlaylistRepository()
 
         log.info('checking whether title already exists')
-        const playlist = await runWithLogger(log, () => playlistRepository.getByName(name));
+        const playlist = await runWithLogger(log, () => playlistRepository.getByNameForUser(userId, name));
         log.debug({ playlist });
         if (playlist) {
             log.info('Rejected playlist upload: title already exists');
@@ -51,14 +51,14 @@ router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) =>
     }
 })
 
-router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
+router.post('/', auth, async (req, res) => {
     let log = getLogger().child({ module: 'playlist', route: 'GET /api/playlist/' });
 
     try {
         log.info('playlist list request received');
 
-        log.debug({ query: req.query });
-        const { name } = await runWithLogger(log, () => validate(postSchema, req.query));
+        log.debug({ body: req.body });
+        const { name } = await runWithLogger(log, () => validate(postSchema, req.body));
         log.info('Input validated');
         log.debug({ name });
 
@@ -67,7 +67,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const playlistRepository = new PlaylistRepository();
 
-        const duplicateNameCheck = await runWithLogger(log, () => playlistRepository.getByName(name))
+        const duplicateNameCheck = await runWithLogger(log, () => playlistRepository.getByNameForUser(userId, name))
         log.debug({ duplicateNameCheck })
         if (duplicateNameCheck) {
             log.info('provided name already exists')
@@ -82,7 +82,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
         }
 
         log.info('playlist created');
-        res.status(201).json({ status: 'success' });
+        res.status(201).json({ status: 'success', data: { playlistId: result.insertedId.toString() } });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -143,7 +143,7 @@ router.get('/info', auth, async (req, res) => {
         log.debug({ playlistId, name });
 
         const userId = req.user!.userId;
-        log = log.child({ userId });
+        log.debug({ userId });
 
         const playlistRepository = new PlaylistRepository();
 
@@ -168,14 +168,14 @@ router.post('/audio', auth, async (req, res) => {
     try {
         log.info('playlist audio list request received');
 
-        log.debug({ query: req.query });
-        const { playlistId, audioId, audioIds } = await runWithLogger(log, () => validate(createPlaylistAudioSchema, req.query));
+        log.debug({ body: req.body });
+        const { playlistId, audioId, audioIds } = await runWithLogger(log, () => validate(createPlaylistAudioSchema, req.body));
         log.debug({ playlistId, audioId, audioIds });
 
         log.info('Input validated');
 
         const userId = req.user!.userId;
-        log = log.child({ userId });
+        log.debug({ userId });
 
         const audioRepository = new AudioRepository();
         const playlistRepository = new PlaylistRepository();
@@ -260,7 +260,7 @@ router.get('/audio', auth, async (req, res) => {
         log.debug({ playlistId, name, page, pageSize, search: audioNameSearch });
 
         const userId = req.user!.userId;
-        log = log.child({ userId });
+        log.debug({ userId });
 
         const playlistRepository = new PlaylistRepository();
         const playlistAudioRepository = new PlaylistAudioRepository();
@@ -311,7 +311,7 @@ router.delete('/audio', auth, async (req, res) => {
         log.debug({ playlistId, audioId, audioIds });
 
         const userId = req.user!.userId;
-        log = log.child({ userId });
+        log.debug({ userId });
 
         const playlistRepository = new PlaylistRepository();
 
@@ -359,14 +359,17 @@ router.get('/avatar/:playlistId', auth, async (req, res) => {
     try {
         log.info('avatar request received');
 
-        log.debug({ params: req.params, query: req.query });
-        const { playlistId } = await runWithLogger(log, () => validate(avatarParamsSchema, { ...req.params, ...req.query }));
+        log.debug({ params: req.params });
+        const { playlistId } = await runWithLogger(log, () => validate(avatarParamsSchema, req.params));
         log.info('Input validated');
         log.debug({ playlistId });
 
+        const userId = req.user!.userId;
+        log.debug({ userId });
+
         const playlistRepository = new PlaylistRepository();
 
-        const playlist = await runWithLogger(log, () => playlistRepository.get(playlistId));
+        const playlist = await runWithLogger(log, () => playlistRepository.getForUser(userId, playlistId));
         log.debug({ playlist });
         log.info('Checked playlist ownership');
         if (!playlist) {
@@ -405,7 +408,7 @@ router.get('/avatar/:playlistId', auth, async (req, res) => {
     }
 });
 
-router.put('/avatar/:playlistId', auth, isAdminIfAuthenticated, async (req, res) => {
+router.put('/avatar/:playlistId', auth, async (req, res) => {
     let log = getLogger().child({ module: 'playlist', route: 'GET /api/playlist/avatar/:playlistId' });
 
     try {
@@ -416,9 +419,12 @@ router.put('/avatar/:playlistId', auth, isAdminIfAuthenticated, async (req, res)
         log.info('Input validated');
         log.debug({ playlistId });
 
+        const userId = req.user!.userId;
+        log.debug({ userId });
+
         const playlistRepository = new PlaylistRepository();
 
-        const playlist = await runWithLogger(log, () => playlistRepository.get(playlistId));
+        const playlist = await runWithLogger(log, () => playlistRepository.getForUser(userId, playlistId));
         log.debug({ playlist });
         log.info('Checked playlist ownership');
         if (!playlist) {
@@ -461,6 +467,13 @@ router.put('/avatar/:playlistId', auth, isAdminIfAuthenticated, async (req, res)
 
             const key = getAvatarKey(playlistId)
             await runWithLogger(log, () => uploadToS3(createReadStream(inputPath), key, contentType.mimeType, true))
+
+            const updateResult = await runWithLogger(log, () => playlistRepository.unsafeUpdate(playlistId, { avatarKey: key }));
+            log.debug({ updateResult });
+            if (!updateResult.acknowledged) {
+                log.info('Rejected avatar request: updateResult not found or has no avatar');
+                return res.status(404).json({ status: 'error', message: 'Playlist not found' });
+            }
         } catch (err) {
             log.error({ err }, 'caught an error while trying to upload files')
             cleanup()
@@ -472,7 +485,7 @@ router.put('/avatar/:playlistId', auth, isAdminIfAuthenticated, async (req, res)
     }
 });
 
-router.delete('/:playlistId', auth, isAdminIfAuthenticated, async (req, res) => {
+router.delete('/:playlistId', auth, async (req, res) => {
     let log = getLogger().child({ module: 'playlist', route: 'DELETE /api/playlist/:playlistId' });
 
     let db: MongoDB | undefined = undefined
@@ -484,6 +497,9 @@ router.delete('/:playlistId', auth, isAdminIfAuthenticated, async (req, res) => 
         log.info('Input validated');
         log.debug({ playlistId });
 
+        const userId = req.user!.userId;
+        log.debug({ userId });
+
         db = MongoDB.getDbInstance()
 
         // sessions are set after in case s3 storage deletion process gets interrupted
@@ -492,7 +508,7 @@ router.delete('/:playlistId', auth, isAdminIfAuthenticated, async (req, res) => 
         const playlistRepository = new PlaylistRepository();
         playlistRepository.setTransactionSession(session)
 
-        const playlist = await runWithLogger(log, () => playlistRepository.get(playlistId));
+        const playlist = await runWithLogger(log, () => playlistRepository.getForUser(userId, playlistId));
         log.debug({ playlist });
         if (!playlist) {
             log.info('Rejected playlist delete request: playlist not found');

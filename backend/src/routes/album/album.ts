@@ -19,8 +19,6 @@ import { Artist } from '../../db/models/Artist';
 import { Controller } from '../controller';
 import { Audio } from '../../db/models/Audio';
 
-const ALBUM_NAME_SEPARATOR = '__ALBUM_NAME_SEPARATOR__'
-
 const router = express.Router();
 
 router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
@@ -131,28 +129,14 @@ router.get('/artist', auth, async (req, res) => {
         log.info('album artist list request received');
 
         log.debug({ query: req.query });
-        const { albumId, albumName, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
-        log.debug({ albumId, albumName, page, pageSize });
+        const { albumId, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
+        log.debug({ albumId, page, pageSize });
         log.info('Input validated');
 
-        const albumRepository = new AlbumRepository();
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let artists: WithId<Artist>[] = []
-        if (!albumId) {
-            const album = await runWithLogger(log, () => albumRepository.getByName(albumName))
-            log.debug({ album })
-            if (!album) {
-                log.info('album not found');
-                return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' })
-            }
-
-            artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumId(albumId, page - 1, pageSize))
-            log.debug({ artists });
-        } else {
-            artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumId(albumId, page - 1, pageSize))
-            log.debug({ artists });
-        }
+        let artists: WithId<Artist>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumId(albumId, (page - 1) * pageSize, pageSize))
+        log.debug({ artists });
 
         res.status(200).json({ status: 'success', data: artists });
     } catch (err) {
@@ -160,9 +144,6 @@ router.get('/artist', auth, async (req, res) => {
     }
 });
 
-/**
- * if albumName is provided instead of albumId, audios that have an album name in common is returned, they might belong to different artists
- */
 router.get('/audio', auth, async (req, res) => {
     let log = getLogger().child({ module: 'album', route: 'GET /api/album/audio' });
 
@@ -170,30 +151,16 @@ router.get('/audio', auth, async (req, res) => {
         log.info('album audio list request received');
 
         log.debug({ query: req.query });
-        const { albumId, albumName, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
+        const { albumId, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
         log.info('Input validated');
-        log.debug({ albumId, albumName, page, pageSize });
+        log.debug({ albumId, page, pageSize });
 
         const userId = req.user!.userId;
         log = log.child({ userId });
 
-        const albumRepository = new AlbumRepository();
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let audios: WithId<Audio>[] = []
-        if (!albumId) {
-            const album = await runWithLogger(log, () => albumRepository.getByName(albumName))
-            log.debug({ album })
-            if (!album) {
-                log.info('album not found');
-                return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' })
-            }
-
-            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(albumId, page - 1, pageSize))
-        } else {
-            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(albumId, page - 1, pageSize))
-        }
-
+        let audios: WithId<Audio>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(albumId, (page - 1) * pageSize, pageSize))
         log.debug({ audios });
 
         res.status(200).json({ status: 'success', data: audios });

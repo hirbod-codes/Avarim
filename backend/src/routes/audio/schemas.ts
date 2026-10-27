@@ -48,25 +48,8 @@ export const listQuerySchema = object().required().shape({
 }).required().stripUnknown()
 
 export const infoQuerySchema = object().required().shape({
-    audioId: string().objectIdString().optional().label('Audio id').when('title', {
-        is: (title: any) => !title || title === null || title === undefined,
-        then(schema) {
-            return schema.required()
-        },
-        otherwise(schema) {
-            return schema.notRequired()
-        },
-    }),
-    title: string().optional().label('Title').when('audioId', {
-        is: (audioId: any) => !audioId || audioId === null || audioId === undefined,
-        then(schema) {
-            return schema.required()
-        },
-        otherwise(schema) {
-            return schema.notRequired()
-        },
-    }),
-}, [['audioId', 'title']]).required().stripUnknown()
+    audioId: string().objectIdString().required().label('Audio id'),
+}).required().stripUnknown()
 
 export const signedTokenQuerySchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id')
@@ -125,14 +108,12 @@ export const audioArtistSchema = object().required().shape({
 
 export const postAudioAlbumSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
-    albumId: string().objectIdString().label('Album id'),
-    artistId: string().objectIdString().label('Artist id'),
+    albumId: string().objectIdString().required().label('Album id'),
 }).required().stripUnknown()
 
 export const postAudioArtistSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
-    artistId: string().objectIdString().label('Artist id'),
-    albumId: string().objectIdString().label('Album id'),
+    artistId: string().objectIdString().required().label('Artist id'),
 }).required().stripUnknown()
 
 export const deleteAudioAlbumSchema = object().required().shape({

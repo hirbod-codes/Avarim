@@ -35,8 +35,8 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
 
         const indexes = await db.collection(artistAlbumAudioCollection).indexes()
 
-        if (indexes.find(i => i.name === 'uniqueNames') === undefined)
-            await db.createIndex(artistAlbumAudioCollection, { artistName: 1, albumName: 1, audioTitle: 1 }, { unique: true, name: 'uniqueNames' })
+        if (indexes.find(i => i.name === 'uniqueIds') === undefined)
+            await db.createIndex(artistAlbumAudioCollection, { artistId: 1, albumId: 1, audioId: 1 }, { unique: true, name: 'uniqueIds' })
 
         if (indexes.find(i => i.name === 'createdAt') === undefined)
             await db.createIndex(artistAlbumAudioCollection, { createdAt: -1 }, { name: 'createdAt' })
@@ -98,7 +98,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { artistId } },
-                { $group: { _id: '$audioTitle' } },
+                { $group: { _id: '$audioId' } },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -121,7 +121,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { artistId, albumId } },
-                { $group: { _id: '$audioTitle' } },
+                { $group: { _id: '$audioId' } },
                 {
                     $lookup: {
                         from: audioCollection,

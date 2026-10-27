@@ -19,27 +19,10 @@ export const albumIdArtistNameSchema = object().required().shape({
 }).stripUnknown().required()
 
 export const albumNamePagePageSizeSchema = object().required().shape({
-    albumId: string().required().label('Album Id').when('albumName', {
-        is: (albumName: any) => !albumName || albumName === null || albumName === undefined,
-        then(schema) {
-            return schema.required()
-        },
-        otherwise(schema) {
-            return schema.notRequired()
-        },
-    }),
-    albumName: string().required().label('Album Name').when('albumId', {
-        is: (albumId: any) => !albumId || albumId === null || albumId === undefined,
-        then(schema) {
-            return schema.required()
-        },
-        otherwise(schema) {
-            return schema.notRequired()
-        },
-    }),
+    albumId: string().required().label('Album Id'),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
     pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-}, [['albumId', 'albumName']]).stripUnknown().required()
+}).stripUnknown().required()
 
 export const infoQuerySchema = object().required().shape({
     albumId: string().optional().label('Album id').when('name', {
