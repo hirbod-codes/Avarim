@@ -939,7 +939,7 @@ router.get('/album/artist', auth, async (req, res) => {
         log.debug({ albums })
 
         log.info('albums successfully fetched');
-        res.status(204).json({ status: 'success', data: albums });
+        res.status(200).json({ status: 'success', data: albums });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -965,7 +965,7 @@ router.get('/album', auth, async (req, res) => {
         log.debug({ albums })
 
         log.info('albums successfully fetched');
-        res.status(204).json({ status: 'success', data: albums });
+        res.status(200).json({ status: 'success', data: albums });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -992,7 +992,7 @@ router.get('/artist/album', auth, async (req, res) => {
         log.debug({ artists })
 
         log.info('artists successfully fetched');
-        res.status(204).json({ status: 'success', data: artists });
+        res.status(200).json({ status: 'success', data: artists });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -1018,7 +1018,7 @@ router.get('/artist', auth, async (req, res) => {
         log.debug({ artists })
 
         log.info('artists successfully fetched');
-        res.status(204).json({ status: 'success', data: artists });
+        res.status(200).json({ status: 'success', data: artists });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
