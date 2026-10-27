@@ -1081,7 +1081,7 @@ router.post('/artist', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const artistExistenceCheck = await runWithLogger(log, () => artistRepository.get(artistId))
         log.debug({ artistExistenceCheck })
-        if (artistExistenceCheck) {
+        if (!artistExistenceCheck) {
             log.info('artist not found')
             return res.status(404).json({ status: 'error', error_code: 'ARTIST_NOT_FOUND' })
         }

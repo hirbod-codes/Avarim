@@ -241,7 +241,7 @@ router.get('/album', auth, async (req, res) => {
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let albums = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByArtistId(artistId, page - 1, pageSize))
+        let albums = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByArtistId(artistId, (page - 1) * pageSize, pageSize))
         log.debug({ albums });
 
         res.status(200).json({ status: 'success', data: albums });
@@ -263,7 +263,7 @@ router.get('/audio', auth, async (req, res) => {
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByArtistId(artistId, page - 1, pageSize))
+        let audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByArtistId(artistId, (page - 1) * pageSize, pageSize))
         log.debug({ audios });
 
         res.status(200).json({ status: 'success', data: audios });
@@ -285,7 +285,7 @@ router.get('/audio/singles', auth, async (req, res) => {
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let audios: WithId<Audio>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByArtistIdByAlbumId(artistId, undefined, page - 1, pageSize))
+        let audios: WithId<Audio>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByArtistIdByAlbumId(artistId, undefined, (page - 1) * pageSize, pageSize))
         log.debug({ audios });
 
         res.status(200).json({ status: 'success', data: audios });

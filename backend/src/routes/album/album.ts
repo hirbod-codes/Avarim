@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { albumIdArtistNameSchema, albumNamePagePageSizeSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
+import { albumIdArtistNameSchema, albumNamePagePageSizeSchema, albumOwnerSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
 import AlbumRepository from '../../db/MongoDB/AlbumRepository';
 import { meiliAlbum } from '../../db/meilisearch';
 import { Album, getAvatarKey } from '../../db/models/Album';
@@ -229,6 +229,44 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
     } catch (err) {
         try { await db?.abortTransaction() } catch (_) { }
 
+        runWithLogger(log, () => handleError(res, err))
+    }
+})
+
+router.patch('/owner', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'album', route: 'PATCH /api/album/owner' });
+
+    try {
+        log.info('audio approve request received');
+
+        log.debug({ body: req.body });
+        const { albumId, newArtistId } = await runWithLogger(log, () => validate(albumOwnerSchema, req.body))
+        log.debug({ albumId, newArtistId });
+        log.info('input validated');
+
+        const albumRepository = new AlbumRepository()
+
+        const album = await runWithLogger(log, () => albumRepository.get(albumId));
+        log.debug({ album });
+        if (!album) {
+            log.info('album not found');
+            return res.status(400).json({ status: 'error', error_code: 'ARTIST_NOT_FOUND' });
+        }
+
+        if (album.artistId === newArtistId) {
+            log.info('album already has artistId field set to the requested value')
+            return res.status(200).json({ status: 'success' })
+        }
+
+        const updateResult = await runWithLogger(log, () => albumRepository.unsafeUpdate(albumId, { artistId: newArtistId }));
+        log.debug({ updateResult });
+        if (!updateResult.acknowledged) {
+            log.info('update failed');
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+        }
+
+        return res.status(200).json({ status: 'success' })
+    } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
 })

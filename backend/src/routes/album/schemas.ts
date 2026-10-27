@@ -18,6 +18,11 @@ export const albumIdArtistNameSchema = object().required().shape({
     albumName: string().required().label('Album Name'),
 }).stripUnknown().required()
 
+export const albumOwnerSchema = object().required().shape({
+    albumId: string().objectIdString().required().label('Album id'),
+    newArtistId: string().optional().label('New artist id'),
+}).stripUnknown().required()
+
 export const albumNamePagePageSizeSchema = object().required().shape({
     albumId: string().required().label('Album Id'),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
