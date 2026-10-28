@@ -9,7 +9,9 @@
 // nothing is rendered when it has none.
 
 import 'package:avarim/api/models/audio.dart';
+import 'package:avarim/api/providers/audio_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum AudioInfoPanel { lyrics, tags, technical }
 
@@ -36,9 +38,6 @@ String? _pair(int? a, int? b) => a == null ? null : (b == null ? '$a' : '$a / $b
 _Rows _tagRows(AudioTags t) {
   final b = _RowBuilder();
   b.add('File title', t.audioTitle);
-  b.addList('Artists', t.artists);
-  b.addList('Album artists', t.albumArtists);
-  b.add('Album', t.album);
   b.add('Track', _pair(t.trackNumber, t.trackTotal));
   b.add('Disc', _pair(t.discNumber, t.discTotal));
   b.add('Year', t.year?.toString());
@@ -113,7 +112,8 @@ _Rows _technicalRows(Audio a) {
 }
 
 bool _hasLyricsPanel(Audio a) => (a.tags?.lyrics?.trim().isNotEmpty ?? false) || (a.tags?.lyricists.any((l) => l.trim().isNotEmpty) ?? false);
-bool _hasTagsPanel(Audio a) => a.tags != null && _tagRows(a.tags!).isNotEmpty;
+// Always: the artists and albums (resolved from the audio's links) are shown there too.
+bool _hasTagsPanel(Audio a) => true;
 bool _hasTechnicalPanel(Audio a) => _technicalRows(a).isNotEmpty;
 
 bool _has(Audio a, AudioInfoPanel p) => switch (p) {
@@ -219,7 +219,7 @@ class _AudioInfoPanelViewState extends State<AudioInfoPanelView> {
             Text('No lyrics available', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ];
       case AudioInfoPanel.tags:
-        return [for (final e in _tagRows(widget.audio.tags ?? const AudioTags())) _InfoRow(label: e.key, value: e.value)];
+        return [_LinksRows(widget.audio.id), for (final e in _tagRows(widget.audio.tags ?? const AudioTags())) _InfoRow(label: e.key, value: e.value)];
       case AudioInfoPanel.technical:
         return [for (final e in _technicalRows(widget.audio)) _InfoRow(label: e.key, value: e.value)];
     }
@@ -253,6 +253,26 @@ class _AudioInfoPanelViewState extends State<AudioInfoPanelView> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// "Artists" and "Albums" rows. They aren't tags: they are resolved from the audio's links.
+class _LinksRows extends ConsumerWidget {
+  const _LinksRows(this.audioId);
+
+  final String audioId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final artists = artistsLabel(ref.watch(audioArtistsProvider(audioId)).value);
+    final albums = albumsLabel(ref.watch(audioAlbumsProvider(audioId)).value);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (artists != null) _InfoRow(label: 'Artists', value: artists),
+        if (albums != null) _InfoRow(label: 'Albums', value: albums),
+      ],
     );
   }
 }

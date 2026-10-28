@@ -145,8 +145,8 @@ class AudioUploadNotifier extends Notifier<UploadState> {
     state = state.copyWith(phase: UploadPhase.failed, error: message);
   }
 
-  /// Sends only what changed: one PATCH each for the title, artists, album and lyrics (they have their own
-  /// routes), plus one PATCH /tag for all the other changed tags.
+  /// Sends only what changed: one PATCH each for the title and lyrics (they have their own routes), plus one
+  /// PATCH /tag for all the other changed tags. (Artists and albums aren't saved here: see audio_links_section.dart.)
   /// In [tags], a key with a `null` value means "clear this tag" (the user emptied the field).
   /// Returns true when every change was saved; on failure the error was already shown.
   ///
@@ -162,24 +162,17 @@ class AudioUploadNotifier extends Notifier<UploadState> {
 
     // `containsKey` matters here: a present key with a null value is a CLEAR, an absent key is "unchanged".
     final changed = tags ?? const <String, dynamic>{};
-    final artists = (changed['artists'] as List?)?.cast<String>();
-    final album = changed['album'] as String?;
     final lyrics = changed['lyrics'] as String?;
-    // Everything else goes through the generic /tag route. Artists and album must NOT: their routes also
-    // create the artist / album records and update the search index, /tag only rewrites the audio's tags.
+    // Everything else goes through the generic /tag route (lyrics have their own).
     final others = <String, dynamic>{
       for (final e in (tags ?? const <String, dynamic>{}).entries)
-        if (e.key != 'artists' && e.key != 'album' && e.key != 'lyrics') e.key: e.value,
+        if (e.key != 'lyrics') e.key: e.value,
     };
 
-    // The title goes first: it is the call most likely to be rejected (TITLE_NOT_UNIQUE),
-    // so when it fails nothing has been changed yet.
+    // The title goes first: when it is rejected nothing has been changed yet.
     final steps = <({Future<ApiCallResult<dynamic>> Function() send, void Function() apply})>[
       if (title != null) (send: () => _api.updateTitle(audioId: id, title: title), apply: () => saved['title'] = title),
       if (others.isNotEmpty) (send: () => _api.updateTags(audioId: id, tags: others), apply: () => _applyTags(savedTags, others)),
-      if (changed.containsKey('artists'))
-        (send: () => _api.updateArtists(audioId: id, artists: artists), apply: () => _applyTags(savedTags, {'artists': artists})),
-      if (changed.containsKey('album')) (send: () => _api.updateAlbum(audioId: id, album: album), apply: () => _applyTags(savedTags, {'album': album})),
       if (changed.containsKey('lyrics')) (send: () => _api.updateLyrics(audioId: id, lyrics: lyrics), apply: () => _applyTags(savedTags, {'lyrics': lyrics})),
     ];
 

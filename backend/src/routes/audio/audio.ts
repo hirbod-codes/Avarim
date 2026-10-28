@@ -5,7 +5,7 @@ import AudioRepository from '../../db/MongoDB/AudioRepository';
 import { generateStreamToken, verifyStreamToken } from '../../lib/signed_urls';
 import { pipeline } from 'stream/promises';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
-import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, isUploadFinished, titleUpdateSchema, lyricsUpdateSchema, tagUpdateSchema, audioAlbumSchema, audioArtistSchema, postAudioAlbumSchema, postAudioArtistSchema, deleteAudioAlbumSchema, deleteAudioArtistSchema, audioArtistAlbumSchema, audioAlbumArtistSchema } from './schemas';
+import { listQuerySchema, infoQuerySchema, signedTokenQuerySchema, fileParamsSchema, webFileParamsSchema, coverArtParamsSchema, deleteParamsSchema, postSchema, isUploadFinished, titleUpdateSchema, lyricsUpdateSchema, tagUpdateSchema, postAudioAlbumSchema, postAudioArtistSchema, deleteAudioAlbumSchema, deleteAudioArtistSchema } from './schemas';
 import { handleError, validate } from '../../lib';
 import { deleteFromS3, detectContentType, getS3ObjectStream, receiveUpload, uploadToS3 } from '../../lib/file_management';
 import { generateWebCompatibleCopy, isWebCompatible } from '../../ffmpeg';
@@ -21,9 +21,6 @@ import { meiliAudio, meiliPlaylistAudio } from '../../db/meilisearch';
 import { Audio } from '../../db/models/Audio';
 import { Readable } from 'stream';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
-import { WithId } from '../../db/common_schemas';
-import { Album } from '../../db/models/Album';
-import { Artist } from '../../db/models/Artist';
 import AlbumRepository from '../../db/MongoDB/AlbumRepository';
 import ArtistRepository from '../../db/MongoDB/ArtistRepository';
 
@@ -895,7 +892,7 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId }));
         log.debug({ artistAlbumAudioDeleteResult });
-        if (!artistAlbumAudioDeleteResult.acknowledged) {
+        if (!artistAlbumAudioDeleteResult?.acknowledged) {
             log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio record from DB');
             res.status(500).json({ status: 'error', message: 'Error deleting artistAlbumAudio' });
             return
@@ -917,112 +914,6 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         runWithLogger(log, () => handleError(res, err));
     }
 });
-
-/**
- * to fetch a list of albums that the audio and the artist belongs to.
- * the artist can be undefined, some audios don't have an artist
- */
-router.get('/album/artist', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/album/artist' });
-
-    try {
-        log.info('Audio album artist request received');
-
-        log.debug({ query: req.query });
-        const { audioId, artistId, page, pageSize } = await runWithLogger(log, () => validate(audioAlbumArtistSchema, req.query));
-        log.debug({ audioId, artistId, page, pageSize });
-        log.info('Input validated');
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        const albums: WithId<Album>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByAudioIdByArtistId(audioId, artistId, (page - 1) * pageSize, pageSize))
-        log.debug({ albums })
-
-        log.info('albums successfully fetched');
-        res.status(200).json({ status: 'success', data: albums });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-})
-
-/**
- * to fetch a list of albums that the audio belongs to. 
- */
-router.get('/album', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/album' });
-
-    try {
-        log.info('Audio album request received');
-
-        log.debug({ query: req.query });
-        const { audioId, page, pageSize } = await runWithLogger(log, () => validate(audioAlbumSchema, req.query));
-        log.debug({ audioId, page, pageSize });
-        log.info('Input validated');
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        const albums: WithId<Album>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByAudioId(audioId, (page - 1) * pageSize, pageSize))
-        log.debug({ albums })
-
-        log.info('albums successfully fetched');
-        res.status(200).json({ status: 'success', data: albums });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-})
-
-/**
- * to fetch a list of artists that the audio and the album belongs to.
- * the album can be undefined, some audios don't have an album
- */
-router.get('/artist/album', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/artist/album' });
-
-    try {
-        log.info('Audio artist album request received');
-
-        log.debug({ query: req.query });
-        const { audioId, albumId, page, pageSize } = await runWithLogger(log, () => validate(audioArtistAlbumSchema, req.query));
-        log.debug({ audioId, albumId, page, pageSize });
-        log.info('Input validated');
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        const artists: WithId<Artist>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAudioIdByAlbumId(audioId, albumId, (page - 1) * pageSize, pageSize))
-        log.debug({ artists })
-
-        log.info('artists successfully fetched');
-        res.status(200).json({ status: 'success', data: artists });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-})
-
-/**
- * to fetch a list of albums that the audio belongs to. 
- */
-router.get('/artist', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/artist' });
-
-    try {
-        log.info('Audio artist request received');
-
-        log.debug({ query: req.query });
-        const { audioId, page, pageSize } = await runWithLogger(log, () => validate(audioArtistSchema, req.query));
-        log.debug({ audioId, page, pageSize });
-        log.info('Input validated');
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        const artists: WithId<Artist>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAudioId(audioId, (page - 1) * pageSize, pageSize))
-        log.debug({ artists })
-
-        log.info('artists successfully fetched');
-        res.status(200).json({ status: 'success', data: artists });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-})
 
 /**
  * adds an already existing album to the audio
@@ -1115,7 +1006,7 @@ router.delete('/album', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const result = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId, albumId, artistId }))
         log.debug({ result })
-        if (!result.acknowledged) {
+        if (!result?.acknowledged) {
             log.info('failed to remove album')
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
         }
@@ -1127,6 +1018,9 @@ router.delete('/album', auth, isAdminIfAuthenticated, async (req, res) => {
     }
 })
 
+/**
+ * to delete a single audio's artist
+ */
 router.delete('/artist', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'DELETE /api/audio/artist' });
 
@@ -1142,7 +1036,7 @@ router.delete('/artist', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const result = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId, albumId, artistId }))
         log.debug({ result })
-        if (!result.acknowledged) {
+        if (!result?.acknowledged) {
             log.info('failed to remove artist')
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
         }

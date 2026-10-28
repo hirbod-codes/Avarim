@@ -20,15 +20,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const kIsUploadFinishedPath = '/api/audio/is_upload_finished';
 const kAudioInfoPath = '/api/audio/info';
-const kIsTitleUniquePath = '/api/audio/is_title_unique';
 
-// PATCH routes (updates no longer go through `POST /api/audio/`): title, artists, album and lyrics
-// each have their own; every other editable tag goes through /tag.
-// Each answers 204 on success and 400 with an `error_code` (AUDIO_NOT_FOUND, TITLE_NOT_UNIQUE, ...) on failure.
+// PATCH routes (updates no longer go through `POST /api/audio/`): title and lyrics each have their own;
+// every other editable tag goes through /tag. (Artists and albums are links, see audio_links_section.dart.)
+// Each answers 204 on success and 400 with an `error_code` (AUDIO_NOT_FOUND, ...) on failure.
 // A tag sent as `null` is CLEARED (unset). Absent = unchanged. (The title is required and can't be cleared.)
 const kAudioTitlePath = '/api/audio/title';
-const kAudioArtistPath = '/api/audio/artist';
-const kAudioAlbumPath = '/api/audio/album';
 const kAudioLyricsPath = '/api/audio/lyrics';
 const kAudioTagPath = '/api/audio/tag';
 
@@ -36,9 +33,6 @@ const kAudioTagPath = '/api/audio/tag';
 // under this field name. Answers { status: 'queued', data: { id } }.
 const kUploadAudioPath = '/api/audio/';
 const kUploadFileField = 'file';
-
-/// `error_code` the backend answers with (HTTP 400) when a title is already taken.
-const kTitleNotUniqueCode = 'TITLE_NOT_UNIQUE';
 
 /// For requests the UI handles inline or that may be cancelled: no error toast.
 final _silent = Options(extra: {GlobalErrorInterceptor.silentErrorsKey: true});
@@ -64,12 +58,6 @@ class AudioUploadApi {
     );
   }
 
-  /// 204 -> success (free). 400 + TITLE_NOT_UNIQUE -> failure with `errorCode == kTitleNotUniqueCode`
-  /// (taken). Any other failure means "couldn't verify".
-  Future<ApiCallResult<dynamic>> isTitleUnique(String title, {CancelToken? cancelToken}) {
-    return apiCall<dynamic>(() => _dio.get<dynamic>(kIsTitleUniquePath, queryParameters: {'title': title}, cancelToken: cancelToken, options: _silent));
-  }
-
   // ── updates (not silent: a failure is toasted by GlobalErrorInterceptor) ───
 
   /// POST /api/audio/ (multipart) => { status: 'queued', data: { id } }
@@ -88,16 +76,6 @@ class AudioUploadApi {
     return _patch(kAudioTitlePath, {'audioId': audioId, 'title': title});
   }
 
-  /// PATCH /api/audio/artist  { audioId, artists }  (artists == null clears them)
-  Future<ApiCallResult<dynamic>> updateArtists({required String audioId, required List<String>? artists}) {
-    return _patch(kAudioArtistPath, {'audioId': audioId, 'artists': artists});
-  }
-
-  /// PATCH /api/audio/album  { audioId, album }  (album == null clears it)
-  Future<ApiCallResult<dynamic>> updateAlbum({required String audioId, required String? album}) {
-    return _patch(kAudioAlbumPath, {'audioId': audioId, 'album': album});
-  }
-
   /// PATCH /api/audio/lyrics  { audioId, lyrics }  (lyrics == null clears them)
   Future<ApiCallResult<dynamic>> updateLyrics({required String audioId, required String? lyrics}) {
     return _patch(kAudioLyricsPath, {'audioId': audioId, 'lyrics': lyrics});
@@ -105,9 +83,7 @@ class AudioUploadApi {
 
   /// PATCH /api/audio/tag  { audioId, tags }   (a tag with a null value is cleared)
   ///
-  /// For every editable tag EXCEPT artists, album and lyrics. The backend drops `audioTitle` and `lyrics`
-  /// from this request, and the artist / album routes also keep the artist, album and search data in
-  /// sync, so those two must go through their own routes.
+  /// For every editable tag EXCEPT lyrics. The backend drops `audioTitle` and `lyrics` from this request.
   Future<ApiCallResult<dynamic>> updateTags({required String audioId, required Map<String, dynamic> tags}) {
     return _patch(kAudioTagPath, {'audioId': audioId, 'tags': tags});
   }

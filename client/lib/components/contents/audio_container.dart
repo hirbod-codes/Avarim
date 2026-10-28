@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:avarim/api/controllers/audio_controller.dart';
+import 'package:avarim/api/providers/audio_links.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/auth/token_storage.dart';
@@ -118,15 +119,9 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
     });
   }
 
-  /// "Artist A, Artist B" from the audio's tags (album artists when there are no track artists), or null.
-  String? _artistLabel(Audio audio) {
-    final tags = audio.tags;
-    if (tags == null) return null;
-
-    final names = (tags.artists.isNotEmpty ? tags.artists : tags.albumArtists).where((n) => n.trim().isNotEmpty);
-    final label = names.join(', ');
-    return label.isEmpty ? null : label;
-  }
+  /// "Artist A, Artist B", or null. An audio's artists are resolved from its links (see audioArtistsProvider),
+  /// not read from its tags. Call it from build: the label appears once they are loaded.
+  String? _artistLabel(Audio audio) => artistsLabel(ref.watch(audioArtistsProvider(audio.id)).value);
 
   /// With a fixed height the placeholder states keep their old compact layout;
   /// when asked to fill the parent (infinite height) they are centered in it.

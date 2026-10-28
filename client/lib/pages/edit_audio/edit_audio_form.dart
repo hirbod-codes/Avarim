@@ -1,27 +1,19 @@
 // edit_audio_form.dart
 //
-// The form of EditAudioPage: title (with uniqueness check), tags, read-only details
-// and the Update button. Only fields that changed are sent (see edit_audio_notifier.dart: title, artists,
-// album and lyrics have their own PATCH routes, every other editable tag goes through PATCH /tag).
+// The form of EditAudioPage: title, tags, read-only details
+// and the Update button. Only fields that changed are sent (see edit_audio_notifier.dart: title and lyrics
+// have their own PATCH routes, every other editable tag goes through PATCH /tag). Titles aren't unique, so
+// there is no availability check. Artists and albums are links, edited in audio_links_section.dart.
 // Tags without an editor (audioTitle, albumArtists, ...) are shown read-only.
 
-import 'dart:async';
-
-import 'package:avarim/api/api_call.dart';
 import 'package:avarim/pages/edit_audio/audio_tag_specs.dart';
 import 'package:avarim/pages/edit_audio/chip_list_field.dart';
-import 'package:avarim/pages/edit_audio/edit_audio_api.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_notifier.dart';
 import 'package:avarim/pages/common/read_only_details.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-const kTitleCheckDebounce = Duration(milliseconds: 600);
-
-enum _TitleStatus { unchanged, checking, available, taken, unknown }
 
 class EditAudioForm extends ConsumerStatefulWidget {
   const EditAudioForm({super.key, required this.audio, required this.isSaving, required this.isExisting});
@@ -51,10 +43,6 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
   // flag fields
   final _flags = <String, bool>{};
   final _baseFlags = <String, bool>{};
-
-  Timer? _titleDebounce;
-  CancelToken? _titleToken;
-  _TitleStatus _titleStatus = _TitleStatus.unchanged;
 
   @override
   void initState() {
@@ -89,8 +77,6 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
 
   @override
   void dispose() {
-    _titleDebounce?.cancel();
-    _titleToken?.cancel();
     _title.dispose();
     for (final c in _text.values) {
       c.dispose();
@@ -102,38 +88,7 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
 
   // ── title uniqueness ───────────────────────────────────────────────────────
 
-  void _onTitleChanged() {
-    final t = _title.text.trim();
-    _titleDebounce?.cancel();
-    _titleToken?.cancel();
-
-    // The audio already owns its current title, so only a CHANGED title needs checking.
-    if (t.isEmpty || t == _baseTitle) {
-      setState(() => _titleStatus = _TitleStatus.unchanged);
-      return;
-    }
-
-    setState(() => _titleStatus = _TitleStatus.checking);
-    _titleDebounce = Timer(kTitleCheckDebounce, () => _checkTitle(t));
-  }
-
-  Future<void> _checkTitle(String t) async {
-    final token = _titleToken = CancelToken();
-
-    final result = await ref.read(audioUploadApiProvider).isTitleUnique(t, cancelToken: token);
-    if (!mounted || token.isCancelled || _title.text.trim() != t) return;
-
-    setState(() {
-      _titleStatus = switch (result) {
-        // 400 TITLE_NOT_UNIQUE: somebody else already uses this title.
-        ApiCallFailure(errorCode: kTitleNotUniqueCode) => _TitleStatus.taken,
-        // Any other failure: we couldn't verify (this request is silent, so no toast).
-        ApiCallFailure() => _TitleStatus.unknown,
-        // 204: free.
-        _ => _TitleStatus.available,
-      };
-    });
-  }
+  void _onTitleChanged() => setState(() {});
 
   // ── what changed ───────────────────────────────────────────────────────────
 
@@ -259,7 +214,7 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
     final theme = Theme.of(context);
     final changes = _collect();
     final dirty = changes.title != null || changes.tags != null;
-    final canSave = dirty && !widget.isSaving && _titleStatus != _TitleStatus.checking && _titleStatus != _TitleStatus.taken;
+    final canSave = dirty && !widget.isSaving;
 
     return Form(
       key: _formKey,
@@ -302,25 +257,7 @@ class _EditFormState extends ConsumerState<EditAudioForm> {
     return TextFormField(
       controller: _title,
       validator: _validateTitle,
-      decoration: InputDecoration(
-        labelText: 'Title',
-        border: const OutlineInputBorder(),
-        errorText: _titleStatus == _TitleStatus.taken ? 'This title is already taken' : null,
-        helperText: switch (_titleStatus) {
-          _TitleStatus.checking => 'Checking availability…',
-          _TitleStatus.available => 'Title is available',
-          _TitleStatus.unknown => "Couldn't verify that this title is available",
-          _ => null,
-        },
-        suffixIcon: switch (_titleStatus) {
-          _TitleStatus.checking => const Padding(
-            padding: EdgeInsets.all(14),
-            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-          ),
-          _TitleStatus.available => const Icon(Icons.check_circle_outline),
-          _ => null,
-        },
-      ),
+      decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()),
     );
   }
 

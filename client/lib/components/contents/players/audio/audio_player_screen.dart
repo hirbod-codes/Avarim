@@ -690,6 +690,10 @@ class _WaveformPainter extends CustomPainter {
 // Main controls
 // ---------------------------------------------------------------------------
 
+/// Below this screen width the main controls show previous / next track instead of -10 / +10 seconds
+/// (the seek bar covers moving inside the track).
+const kCompactPlayerWidth = 600.0;
+
 class _MainControls extends ConsumerWidget {
   const _MainControls({required this.state, this.showQueueControls = false, this.onPrevious, this.onNext});
   final AudioPlayerState state;
@@ -701,12 +705,18 @@ class _MainControls extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final commands = ref.watch(audioPlayerCommandsProvider.notifier);
     final isLoading = state.isLoading || state.isBuffering;
+    final compact = MediaQuery.sizeOf(context).width < kCompactPlayerWidth;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        if (showQueueControls) IconButton(iconSize: 36, tooltip: 'Previous', onPressed: onPrevious, icon: const Icon(Icons.skip_previous_rounded)),
-        IconButton(iconSize: 40, onPressed: () => commands.skipBackward(), icon: const Icon(Icons.replay_10_rounded)),
+        if (compact)
+          // Always there on small screens (disabled when there is no queue / no previous track).
+          IconButton(iconSize: 44, tooltip: 'Previous', onPressed: showQueueControls ? onPrevious : null, icon: const Icon(Icons.skip_previous_rounded))
+        else ...[
+          if (showQueueControls) IconButton(iconSize: 36, tooltip: 'Previous', onPressed: onPrevious, icon: const Icon(Icons.skip_previous_rounded)),
+          IconButton(iconSize: 40, onPressed: () => commands.skipBackward(), icon: const Icon(Icons.replay_10_rounded)),
+        ],
         Container(
           width: 72,
           height: 72,
@@ -729,8 +739,12 @@ class _MainControls extends ConsumerWidget {
                   ),
                 ),
         ),
-        IconButton(iconSize: 40, onPressed: () => commands.skipForward(), icon: const Icon(Icons.forward_10_rounded)),
-        if (showQueueControls) IconButton(iconSize: 36, tooltip: 'Next', onPressed: onNext, icon: const Icon(Icons.skip_next_rounded)),
+        if (compact)
+          IconButton(iconSize: 44, tooltip: 'Next', onPressed: showQueueControls ? onNext : null, icon: const Icon(Icons.skip_next_rounded))
+        else ...[
+          IconButton(iconSize: 40, onPressed: () => commands.skipForward(), icon: const Icon(Icons.forward_10_rounded)),
+          if (showQueueControls) IconButton(iconSize: 36, tooltip: 'Next', onPressed: onNext, icon: const Icon(Icons.skip_next_rounded)),
+        ],
       ],
     );
   }

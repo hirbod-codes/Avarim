@@ -30,9 +30,10 @@
 // Endpoints used:
 //   GET /api/artist/info?artistId=… | name=…
 //   GET /api/artist/avatar/:artistId        GET /api/artist/banner/:artistId   (the banner keeps its aspect ratio)
-//   GET /api/artist/album?artistName=…&page=…&pageSize=…      the artist's albums
-//   GET /api/artist/audio?artistName=…&page=…&pageSize=…      "Play" (all of the artist's audios)
-//   GET /api/album/audio?albumName=…&page=…&pageSize=…        an album's audios (play an album)
+//   GET /api/artist/album?artistId=&page=&pageSize=           the artist's albums
+//   GET /api/artist/audio?artistId=&page=&pageSize=           "Play" (all of the artist's audios)
+//   GET /api/artist/audio/singles?artistId=&page=&pageSize=   the "Singles" section: audios with this artist but no album
+//   GET /api/album/audio?albumId=&page=&pageSize=             an album's audios (play an album / add it to the queue)
 //   GET /api/album/avatar/:albumId                            album cover
 //
 // ASSUMPTIONS (those responses weren't visible, so they are parsed leniently):
@@ -40,23 +41,25 @@
 //     or just the album's name as a string
 //   - audios are Audio documents (`_id`, plus `tags.trackNumber` / `tags.discNumber`, which order an
 //     album's audios; without them the server order is kept)
-//   - /api/album/audio is keyed by the album NAME only (not the artist), so two albums with the same
-//     name by different artists return the same audios.
+//   - albums are looked up by id: album names are only unique together with their artist.
 
 import 'dart:async';
 
 import 'package:avarim/api/api_call.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/api/models/artist.dart';
+import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/auth/token_storage.dart';
+import 'package:avarim/components/contents/audio_row_actions.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Thumb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:avarim/pages/search/search_page.dart' show Thumb;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -152,27 +155,36 @@ class ArtistPageApi {
   }
 
   /// null = the request failed.
-  Future<List<ArtistAlbum>?> albums(String artistName, int page) async {
+  Future<List<ArtistAlbum>?> albums(String artistId, int page) async {
     final res = await apiCall<List<ArtistAlbum>>(
-      () => _dio.get<dynamic>('/api/artist/album', queryParameters: {'artistName': artistName, 'page': page, 'pageSize': kArtistAlbumsPageSize}),
+      () => _dio.get<dynamic>('/api/artist/album', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAlbumsPageSize}),
       fromJson: (data) => List.from(data).map(ArtistAlbum.tryParse).whereType<ArtistAlbum>().toList(),
     );
     return res.dataOrNull;
   }
 
   /// null = the request failed.
-  Future<List<ArtistTrack>?> audios(String artistName, int page) async {
+  Future<List<ArtistTrack>?> audios(String artistId, int page) async {
     final res = await apiCall<List<ArtistTrack>>(
-      () => _dio.get<dynamic>('/api/artist/audio', queryParameters: {'artistName': artistName, 'page': page, 'pageSize': kArtistAudiosPageSize}),
+      () => _dio.get<dynamic>('/api/artist/audio', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
       fromJson: (data) => List.from(data).map(ArtistTrack.tryParse).whereType<ArtistTrack>().toList(),
     );
     return res.dataOrNull;
   }
 
+  /// The artist's audios that are in no album (GET /api/artist/audio/singles). null = the request failed.
+  Future<List<Audio>?> singles(String artistId, int page) async {
+    final res = await apiCall<List<Audio>>(
+      () => _dio.get<dynamic>('/api/artist/audio/singles', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
+      fromJson: (data) => [for (final e in List.from(data)) Audio.fromJson(Map<String, dynamic>.from(e as Map))],
+    );
+    return res.dataOrNull;
+  }
+
   /// An album's audios (GET /api/album/audio). null = the request failed.
-  Future<List<ArtistTrack>?> albumAudios(String albumName, int page) async {
+  Future<List<ArtistTrack>?> albumAudios(String albumId, int page) async {
     final res = await apiCall<List<ArtistTrack>>(
-      () => _dio.get<dynamic>('/api/album/audio', queryParameters: {'albumName': albumName, 'page': page, 'pageSize': kArtistAudiosPageSize}),
+      () => _dio.get<dynamic>('/api/album/audio', queryParameters: {'albumId': albumId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
       fromJson: (data) => List.from(data).map(ArtistTrack.tryParse).whereType<ArtistTrack>().toList(),
     );
     return res.dataOrNull;
@@ -214,9 +226,17 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
   bool _loadingAlbums = false;
   bool _albumsFailed = false;
 
+  // The "Singles" section: audios with this artist but no album. Loaded after the albums.
+  final List<Audio> _singles = [];
+  int _singlesNextPage = kArtistFirstPage;
+  bool _singlesHasMore = true;
+  bool _loadingSingles = false;
+  bool _singlesFailed = false;
+
   Future<List<ArtistTrack>>? _artistTracks; // all of the artist's audios, loaded on the first "Play"
   final Map<String, Future<List<ArtistTrack>>> _albumTracks = {}; // album name -> its audios, loaded on first play
   String? _busyAlbumKey;
+  String? _queueingAlbumKey; // the album whose audios are being loaded to add them to the queue
   bool _playingAll = false;
   int _imageEpoch = 0; // bumped after editing so that the avatar / banner are fetched again
 
@@ -290,7 +310,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       _albumsFailed = false;
     });
 
-    final batch = await _api.albums(artist.name, _nextPage);
+    final batch = await _api.albums(artist.id, _nextPage);
     if (!mounted) return;
 
     if (batch == null) {
@@ -314,14 +334,56 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewportIfNeeded());
   }
 
+  Future<void> _loadSingles() async {
+    final artist = _artist;
+    if (artist == null || _loadingSingles || !_singlesHasMore) return;
+
+    setState(() {
+      _loadingSingles = true;
+      _singlesFailed = false;
+    });
+
+    final batch = await _api.singles(artist.id, _singlesNextPage);
+    if (!mounted) return;
+
+    if (batch == null) {
+      setState(() {
+        _loadingSingles = false;
+        _singlesFailed = true;
+      });
+      return;
+    }
+
+    setState(() {
+      final known = _singles.map((a) => a.id).toSet();
+      final fresh = batch.where((a) => known.add(a.id)).toList();
+      _singles.addAll(fresh);
+      _singlesNextPage++;
+      // Stop on a short page, or when the server keeps sending what we already have.
+      _singlesHasMore = batch.length >= kArtistAudiosPageSize && fresh.isNotEmpty;
+      _loadingSingles = false;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewportIfNeeded());
+  }
+
+  /// The next page of whatever is still loading: the albums first, then the singles.
+  void _loadMore() {
+    if (_hasMore) {
+      if (!_albumsFailed) _loadAlbums();
+    } else if (!_singlesFailed) {
+      _loadSingles();
+    }
+  }
+
   void _onScroll() {
-    if (_scroll.hasClients && _scroll.position.extentAfter < 400 && !_albumsFailed) _loadAlbums();
+    if (_scroll.hasClients && _scroll.position.extentAfter < 400) _loadMore();
   }
 
   /// If the first page doesn't fill the screen there is nothing to scroll: keep loading until it does.
   void _fillViewportIfNeeded() {
-    if (!mounted || !_scroll.hasClients || _albumsFailed) return;
-    if (_scroll.position.maxScrollExtent <= 0) _loadAlbums();
+    if (!mounted || !_scroll.hasClients) return;
+    if (_scroll.position.maxScrollExtent <= 0) _loadMore();
   }
 
   Future<void> _refresh() async {
@@ -330,6 +392,10 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       _nextPage = kArtistFirstPage;
       _hasMore = true;
       _albumsFailed = false;
+      _singles.clear();
+      _singlesNextPage = kArtistFirstPage;
+      _singlesHasMore = true;
+      _singlesFailed = false;
       _artistTracks = null;
       _albumTracks.clear();
     });
@@ -378,8 +444,8 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
 
   /// All of the artist's audios. Loaded once; a failure isn't cached, so it can be retried.
   Future<List<ArtistTrack>> _allArtistTracks() async {
-    final name = _artist!.name;
-    final future = _artistTracks ??= _loadAllPages((page) => _api.audios(name, page));
+    final artistId = _artist!.id;
+    final future = _artistTracks ??= _loadAllPages((page) => _api.audios(artistId, page));
     try {
       return await future;
     } catch (_) {
@@ -388,13 +454,16 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
     }
   }
 
-  /// An album's audios (GET /api/album/audio). Loaded once per album; a failure isn't cached.
+  /// An album's audios (GET /api/album/audio?albumId). Loaded once per album; a failure isn't cached.
   Future<List<ArtistTrack>> _audiosOf(ArtistAlbum album) async {
-    final future = _albumTracks.putIfAbsent(album.name, () => _loadAllPages((page) => _api.albumAudios(album.name, page)));
+    final albumId = album.id;
+    if (albumId == null) throw StateError('the album has no id');
+
+    final future = _albumTracks.putIfAbsent(album.key, () => _loadAllPages((page) => _api.albumAudios(albumId, page)));
     try {
       return await future;
     } catch (_) {
-      if (identical(_albumTracks[album.name], future)) _albumTracks.remove(album.name);
+      if (identical(_albumTracks[album.key], future)) _albumTracks.remove(album.key);
       rethrow;
     }
   }
@@ -429,6 +498,29 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       if (mounted) NotificationService.showError(message: 'Could not load the album');
     } finally {
       if (mounted) setState(() => _busyAlbumKey = null);
+    }
+  }
+
+  /// Appends the album's audios to the player queue; the current track keeps playing.
+  Future<void> _addAlbumToQueue(ArtistAlbum album) async {
+    if (_queueingAlbumKey != null) return;
+    setState(() => _queueingAlbumKey = album.key);
+
+    try {
+      final ids = _inAlbumOrder(await _audiosOf(album));
+      if (!mounted) return;
+
+      if (ids.isEmpty) {
+        NotificationService.showError(message: 'No audios found for this album');
+        return;
+      }
+      AudioPlayerService.add(audioIds: ids, play: false);
+      NotificationService.showSuccess(message: ids.length == 1 ? 'Added 1 audio to the queue' : 'Added ${ids.length} audios to the queue');
+    } catch (e, st) {
+      talker.error('caught error while trying to queue an album', e, st);
+      if (mounted) NotificationService.showError(message: 'Could not load the album');
+    } finally {
+      if (mounted) setState(() => _queueingAlbumKey = null);
     }
   }
 
@@ -546,6 +638,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                     album: album,
                     headers: headers,
                     busy: _busyAlbumKey == album.key,
+                    queueing: _queueingAlbumKey == album.key,
                     onTap: () {
                       final onAlbumTap = widget.onAlbumTap;
                       if (onAlbumTap != null) {
@@ -555,6 +648,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                       }
                     },
                     onPlay: () => _playAlbum(album),
+                    onAddToQueue: () => _addAlbumToQueue(album),
                   );
                 },
               ),
@@ -562,6 +656,25 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
           SliverToBoxAdapter(
             child: _AlbumsFooter(loading: _loadingAlbums, failed: _albumsFailed, onRetry: _loadAlbums),
           ),
+          // Audios with this artist but no album.
+          if (_singles.isNotEmpty || _loadingSingles || _singlesFailed) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('Singles', style: theme.textTheme.titleLarge),
+              ),
+            ),
+            SliverList.builder(
+              itemCount: _singles.length,
+              itemBuilder: (context, i) {
+                final audio = _singles[i];
+                return _SingleTile(audio: audio, onPlay: () => AudioPlayerService.add(audioId: audio.id));
+              },
+            ),
+            SliverToBoxAdapter(
+              child: _AlbumsFooter(loading: _loadingSingles, failed: _singlesFailed, onRetry: _loadSingles),
+            ),
+          ],
           // Keeps the last row clear of the mini player.
           const SliverToBoxAdapter(child: AudioDockSpacer()),
         ],
@@ -755,15 +868,19 @@ class _BackButtonOnBanner extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _AlbumCard extends StatelessWidget {
-  const _AlbumCard({required this.album, required this.headers, required this.busy, required this.onTap, required this.onPlay});
+  const _AlbumCard({required this.album, required this.headers, required this.busy, required this.queueing, required this.onTap, required this.onPlay, required this.onAddToQueue});
 
   final ArtistAlbum album;
   final Map<String, String>? headers;
 
   /// This album's audios are being loaded to play it.
   final bool busy;
+
+  /// This album's audios are being loaded to add them to the queue.
+  final bool queueing;
   final VoidCallback onTap;
   final VoidCallback onPlay;
+  final VoidCallback onAddToQueue;
 
   @override
   Widget build(BuildContext context) {
@@ -789,6 +906,32 @@ class _AlbumCard extends StatelessWidget {
                   child: album.id == null
                       ? placeholder
                       : _AuthImage(url: '${AppConfig.apiUrl}/api/album/avatar/${album.id}', headers: headers, fallback: placeholder),
+                ),
+                Positioned(
+                  left: 8,
+                  bottom: 8,
+                  child: Tooltip(
+                    message: 'Add to queue',
+                    child: Material(
+                      color: theme.colorScheme.secondaryContainer,
+                      elevation: 3,
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: queueing ? null : onAddToQueue,
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: queueing
+                              ? Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
+                                )
+                              : Icon(Icons.playlist_add, color: theme.colorScheme.onSecondaryContainer),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
                 Positioned(
                   right: 8,
@@ -823,6 +966,24 @@ class _AlbumCard extends StatelessWidget {
           Text(album.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
         ],
       ),
+    );
+  }
+}
+
+/// One row of the "Singles" section: tap to play it, the buttons add it to the queue / to a playlist.
+class _SingleTile extends StatelessWidget {
+  const _SingleTile({required this.audio, required this.onPlay});
+
+  final Audio audio;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onPlay,
+      leading: Thumb(url: '${AppConfig.apiUrl}/api/audio/coverArt/${audio.id}', icon: Icons.music_note),
+      title: Text(audio.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: AudioRowActions(audioId: audio.id, initialPlaylistName: audio.title),
     );
   }
 }

@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { artistIdPagePageSizeSchema, artistIdArtistNameSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, isNameUnique, listQuerySchema, postSchema } from './schemas';
+import { artistIdArtistNameSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, isNameUnique, listQuerySchema, postSchema } from './schemas';
 import ArtistRepository from '../../db/MongoDB/ArtistRepository';
 import { meiliArtist } from '../../db/meilisearch';
 import { Artist, getAvatarKey, getBannerKey } from '../../db/models/Artist';
@@ -14,13 +14,9 @@ import { createReadStream } from 'node:fs';
 import { MongoDB } from '../../db/MongoDB/mongodb';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 import AudioRepository from '../../db/MongoDB/AudioRepository';
-import { Controller } from '../controller';
-import { WithId } from '../../db/common_schemas';
-import { Audio } from '../../db/models/Audio';
+import { ArtistController } from '../../controllers/ArtistController';
 
 const router = express.Router();
-
-const ARTIST_NAME_SEPARATOR = '__ARTIST_NAME_SEPARATOR__'
 
 router.get('/is_title_unique', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'artist', route: 'Get /api/artist/is_title_unique' });
@@ -220,75 +216,6 @@ router.get('/avatar/:artistId', auth, async (req, res) => {
 
         log.info('Streaming avatar to client');
         stream.pipe(res);
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-});
-
-router.get('/album', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/album' });
-
-    try {
-        log.info('artist album list request received');
-
-        log.debug({ query: req.query });
-        const { artistId, page, pageSize } = await runWithLogger(log, () => validate(artistIdPagePageSizeSchema, req.query));
-        log.info('Input validated');
-        log.debug({ artistId, page, pageSize });
-
-        const userId = req.user!.userId;
-        log = log.child({ userId });
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        let albums = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByArtistId(artistId, (page - 1) * pageSize, pageSize))
-        log.debug({ albums });
-
-        res.status(200).json({ status: 'success', data: albums });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-});
-
-router.get('/audio', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/audio' });
-
-    try {
-        log.info('artist audio list request received');
-
-        log.debug({ query: req.query });
-        const { artistId, page, pageSize } = await runWithLogger(log, () => validate(artistIdPagePageSizeSchema, req.query));
-        log.info('Input validated');
-        log.debug({ artistId, page, pageSize });
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        let audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByArtistId(artistId, (page - 1) * pageSize, pageSize))
-        log.debug({ audios });
-
-        res.status(200).json({ status: 'success', data: audios });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-});
-
-router.get('/audio/singles', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/audio/singles' });
-
-    try {
-        log.info('artist audio list request received');
-
-        log.debug({ query: req.query });
-        const { artistId, page, pageSize } = await runWithLogger(log, () => validate(artistIdPagePageSizeSchema, req.query));
-        log.info('Input validated');
-        log.debug({ artistId, page, pageSize });
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        let audios: WithId<Audio>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByArtistIdByAlbumId(artistId, undefined, (page - 1) * pageSize, pageSize))
-        log.debug({ audios });
-
-        res.status(200).json({ status: 'success', data: audios });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -601,7 +528,7 @@ router.delete('/:artistId', auth, isAdminIfAuthenticated, async (req, res) => {
             return res.status(500).json({ status: 'error', error_code: 'UNRESOLVED_ALBUMS_AUDIOS' })
         }
 
-        await runWithLogger(log, () => new Controller().deleteArtist(artistId))
+        await runWithLogger(log, () => new ArtistController().delete(artistId))
 
         log.info('artist deleted successfully');
         res.status(204).json({ status: 'success' });

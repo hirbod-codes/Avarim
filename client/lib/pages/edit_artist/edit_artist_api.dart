@@ -5,8 +5,8 @@
 // shown to the user by GlobalErrorInterceptor (the load is silent: the page shows it inline).
 //
 //   GET  /api/artist/info?artistId=...                         => data: artist
-//   POST /api/artist/  { name }                                  => data: { id }   (create)
-//   POST /api/artist/  { updates: { artistId, name? } }
+//   POST  /api/artist?name=...                                  (create; the route answers without the new artist)
+//   PATCH /api/artist/name  { artistId, artistName }            (rename)
 //
 // Images:
 //   GET / PUT /api/artist/avatar/:artistId
@@ -46,25 +46,27 @@ class ArtistApi {
     );
   }
 
-  /// Creates an artist. The id the server assigned is in `dataOrNull` (see [extractArtistId]).
+  /// Creates an artist. The route answers without the new artist, so it is looked up by its (unique) name and
+  /// the result carries `{ artistId }` (see [extractArtistId]).
   ///
-  /// Request:  POST /api/artist/  { name }
-  /// Response: { status: 'success', data: { id } }
-  Future<ApiCallResult<dynamic>> create({required String name}) {
-    return apiCall<dynamic>(() => _dio.post<dynamic>(kArtistPath, data: {'name': name}));
+  /// Request: POST /api/artist?name=...   (admin only)
+  Future<ApiCallResult<dynamic>> create({required String name}) async {
+    final created = await apiCall<dynamic>(() => _dio.post<dynamic>(kArtistPath, queryParameters: {'name': name}));
+    if (created.isFailure) return created;
+
+    final info = await apiCall<Map<String, dynamic>>(
+      () => _dio.get<dynamic>(kArtistInfoPath, queryParameters: {'name': name}, options: _silent),
+      fromJson: (data) => Map<String, dynamic>.from(data as Map),
+    );
+    final id = info.dataOrNull?['_id']?.toString();
+    if (id == null) return const ApiCallFailure<dynamic>('The artist was created, but it could not be found.');
+    return ApiCallSuccess<dynamic>({'artistId': id});
   }
 
-  /// Payload: { updates: { artistId, name? } }
-  /// If your backend expects `artistId` NEXT TO `updates` instead, move it here.
+  /// PATCH /api/artist/name  { artistId, artistName }
   Future<ApiCallResult<dynamic>> update({required String artistId, String? name}) {
-    return apiCall<dynamic>(
-      () => _dio.post<dynamic>(
-        kArtistPath,
-        data: {
-          'updates': {'artistId': artistId, if (name != null) 'name': name},
-        },
-      ),
-    );
+    if (name == null) return Future.value(const ApiCallSuccess<dynamic>(null)); // nothing to change
+    return apiCall<dynamic>(() => _dio.patch<dynamic>('/api/artist/name', data: {'artistId': artistId, 'artistName': name}));
   }
 }
 

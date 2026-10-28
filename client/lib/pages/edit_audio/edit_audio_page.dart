@@ -13,7 +13,7 @@
 // Editing (both ways):
 //   - cover art               -> GET / PUT /api/audio/coverArt/:audioId   (cover_art_section.dart)
 //   - title + tags            (everything else is shown read-only)
-//        title uniqueness     -> GET  /api/audio/is_title_unique (204 = free, 400 TITLE_NOT_UNIQUE)
+//        artists & albums     -> audio_links_section.dart (links, saved right away)
 //   - "Update"                -> POST /api/audio/  { updates: { audioId, title?, tags? } }
 //
 // Where things live (all in this folder, except the shared widgets in pages/common/):
@@ -31,6 +31,7 @@ import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/pages/edit_audio/batch_upload/batch_upload_notifier.dart';
 import 'package:avarim/pages/edit_audio/batch_upload/batch_upload_view.dart';
 import 'package:avarim/pages/edit_audio/batch_upload/picked_audio.dart';
+import 'package:avarim/pages/edit_audio/audio_links_section.dart';
 import 'package:avarim/pages/edit_audio/cover_art_section.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_form.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_notifier.dart';
@@ -104,6 +105,8 @@ class _EditAudioPageState extends ConsumerState<EditAudioPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CoverArtSection(key: ValueKey('${s.audio!['_id']}'), audioId: '${s.audio!['_id']}'),
+                const SizedBox(height: 24),
+                AudioLinksSection(key: ValueKey('links-${s.audio!['_id']}'), audioId: '${s.audio!['_id']}'),
                 const SizedBox(height: 24),
                 EditAudioForm(key: ValueKey(s.revision), audio: s.audio!, isSaving: s.isSaving, isExisting: s.existing),
               ],

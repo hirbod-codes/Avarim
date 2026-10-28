@@ -27,8 +27,10 @@ import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
+import 'package:avarim/api/providers/audio_links.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/auth/token_storage.dart';
+import 'package:avarim/components/contents/audio_row_actions.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/lib/talker.dart';
@@ -88,7 +90,7 @@ enum LoadMoreMode {
 //   DELETE {baseUrl}/api/audio/:audioId
 //
 // To queue an album / playlist, all of its audios are fetched page by page:
-//   GET    {baseUrl}/api/album/audio?albumName=...&page=1&pageSize=50
+//   GET    {baseUrl}/api/album/audio?albumId=...&page=1&pageSize=50
 //   GET    {baseUrl}/api/playlist/audio?playlistId=...&page=1&pageSize=50
 //
 // Response: { "items": [ {...}, {...} ] }   (a bare JSON array also works)
@@ -140,9 +142,9 @@ class MusicSearchApi {
     return res.isSuccess;
   }
 
-  /// Ids of every audio of the album called [albumName], in order. Null when a request failed
+  /// Ids of every audio of the album [albumId], in order. Null when a request failed
   /// (its error was already shown).
-  Future<List<String>?> albumAudioIds(String albumName) => _allAudioIds('/api/album/audio', {'albumName': albumName});
+  Future<List<String>?> albumAudioIds(String albumId) => _allAudioIds('/api/album/audio', {'albumId': albumId});
 
   /// Ids of every audio of a playlist, in playlist order. Null when a request failed
   /// (its error was already shown).
@@ -337,7 +339,7 @@ class MusicSearchNotifier extends Notifier<SearchState> {
     try {
       final api = ref.read(musicSearchApiProvider);
       ids = switch (item) {
-        Album a => await api.albumAudioIds(a.name),
+        Album a => await api.albumAudioIds(a.id),
         Playlist p => await api.playlistAudioIds(p.id),
         _ => const <String>[],
       };
@@ -845,7 +847,7 @@ class _ResultTile extends StatelessWidget {
         onTap: onTap,
         leading: Thumb(url: '${AppConfig.apiUrl}/api/album/avatar/${a.id}', icon: Icons.album),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: _subtitle([a.name]),
+        subtitle: a.artistId == null ? null : _ArtistNameText(a.artistId!),
         trailing: editMode ? _editActions(context) : _queueButton(),
       ),
       Audio a => ListTile(
@@ -853,8 +855,9 @@ class _ResultTile extends StatelessWidget {
         selected: isPlaying,
         leading: Thumb(url: '${AppConfig.apiUrl}/api/audio/coverArt/${a.id}', icon: Icons.music_note),
         title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: _subtitle([a.tags?.artists.join(', '), a.tags?.album]),
-        trailing: editMode ? _editActions(context) : (a.technical?.durationSec == null ? null : Text(_formatDuration(a.technical!.durationSec!.round()))),
+        // an audio's artists are resolved from its links (they aren't part of the audio document)
+        subtitle: _AudioSubtitle(a.id),
+        trailing: editMode ? _editActions(context) : _audioTrailing(context, a),
       ),
       Playlist p => ListTile(
         // Tapping plays it: all its audios are added to the queue and the first one starts.
@@ -898,6 +901,20 @@ class _ResultTile extends StatelessWidget {
       );
     }
     return IconButton(tooltip: 'Add to queue', icon: const Icon(Icons.playlist_add), onPressed: onAddToQueue);
+  }
+
+  /// Duration (when there is room) and the "add to queue" / "add to playlist" buttons.
+  Widget _audioTrailing(BuildContext context, Audio a) {
+    final seconds = a.technical?.durationSec;
+    // narrow screens only have room for the buttons
+    final wide = MediaQuery.sizeOf(context).width >= 480;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (seconds != null && wide) Text(_formatDuration(seconds.round())),
+        AudioRowActions(audioId: a.id, initialPlaylistName: a.title),
+      ],
+    );
   }
 
   static Widget? _subtitle(List<String?> parts) {
@@ -977,5 +994,32 @@ class _Thumb extends ConsumerState<Thumb> {
           );
 
     return ClipRRect(borderRadius: BorderRadius.circular(widget.circular ? _size / 2 : 8), child: image);
+  }
+}
+
+/// The artists of an audio, e.g. "Artist A, Artist B". They are looked up per audio (and cached), see
+/// audioArtistsProvider. A blank line is shown meanwhile so the row keeps its height.
+class _AudioSubtitle extends ConsumerWidget {
+  const _AudioSubtitle(this.audioId);
+
+  final String audioId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final label = artistsLabel(ref.watch(audioArtistsProvider(audioId)).value);
+    return Text(label ?? ' ', maxLines: 1, overflow: TextOverflow.ellipsis);
+  }
+}
+
+/// The name of an album's artist.
+class _ArtistNameText extends ConsumerWidget {
+  const _ArtistNameText(this.artistId);
+
+  final String artistId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final artist = ref.watch(artistByIdProvider(artistId)).value;
+    return Text(artist?.name ?? ' ', maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 }

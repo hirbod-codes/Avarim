@@ -5,8 +5,8 @@
 // shown to the user by GlobalErrorInterceptor (the load is silent: the page shows it inline).
 //
 //   GET  /api/album/info?albumId=...                         => data: album
-//   POST /api/album/  { name }                                  => data: { id }   (create)
-//   POST /api/album/  { updates: { albumId, name? } }
+//   POST  /api/album?name=...[&artistId=...]                    => data: { albumId }   (create)
+//   PATCH /api/album/name  { albumId, albumName }               (rename)
 //
 // Images:
 //   GET / PUT /api/album/avatar/:albumId
@@ -44,25 +44,19 @@ class AlbumApi {
     );
   }
 
-  /// Creates an album. The id the server assigned is in `dataOrNull` (see [extractAlbumId]).
+  /// Creates an album (without an artist: an album belongs to zero or one artist). The id the server assigned
+  /// is in `dataOrNull` (see [extractAlbumId]).
   ///
-  /// Request:  POST /api/album/  { name }
-  /// Response: { status: 'success', data: { id } }
+  /// Request:  POST /api/album?name=...   (admin only)
+  /// Response: { status: 'success', data: { albumId } }
   Future<ApiCallResult<dynamic>> create({required String name}) {
-    return apiCall<dynamic>(() => _dio.post<dynamic>(kAlbumPath, data: {'name': name}));
+    return apiCall<dynamic>(() => _dio.post<dynamic>(kAlbumPath, queryParameters: {'name': name}));
   }
 
-  /// Payload: { updates: { albumId, name? } }
-  /// If your backend expects `albumId` NEXT TO `updates` instead, move it here.
+  /// PATCH /api/album/name  { albumId, albumName }
   Future<ApiCallResult<dynamic>> update({required String albumId, String? name}) {
-    return apiCall<dynamic>(
-      () => _dio.post<dynamic>(
-        kAlbumPath,
-        data: {
-          'updates': {'albumId': albumId, if (name != null) 'name': name},
-        },
-      ),
-    );
+    if (name == null) return Future.value(const ApiCallSuccess<dynamic>(null)); // nothing to change
+    return apiCall<dynamic>(() => _dio.patch<dynamic>('/api/album/name', data: {'albumId': albumId, 'albumName': name}));
   }
 }
 

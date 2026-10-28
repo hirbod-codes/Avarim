@@ -16,7 +16,8 @@ import ArtistRepository from "../../db/MongoDB/ArtistRepository";
 import AlbumRepository from "../../db/MongoDB/AlbumRepository";
 import ArtistAlbumAudioRepository from "../../db/MongoDB/ArtistAlbumAudioRepository";
 import { meiliAlbum, meiliArtist } from "../../db/meilisearch";
-import { Controller } from "../controller";
+import { AlbumController } from "../../controllers/AlbumController";
+import { ArtistController } from "../../controllers/ArtistController";
 
 /**
  * if album provided
@@ -61,11 +62,11 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
             const promises = []
             for (const name of artistNames) {
                 promises.push((async () => {
-                    const artistId = await runWithLogger(log, () => new Controller().createArtist(name));
+                    const artistId = await runWithLogger(log, () => new ArtistController().create(name));
 
                     let albumId: string | undefined = undefined
                     if (tags && tags.album) {
-                        albumId = await runWithLogger(log, () => new Controller().createAlbum(tags.album!, artistId))
+                        albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!))
                     }
 
                     const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId, audioId }));
@@ -81,7 +82,7 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
         } else {
             let albumId: string | undefined = undefined
             if (tags && tags.album) {
-                albumId = await runWithLogger(log, () => new Controller().createAlbum(tags.album!))
+                albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!))
             }
 
             const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId: undefined, albumId, audioId }));

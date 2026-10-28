@@ -80,32 +80,6 @@ export const deleteParamsSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
 }).required().stripUnknown()
 
-export const audioAlbumArtistSchema = object().required().shape({
-    audioId: string().objectIdString().required().label('Audio id'),
-    artistId: string().objectIdString().label('Artist id'),
-    page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
-    pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-}).required().stripUnknown()
-
-export const audioArtistAlbumSchema = object().required().shape({
-    audioId: string().objectIdString().required().label('Audio id'),
-    albumId: string().objectIdString().label('Album id'),
-    page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
-    pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-}).required().stripUnknown()
-
-export const audioAlbumSchema = object().required().shape({
-    audioId: string().objectIdString().required().label('Audio id'),
-    page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
-    pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-}).required().stripUnknown()
-
-export const audioArtistSchema = object().required().shape({
-    audioId: string().objectIdString().required().label('Audio id'),
-    page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
-    pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-}).required().stripUnknown()
-
 export const postAudioAlbumSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),
     albumId: string().objectIdString().required().label('Album id'),

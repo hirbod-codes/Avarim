@@ -47,6 +47,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:avarim/api/controllers/audio_controller.dart';
+import 'package:avarim/pages/search/album_playlist_menu.dart' show SaveAsPlaylistButton;
+import 'package:avarim/api/providers/audio_links.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/root_navigator_key.dart';
 import 'package:avarim/components/contents/audio_container.dart';
@@ -66,6 +68,10 @@ const kDockProgressHeight = 2.0;
 
 /// Space the minimized dock occupies (excluding the bottom safe-area inset).
 const kDockCollapsedExtent = kDockHeaderHeight + kDockProgressHeight;
+
+/// Height of the strip along the top edge of the minimized dock that can be tapped / dragged to seek. It is
+/// drawn over the top of the bar, so it doesn't change [kDockCollapsedExtent].
+const kDockSeekHeight = 14.0;
 
 /// Height reserved at the top of the full-screen player for the minimize / close buttons
 /// (on top of the status-bar inset).
@@ -626,6 +632,7 @@ class _QueuePanel extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(child: Text('Queue · ${ids.length}', style: theme.textTheme.titleMedium)),
+                SaveAsPlaylistButton(tooltip: 'Save the queue as a playlist', audioIds: () => List<String>.of(AudioPlayerService.queue.value.ids)),
                 IconButton(tooltip: 'Close queue', icon: const Icon(Icons.keyboard_arrow_down), onPressed: () => AudioPlayerService.setQueueVisible(false)),
               ],
             ),
@@ -665,7 +672,8 @@ class _QueueTile extends ConsumerWidget {
     final audio = meta.value;
 
     final title = audio?.title ?? (meta.hasError ? 'Unavailable audio' : '…');
-    final artists = audio?.tags?.artists.join(', ');
+    // an audio's artists are resolved from its links, not read from its tags
+    final artists = artistsLabel(ref.watch(audioArtistsProvider(audioId)).value);
 
     return ListTile(
       selected: isCurrent,
@@ -718,8 +726,8 @@ class _MiniBar extends ConsumerWidget {
     // "2 / 5 · Artist A, Artist B · Album" (the parts that exist)
     final subtitle = [
       if (multiple) '${state.index + 1} / ${state.ids.length}',
-      audio?.tags?.artists.join(', '),
-      audio?.tags?.album,
+      artistsLabel(ref.watch(audioArtistsProvider(state.currentId!)).value),
+      albumsLabel(ref.watch(audioAlbumsProvider(state.currentId!)).value),
     ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 
     return Material(
@@ -735,85 +743,91 @@ class _MiniBar extends ConsumerWidget {
             final player = snapshot.data ?? const AudioPlayerState();
             final busy = player.isLoading || player.isBuffering;
 
-            return Column(
-              mainAxisSize: MainAxisSize.min,
+            return Stack(
+              // the seek handle may stick out above the bar
+              clipBehavior: Clip.none,
               children: [
-                SizedBox(
-                  height: kDockProgressHeight,
-                  child: LinearProgressIndicator(value: player.progress, minHeight: kDockProgressHeight, backgroundColor: Colors.transparent),
-                ),
-                InkWell(
-                  onTap: AudioPlayerService.toggleMinimized,
-                  child: SizedBox(
-                    height: kDockHeaderHeight,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Row(
-                        children: [
-                          // Play / pause first, before the music note.
-                          if (busy)
-                            const SizedBox(
-                              width: 40,
-                              height: 40,
-                              child: Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2.5)),
-                            )
-                          else
-                            IconButton(
-                              tooltip: player.isPlaying ? 'Pause' : 'Play',
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(
-                                player.status == AudioPlayerStatus.ended
-                                    ? Icons.replay
-                                    : player.isPlaying
-                                    ? Icons.pause
-                                    : Icons.play_arrow,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // The line (and the seek handle) is drawn by the seek bar on top of this spacer.
+                    const SizedBox(height: kDockProgressHeight),
+                    InkWell(
+                      onTap: AudioPlayerService.toggleMinimized,
+                      child: SizedBox(
+                        height: kDockHeaderHeight,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Row(
+                            children: [
+                              // Play / pause first, before the music note.
+                              if (busy)
+                                const SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2.5)),
+                                )
+                              else
+                                IconButton(
+                                  tooltip: player.isPlaying ? 'Pause' : 'Play',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: Icon(
+                                    player.status == AudioPlayerStatus.ended
+                                        ? Icons.replay
+                                        : player.isPlaying
+                                        ? Icons.pause
+                                        : Icons.play_arrow,
+                                  ),
+                                  onPressed: () => commands.togglePlayPause(),
+                                ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.music_note, color: theme.colorScheme.primary),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+                                    if (subtitle.isNotEmpty) Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                                  ],
+                                ),
                               ),
-                              onPressed: () => commands.togglePlayPause(),
-                            ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.music_note, color: theme.colorScheme.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
-                                if (subtitle.isNotEmpty) Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
-                              ],
-                            ),
+                              if (multiple)
+                                IconButton(
+                                  tooltip: 'Previous',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.skip_previous),
+                                  onPressed: state.hasPrevious ? AudioPlayerService.previous : null,
+                                ),
+                              if (multiple)
+                                IconButton(
+                                  tooltip: 'Next',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.skip_next),
+                                  onPressed: state.hasNext ? AudioPlayerService.next : null,
+                                ),
+                              IconButton(
+                                tooltip: 'Expand',
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.expand_less),
+                                onPressed: AudioPlayerService.toggleMinimized,
+                              ),
+                              IconButton(
+                                tooltip: 'Close',
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.close),
+                                onPressed: AudioPlayerService.close,
+                              ),
+                            ],
                           ),
-                          if (multiple)
-                            IconButton(
-                              tooltip: 'Previous',
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.skip_previous),
-                              onPressed: state.hasPrevious ? AudioPlayerService.previous : null,
-                            ),
-                          if (multiple)
-                            IconButton(
-                              tooltip: 'Next',
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.skip_next),
-                              onPressed: state.hasNext ? AudioPlayerService.next : null,
-                            ),
-                          IconButton(
-                            tooltip: 'Expand',
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.expand_less),
-                            onPressed: AudioPlayerService.toggleMinimized,
-                          ),
-                          IconButton(
-                            tooltip: 'Close',
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.close),
-                            onPressed: AudioPlayerService.close,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
+                // Tap or drag along the top edge of the bar to seek.
+                Positioned(left: 0, right: 0, top: 0, height: kDockSeekHeight, child: _DockSeekBar(player: player)),
               ],
             );
           },
@@ -840,4 +854,118 @@ class AudioDockSpacer extends StatelessWidget {
       builder: (context, state, _) => SizedBox(height: state.isEmpty ? 0 : kDockCollapsedExtent + bottomInset),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Seek bar on the top edge of the minimized dock
+// ---------------------------------------------------------------------------
+
+/// The progress line along the top edge of the mini bar. It always shows the position; tap it or drag along it
+/// to seek without expanding the player. The handle is small and grows (with the line) while the mouse is over
+/// the bar (web / desktop) or while it is dragged (touch).
+class _DockSeekBar extends ConsumerStatefulWidget {
+  const _DockSeekBar({required this.player});
+
+  final AudioPlayerState player;
+
+  @override
+  ConsumerState<_DockSeekBar> createState() => _DockSeekBarState();
+}
+
+class _DockSeekBarState extends ConsumerState<_DockSeekBar> {
+  /// 0..1 while the user drags (the bar follows the pointer before the player catches up).
+  double? _drag;
+  bool _hover = false;
+
+  double _fractionAt(double dx, double width) => width <= 0 ? 0.0 : (dx / width).clamp(0.0, 1.0);
+
+  void _seek(double fraction) {
+    final duration = widget.player.duration;
+    if (duration == Duration.zero) return; // nothing loaded yet
+    ref.read(audioPlayerCommandsProvider.notifier).seek(Duration(milliseconds: (fraction * duration.inMilliseconds).round()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final player = widget.player;
+    final progress = _drag ?? player.progress;
+
+    return LayoutBuilder(
+      builder: (context, box) {
+        final width = box.maxWidth;
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: Semantics(
+            slider: true,
+            label: 'Seek',
+            value: '${(progress * 100).round()}%',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (d) => _seek(_fractionAt(d.localPosition.dx, width)),
+              onHorizontalDragStart: (d) => setState(() => _drag = _fractionAt(d.localPosition.dx, width)),
+              onHorizontalDragUpdate: (d) => setState(() => _drag = _fractionAt(d.localPosition.dx, width)),
+              onHorizontalDragEnd: (_) {
+                final fraction = _drag;
+                setState(() => _drag = null);
+                if (fraction != null) _seek(fraction);
+              },
+              onHorizontalDragCancel: () => setState(() => _drag = null),
+              child: CustomPaint(
+                size: Size(width, kDockSeekHeight),
+                painter: _DockSeekPainter(
+                  progress: progress,
+                  buffered: player.bufferedProgress,
+                  active: _hover || _drag != null,
+                  playedColor: theme.colorScheme.primary,
+                  bufferedColor: theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                  trackColor: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DockSeekPainter extends CustomPainter {
+  const _DockSeekPainter({
+    required this.progress,
+    required this.buffered,
+    required this.active,
+    required this.playedColor,
+    required this.bufferedColor,
+    required this.trackColor,
+  });
+
+  final double progress;
+  final double buffered;
+
+  /// Hovered or dragged: a thicker line and a bigger handle.
+  final bool active;
+  final Color playedColor;
+  final Color bufferedColor;
+  final Color trackColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lineHeight = active ? kDockProgressHeight * 2 : kDockProgressHeight;
+    final played = size.width * progress.clamp(0.0, 1.0);
+
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, lineHeight), Paint()..color = trackColor);
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width * buffered.clamp(0.0, 1.0), lineHeight), Paint()..color = bufferedColor);
+    canvas.drawRect(Rect.fromLTWH(0, 0, played, lineHeight), Paint()..color = playedColor);
+
+    final radius = active ? 7.0 : 3.5;
+    final x = size.width <= radius * 2 ? played : played.clamp(radius, size.width - radius);
+    canvas.drawCircle(Offset(x, lineHeight / 2), radius, Paint()..color = playedColor);
+  }
+
+  @override
+  bool shouldRepaint(_DockSeekPainter old) =>
+      old.progress != progress || old.buffered != buffered || old.active != active || old.playedColor != playedColor || old.bufferedColor != bufferedColor || old.trackColor != trackColor;
 }

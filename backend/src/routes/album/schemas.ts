@@ -6,7 +6,6 @@ import { boolean } from "yup";
 
 export const postSchema = object().required().shape({
     name: string().required().label('Name'),
-    artistId: string().objectIdString().optional().label('Artist id'),
 }).stripUnknown().required()
 
 export const audioListQuerySchema = object().required().shape({
@@ -20,13 +19,8 @@ export const albumIdArtistNameSchema = object().required().shape({
 
 export const albumOwnerSchema = object().required().shape({
     albumId: string().objectIdString().required().label('Album id'),
+    artistId: string().optional().label('Artist id'),
     newArtistId: string().optional().label('New artist id'),
-}).stripUnknown().required()
-
-export const albumNamePagePageSizeSchema = object().required().shape({
-    albumId: string().required().label('Album Id'),
-    page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
-    pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
 }).stripUnknown().required()
 
 export const infoQuerySchema = object().required().shape({
@@ -47,17 +41,8 @@ export const infoQuerySchema = object().required().shape({
         otherwise(schema) {
             return schema.notRequired()
         },
-    }),
-    artistId: string().optional().label('Artist id').when('albumId', {
-        is: (albumId: any) => !albumId || albumId === null || albumId === undefined,
-        then(schema) {
-            return schema.required()
-        },
-        otherwise(schema) {
-            return schema.notRequired()
-        },
-    }),
-}, [['albumId', 'name'], ['albumId', 'artistId']]).stripUnknown().required()
+    })
+}, [['albumId', 'name']]).stripUnknown().required()
 
 export const listQuerySchema = object().required().shape({
     search: string().max(5000).optional(),

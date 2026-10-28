@@ -48,14 +48,13 @@ class TagGroup {
 String normalizeIsrc(String v) => v.replaceAll('-', '').replaceAll(' ', '').toUpperCase();
 
 /// The editable tags. Where each one is saved (see AudioUploadNotifier.save):
-///   artists -> PATCH /api/audio/artist     album -> PATCH /api/audio/album     lyrics -> PATCH /api/audio/lyrics
-///   every other tag here -> PATCH /api/audio/tag
+///   lyrics -> PATCH /api/audio/lyrics     every other tag here -> PATCH /api/audio/tag
+/// Artists and albums are NOT tags any more: they are links to artist / album records, edited right away in
+/// audio_links_section.dart.
 /// `audioTitle` (read from the file) is not editable, so it has no spec and is shown read-only,
 /// like any tag that has no spec (e.g. `albumArtists`).
 const kTagGroups = [
   TagGroup('Track info', [
-    TagSpec('artists', 'Artists', TagKind.list),
-    TagSpec('album', 'Album', TagKind.text),
     TagSpec('genres', 'Genres', TagKind.list),
     TagSpec('year', 'Year', TagKind.integer, min: 1000, max: 9999),
     TagSpec(

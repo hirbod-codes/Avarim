@@ -59,7 +59,14 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return (await ArtistAlbumAudioRepository.collection!.find({ _id: ObjectId.createFromHexString(id) }, { session: this.session }).toArray())[0]
     }
 
-    async getBy(filter: Filter<WithId<ArtistAlbumAudio>>): Promise<WithId<ArtistAlbumAudio>[]> {
+    getFromCursor(fromTsMs: number) {
+        return ArtistAlbumAudioRepository.collection!.find({ updatedAt: { $gte: fromTsMs } }, { session: this.session })
+    }
+
+    async getBy(filter: Filter<WithId<ArtistAlbumAudio>>, skip?: number, limit?: number): Promise<WithId<ArtistAlbumAudio>[]> {
+        if (skip !== undefined && skip !== null && limit !== undefined && limit !== null)
+            return await ArtistAlbumAudioRepository.collection!.find(filter, { session: this.session }).skip(skip).limit(limit).toArray()
+
         return await ArtistAlbumAudioRepository.collection!.find(filter, { session: this.session }).toArray()
     }
 
@@ -75,7 +82,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { artistId } },
-                { $group: { _id: '$albumId' } },
+                { $group: { _id: { $toObjectId: '$albumId' } } },
                 {
                     $lookup: {
                         from: albumCollection,
@@ -98,7 +105,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { artistId } },
-                { $group: { _id: '$audioId' } },
+                { $group: { _id: { $toObjectId: '$audioId' } } },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -121,7 +128,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { artistId, albumId } },
-                { $group: { _id: '$audioId' } },
+                { $group: { _id: { $toObjectId: '$audioId' } } },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -144,7 +151,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { albumId } },
-                { $group: { _id: '$artistId' } },
+                { $group: { _id: { $toObjectId: '$artistId' } } },
                 {
                     $lookup: {
                         from: artistCollection,
@@ -167,7 +174,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { albumId } },
-                { $group: { _id: '$audioId' } },
+                { $group: { _id: { $toObjectId: '$audioId' } } },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -190,7 +197,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { audioId } },
-                { $group: { _id: '$albumId' } },
+                { $group: { _id: { $toObjectId: '$albumId' } } },
                 {
                     $lookup: {
                         from: albumCollection,
@@ -213,7 +220,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { audioId, artistId } },
-                { $group: { _id: '$albumId' } },
+                { $group: { _id: { $toObjectId: '$albumId' } } },
                 {
                     $lookup: {
                         from: albumCollection,
@@ -236,7 +243,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { audioId, albumId } },
-                { $group: { _id: '$artistId' } },
+                { $group: { _id: { $toObjectId: '$artistId' } } },
                 {
                     $lookup: {
                         from: artistCollection,
@@ -260,7 +267,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
                 { $match: { audioId } },
-                { $group: { _id: '$artistId' } },
+                { $group: { _id: { $toObjectId: '$artistId' } } },
                 {
                     $lookup: {
                         from: artistCollection,
@@ -291,6 +298,10 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!.deleteMany({ albumId, audioId }, { session: this.session })
     }
 
+    async updateManyByAlbumId(albumId: string, updates: ArtistAlbumAudioUpdate) {
+        return await ArtistAlbumAudioRepository.collection!.updateMany({ albumId }, { $set: { ...updates, updatedAt: Date.now() } }, { session: this.session })
+    }
+
     async updateManyByAudioId(audioId?: string, updates?: ArtistAlbumAudioUpdate) {
         return await ArtistAlbumAudioRepository.collection!.updateMany({ audioId }, { $set: { ...updates, updatedAt: Date.now() } }, { session: this.session })
     }
@@ -303,7 +314,17 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!.updateMany({ albumId, audioId }, { $set: { ...updates, updatedAt: Date.now() } }, { upsert: true, session: this.session })
     }
 
-    async deleteBy(filter: ArtistAlbumAudioUpdate): Promise<DeleteResult> {
+    async updateBy(filter: { artistId?: string; albumId?: string; audioId?: string; }, update: { artistId?: string; albumId?: string; audioId?: string; }) {
+        if (!update.audioId) delete update.audioId
+
+        if (Object.keys(update).length < 1) return
+
+        return await ArtistAlbumAudioRepository.collection!.updateMany(filter, { $set: { ...update, updatedAt: Date.now() } }, { session: this.session })
+    }
+
+    async deleteBy(filter: ArtistAlbumAudioUpdate) {
+        if (Object.keys(filter).length < 1) return
+
         return await ArtistAlbumAudioRepository.collection!.deleteMany(filter, { session: this.session })
     }
 

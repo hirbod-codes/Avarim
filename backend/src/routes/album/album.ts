@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { albumIdArtistNameSchema, albumNamePagePageSizeSchema, albumOwnerSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
+import { albumIdArtistNameSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
 import AlbumRepository from '../../db/MongoDB/AlbumRepository';
 import { meiliAlbum } from '../../db/meilisearch';
 import { Album, getAvatarKey } from '../../db/models/Album';
@@ -15,9 +15,10 @@ import { MongoDB } from '../../db/MongoDB/mongodb';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 import AudioRepository from '../../db/MongoDB/AudioRepository';
 import { WithId } from '../../db/common_schemas';
-import { Artist } from '../../db/models/Artist';
-import { Controller } from '../controller';
 import { Audio } from '../../db/models/Audio';
+import { AlbumController } from '../../controllers/AlbumController';
+import { AudioController } from '../../controllers/AudioController';
+import { ArtistAlbumAudioController } from '../../controllers/ArtistAlbumAudioController';
 
 const router = express.Router();
 
@@ -28,11 +29,11 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
         log.info('album list request received');
 
         log.debug({ query: req.query });
-        const { name, artistId } = await runWithLogger(log, () => validate(postSchema, req.query));
-        log.debug({ name, artistId });
+        const { name } = await runWithLogger(log, () => validate(postSchema, req.query));
+        log.debug({ name });
         log.info('Input validated');
 
-        const albumId = await runWithLogger(log, () => new Controller().createAlbum(name, artistId))
+        const albumId = await runWithLogger(log, () => new AlbumController().create(name))
         log.debug({ albumId });
 
         log.info('album created');
@@ -85,6 +86,9 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
+/**
+ * if name is provided, client will receive many albums
+ */
 router.get('/info', auth, async (req, res) => {
     let log = getLogger().child({ module: 'album', route: 'GET /api/album/info' });
 
@@ -92,9 +96,9 @@ router.get('/info', auth, async (req, res) => {
         log.info('album info request received');
 
         log.debug({ query: req.query });
-        const { albumId, name, artistId } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
+        const { albumId, name } = await runWithLogger(log, () => validate(infoQuerySchema, req.query));
         log.info('Input validated');
-        log.debug({ albumId, name, artistId });
+        log.debug({ albumId, name });
 
         const userId = req.user!.userId;
         log = log.child({ userId });
@@ -107,7 +111,7 @@ router.get('/info', auth, async (req, res) => {
         if (albumId)
             album = await runWithLogger(log, () => albumRepository.get(albumId))
         else
-            album = await runWithLogger(log, () => albumRepository.getByNameByArtistId(name!, artistId!))
+            album = await runWithLogger(log, () => albumRepository.getByName(name!))
 
         log.debug({ album });
 
@@ -117,53 +121,6 @@ router.get('/info', auth, async (req, res) => {
         }
 
         res.status(200).json({ status: 'success', data: album });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-});
-
-router.get('/artist', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'album', route: 'GET /api/album/artist' });
-
-    try {
-        log.info('album artist list request received');
-
-        log.debug({ query: req.query });
-        const { albumId, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
-        log.debug({ albumId, page, pageSize });
-        log.info('Input validated');
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        let artists: WithId<Artist>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumId(albumId, (page - 1) * pageSize, pageSize))
-        log.debug({ artists });
-
-        res.status(200).json({ status: 'success', data: artists });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-});
-
-router.get('/audio', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'album', route: 'GET /api/album/audio' });
-
-    try {
-        log.info('album audio list request received');
-
-        log.debug({ query: req.query });
-        const { albumId, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
-        log.info('Input validated');
-        log.debug({ albumId, page, pageSize });
-
-        const userId = req.user!.userId;
-        log = log.child({ userId });
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        let audios: WithId<Audio>[] = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(albumId, (page - 1) * pageSize, pageSize))
-        log.debug({ audios });
-
-        res.status(200).json({ status: 'success', data: audios });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -200,7 +157,7 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
         log.debug({ album });
         if (!album) {
             log.info('album not found');
-            return res.status(400).json({ status: 'error', error_code: 'ARTIST_NOT_FOUND' });
+            return res.status(400).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' });
         }
 
         if (album.name === albumName) {
@@ -229,44 +186,6 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
     } catch (err) {
         try { await db?.abortTransaction() } catch (_) { }
 
-        runWithLogger(log, () => handleError(res, err))
-    }
-})
-
-router.patch('/owner', auth, isAdminIfAuthenticated, async (req, res) => {
-    let log = getLogger().child({ module: 'album', route: 'PATCH /api/album/owner' });
-
-    try {
-        log.info('audio approve request received');
-
-        log.debug({ body: req.body });
-        const { albumId, newArtistId } = await runWithLogger(log, () => validate(albumOwnerSchema, req.body))
-        log.debug({ albumId, newArtistId });
-        log.info('input validated');
-
-        const albumRepository = new AlbumRepository()
-
-        const album = await runWithLogger(log, () => albumRepository.get(albumId));
-        log.debug({ album });
-        if (!album) {
-            log.info('album not found');
-            return res.status(400).json({ status: 'error', error_code: 'ARTIST_NOT_FOUND' });
-        }
-
-        if (album.artistId === newArtistId) {
-            log.info('album already has artistId field set to the requested value')
-            return res.status(200).json({ status: 'success' })
-        }
-
-        const updateResult = await runWithLogger(log, () => albumRepository.unsafeUpdate(albumId, { artistId: newArtistId }));
-        log.debug({ updateResult });
-        if (!updateResult.acknowledged) {
-            log.info('update failed');
-            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
-        }
-
-        return res.status(200).json({ status: 'success' })
-    } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
 })
@@ -421,23 +340,30 @@ router.delete('/:albumId', auth, isAdminIfAuthenticated, async (req, res) => {
         const session = await db.startTransaction()
 
         const artistAlbumAudio = new ArtistAlbumAudioRepository()
+        artistAlbumAudio.setTransactionSession(session)
+
         const audioRepository = new AudioRepository()
+        audioRepository.setTransactionSession(session)
+
+        const albumRepository = new AlbumRepository()
         audioRepository.setTransactionSession(session)
 
         if (shouldDeleteAudios === true) {
             let audios: WithId<Audio>[] = [], skip = 0
             do {
-                audios = await runWithLogger(log, () => artistAlbumAudio.getManyAudioByAlbumId(albumId, skip, 10))
+                audios = await runWithLogger(log, () => new ArtistAlbumAudioController().getAlbumAudios(albumId, skip, 10, artistAlbumAudio))
                 if (audios.length === 0) break;
 
                 for (const audio of audios)
-                    await runWithLogger(log, () => new Controller().deleteAudio(audio, audioRepository))
+                    await runWithLogger(log, () => new AudioController().delete(audio, audioRepository))
 
                 skip += audios.length
             } while (audios.length !== 0);
         }
 
-        await runWithLogger(log, () => new Controller().deleteAlbum(albumId));
+        await runWithLogger(log, () => new AlbumController().delete(albumId, albumRepository));
+
+        await db.commitTransaction()
 
         log.info('album deleted successfully');
         res.status(204).json({ status: 'success' });
