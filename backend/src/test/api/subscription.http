@@ -39,3 +39,12 @@ Content-Type: audio/flac
 # @name is_upload_finished
 GET https://localhost:3000/api/audio/is_upload_finished?title=d44a6804-8590-45fb-9014-0985815a5785__AUDIO_TITLE_SEPARATOR__5f2a5bf8-7871-43b4-8b70-21b539837855-input HTTP/1.1
 Authorization: bearer {{accessToken}}
+
+###
+POST https://localhost:3000/ HTTP/1.1
+Content-Type: application/json
+
+{
+    "albumId": null,
+    "audioId": "abgdtijsmp;egklp"
+}

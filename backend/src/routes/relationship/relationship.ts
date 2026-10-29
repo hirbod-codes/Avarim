@@ -7,13 +7,13 @@ import { albumNamePagePageSizeSchema, artistIdPagePageSizeSchema, audioAlbumArti
 
 const router = express.Router();
 
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'relationship', route: 'POST /api/relationship/' });
 
     try {
         log.info('relationship request received');
 
-        log.debug({ query: req.query });
+        log.debug({ body: req.body });
         const create = await runWithLogger(log, () => validate(createSchema, req.body))
         log.debug({ create });
         log.info('input validated');
@@ -36,7 +36,7 @@ router.get('/', auth, async (req, res) => {
         log.info('relationship request received');
 
         log.debug({ query: req.query });
-        const { page, pageSize, ...filter } = await runWithLogger(log, () => validate(fetchSchema, req.body))
+        const { page, pageSize, ...filter } = await runWithLogger(log, () => validate(fetchSchema, req.query))
         log.debug({ page, pageSize, filter });
         log.info('input validated');
 
@@ -297,26 +297,31 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
         log.info('update relationship request received');
 
         log.debug({ body: req.body });
-        const filter = await runWithLogger(log, () => validate(filterSchema, req.body))
+        const filter = await runWithLogger(log, () => validate(filterSchema, req.body?.filter))
         log.debug({ filter });
-        const update = await runWithLogger(log, () => validate(updateSchema, req.body))
+        const update = await runWithLogger(log, () => validate(updateSchema, req.body?.update))
         log.debug({ update });
         log.info('input validated');
 
+        if (filter.artistId === undefined) filter.artistId = undefined
+        if (filter.albumId === undefined) filter.albumId = undefined
+        if (filter.audioId === undefined) filter.audioId = undefined
         if (filter.artistId === null) delete filter.artistId
         if (filter.albumId === null) delete filter.albumId
         if (filter.audioId === null) delete filter.audioId
         log.debug({ filter })
 
+        if (!filter.audioId && !filter.artistId && !filter.albumId){
+            log.info('there is no filter');
+            return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
+        }
+
+        if (update.artistId === undefined) update.artistId = undefined
+        if (update.albumId === undefined) update.albumId = undefined
         if (update.artistId === null) delete update.artistId
         if (update.albumId === null) delete update.albumId
         if (!update.audioId) delete update.audioId
         log.debug({ update })
-
-        if (Object.keys(update).length < 1) {
-            log.info('there is nothing to update');
-            return res.status(400).json({ status: 'error', error_code: 'NOTHING_TO_UPDATE' });
-        }
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
 
@@ -368,3 +373,5 @@ router.delete('/', auth, isAdminIfAuthenticated, async (req, res) => {
         runWithLogger(log, () => handleError(res, err))
     }
 })
+
+export { router as relationshipRoutes };

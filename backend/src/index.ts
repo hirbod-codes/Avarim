@@ -25,6 +25,11 @@ import { UserRepository } from './db/MongoDB/UserRepository';
 import { InvalidTokensRepository } from './db/MongoDB/InvalidTokensRepository';
 import AudioRepository from './db/MongoDB/AudioRepository';
 import AppSettingsRepository from './db/MongoDB/AppSettingsRepository';
+import AlbumRepository from './db/MongoDB/AlbumRepository';
+import ArtistRepository from './db/MongoDB/ArtistRepository';
+import ArtistAlbumAudioRepository from './db/MongoDB/ArtistAlbumAudioRepository';
+import PlaylistRepository from './db/MongoDB/PlaylistRepository';
+import PlaylistAudioRepository from './db/MongoDB/PlaylistAudioRepository';
 // import PlanRepository from './DB/repositories/PlanRepository';
 // import SubscriptionRepository from './DB/repositories/SubscriptionRepository';
 // import UsageRepository from './DB/repositories/UsageRepository';
@@ -49,6 +54,10 @@ export { ffmpeg };
 import { audioRoutes } from './routes/audio/audio';
 import { userRoutes } from './routes/user/user';
 import { authRoutes } from './routes/auth/auth';
+import { artistRoutes } from './routes/artist/artist';
+import { albumRoutes } from './routes/album/album';
+import { playlistRoutes } from './routes/playlist/playlist';
+import { relationshipRoutes } from './routes/relationship/relationship';
 // import { planRoutes } from './routes/plan/plan';
 // import { subscriptionRoutes } from './routes/subscription/subscription';
 
@@ -66,14 +75,6 @@ import { registerProcessErrorHandlers } from './middlewares/processErrorHandlers
 import { OtpFactory } from './services/OTP/OtpFactory';
 import { PaymentFactory } from './services/Payments/factory';
 import { SmtpFactory } from './services/SMTP/SmtpFactory';
-import AlbumRepository from './db/MongoDB/AlbumRepository';
-import ArtistRepository from './db/MongoDB/ArtistRepository';
-import ArtistAlbumAudioRepository from './db/MongoDB/ArtistAlbumAudioRepository';
-import { artistRoutes } from './routes/artist/artist';
-import { albumRoutes } from './routes/album/album';
-import { playlistRoutes } from './routes/playlist/playlist';
-import PlaylistRepository from './db/MongoDB/PlaylistRepository';
-import PlaylistAudioRepository from './db/MongoDB/PlaylistAudioRepository';
 
 export const s3 = new S3Client({
     region: 'us-east-1',
@@ -190,7 +191,7 @@ export const payments = {
         app.get('/is_seeding', (req, res) => { res.status(200).json({ isSeeding: MongoDB.isSeeding() }) })
 
     if (!isProduction)
-        app.get('/', (req, res) => {
+        app.post('/', async (req, res) => {
             res.send('test route' + (new Date()).toISOString());
         });
 
@@ -200,6 +201,7 @@ export const payments = {
     app.use('/api/album', albumRoutes);
     app.use('/api/audio', audioRoutes);
     app.use('/api/playlist', playlistRoutes);
+    app.use('/api/relationship', relationshipRoutes);
     // app.use('/api/subscription', subscriptionRoutes);
     // app.use('/api/plan', planRoutes);
 

@@ -98,7 +98,7 @@ export class AlbumController {
         // a cron job will handle dangling audios
         const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ albumId }))
         log.debug({ artistAlbumAudioDeleteResult })
-        if (!artistAlbumAudioDeleteResult.acknowledged) {
+        if (!artistAlbumAudioDeleteResult?.acknowledged) {
             log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio records from db');
             throw new MeiliAlbumDeleteError()
         }

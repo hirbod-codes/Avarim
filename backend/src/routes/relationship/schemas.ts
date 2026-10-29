@@ -17,7 +17,7 @@ export const fetchSchema = object().required().shape({
     pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
 }).stripUnknown().required()
 
-export const filterSchema = object().required().shape({
+export const filterSchema = object().shape({
     artistId: string().nullable().optional().label('Artist id'),
     albumId: string().nullable().optional().label('Album id'),
     audioId: string().nullable().optional().label('Audio id'),
@@ -33,7 +33,7 @@ export const artistIdPagePageSizeSchema = object().required().shape({
     artistId: string().required().label('Artist Id'),
     page: number().integer().min(1).max(MAX_PAGE).default(1).label('Page'),
     pageSize: number().integer().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).label('Page size'),
-})
+}).required().stripUnknown()
 
 export const audioAlbumArtistSchema = object().required().shape({
     audioId: string().objectIdString().required().label('Audio id'),

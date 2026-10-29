@@ -10,8 +10,6 @@ export const getAvatarKey = (albumId: string) => `${s3RootName}/album/avatar/${a
 const shape = {
     schemaVersion: string().optional().min(6).max(20),
 
-    artistId: string().optional(),
-
     name: string().required(),
 
     avatarKey: string().optional().url(),
