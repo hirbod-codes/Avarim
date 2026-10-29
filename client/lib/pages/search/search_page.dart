@@ -90,7 +90,7 @@ enum LoadMoreMode {
 //   DELETE {baseUrl}/api/audio/:audioId
 //
 // To queue an album / playlist, all of its audios are fetched page by page:
-//   GET    {baseUrl}/api/album/audio?albumId=...&page=1&pageSize=50
+//   GET    {baseUrl}/api/relationship/album/audio?albumId=...&page=1&pageSize=50
 //   GET    {baseUrl}/api/playlist/audio?playlistId=...&page=1&pageSize=50
 //
 // Response: { "items": [ {...}, {...} ] }   (a bare JSON array also works)
@@ -144,7 +144,7 @@ class MusicSearchApi {
 
   /// Ids of every audio of the album [albumId], in order. Null when a request failed
   /// (its error was already shown).
-  Future<List<String>?> albumAudioIds(String albumId) => _allAudioIds('/api/album/audio', {'albumId': albumId});
+  Future<List<String>?> albumAudioIds(String albumId) => _allAudioIds('/api/relationship/album/audio', {'albumId': albumId});
 
   /// Ids of every audio of a playlist, in playlist order. Null when a request failed
   /// (its error was already shown).
@@ -847,7 +847,7 @@ class _ResultTile extends StatelessWidget {
         onTap: onTap,
         leading: Thumb(url: '${AppConfig.apiUrl}/api/album/avatar/${a.id}', icon: Icons.album),
         title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: a.artistId == null ? null : _ArtistNameText(a.artistId!),
+        subtitle: _AlbumSubtitle(a.id),
         trailing: editMode ? _editActions(context) : _queueButton(),
       ),
       Audio a => ListTile(
@@ -1011,15 +1011,15 @@ class _AudioSubtitle extends ConsumerWidget {
   }
 }
 
-/// The name of an album's artist.
-class _ArtistNameText extends ConsumerWidget {
-  const _ArtistNameText(this.artistId);
+/// The artists of an album, e.g. "Artist A, Artist B". Album names repeat, so this tells them apart.
+class _AlbumSubtitle extends ConsumerWidget {
+  const _AlbumSubtitle(this.albumId);
 
-  final String artistId;
+  final String albumId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final artist = ref.watch(artistByIdProvider(artistId)).value;
-    return Text(artist?.name ?? ' ', maxLines: 1, overflow: TextOverflow.ellipsis);
+    final label = artistsLabel(ref.watch(albumArtistsProvider(albumId)).value);
+    return Text(label ?? ' ', maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 }

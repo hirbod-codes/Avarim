@@ -9,7 +9,7 @@
 //   GET  /api/playlist?page&pageSize&search                       playlists (for the picker)
 //   POST /api/playlist  { name }                                  create -> { playlistId }
 //   GET  /api/playlist/audio?playlistId=&page&pageSize            audios already in a playlist
-//   GET  /api/album/audio?albumId=&page&pageSize                  the album's audios
+//   GET  /api/relationship/album/audio?albumId=&page&pageSize                  the album's audios
 //   POST /api/playlist/audio  { playlistId, audioIds }            add audios (in chunks, JSON body)
 //
 // The same actions also work for any list of audio ids (one audio of a result row, the whole queue):
@@ -65,7 +65,7 @@ class AlbumPlaylistApi {
   }
 
   /// Ids of every audio of the album [albumId]. Null when a request failed (already shown).
-  Future<List<String>?> albumAudioIds(String albumId) => _allAudioIds('/api/album/audio', {'albumId': albumId});
+  Future<List<String>?> albumAudioIds(String albumId) => _allAudioIds('/api/relationship/album/audio', {'albumId': albumId});
 
   /// Ids of every audio in a playlist. Null when a request failed (already shown).
   Future<List<String>?> playlistAudioIds(String playlistId) => _allAudioIds('/api/playlist/audio', {'playlistId': playlistId});

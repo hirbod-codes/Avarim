@@ -5,7 +5,7 @@
 // audio that is also in another album, an artist's singles or a playlist disappears from those too), not just
 // from this album.
 //
-//   ids        GET /api/album/audio?albumId&page&pageSize   (all pages, loaded before anything is deleted)
+//   ids        GET /api/relationship/album/audio?albumId&page&pageSize   (all pages, loaded before anything is deleted)
 //   delete     DELETE /api/audio/:audioId                   (one by one, stops at the first failure)
 //
 // Progress is shown inline with a Cancel button (the audio being deleted finishes first).

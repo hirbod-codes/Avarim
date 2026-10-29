@@ -30,10 +30,10 @@
 // Endpoints used:
 //   GET /api/artist/info?artistId=… | name=…
 //   GET /api/artist/avatar/:artistId        GET /api/artist/banner/:artistId   (the banner keeps its aspect ratio)
-//   GET /api/artist/album?artistId=&page=&pageSize=           the artist's albums
-//   GET /api/artist/audio?artistId=&page=&pageSize=           "Play" (all of the artist's audios)
-//   GET /api/artist/audio/singles?artistId=&page=&pageSize=   the "Singles" section: audios with this artist but no album
-//   GET /api/album/audio?albumId=&page=&pageSize=             an album's audios (play an album / add it to the queue)
+//   GET /api/relationship/artist/album?artistId=&page=&pageSize=           the artist's albums
+//   GET /api/relationship/artist/audio?artistId=&page=&pageSize=           "Play" (all of the artist's audios)
+//   GET /api/relationship/artist/audio/singles?artistId=&page=&pageSize=   the "Singles" section: audios with this artist but no album
+//   GET /api/relationship/album/audio?albumId=&page=&pageSize=             an album's audios (play an album / add it to the queue)
 //   GET /api/album/avatar/:albumId                            album cover
 //
 // ASSUMPTIONS (those responses weren't visible, so they are parsed leniently):
@@ -157,7 +157,7 @@ class ArtistPageApi {
   /// null = the request failed.
   Future<List<ArtistAlbum>?> albums(String artistId, int page) async {
     final res = await apiCall<List<ArtistAlbum>>(
-      () => _dio.get<dynamic>('/api/artist/album', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAlbumsPageSize}),
+      () => _dio.get<dynamic>('/api/relationship/artist/album', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAlbumsPageSize}),
       fromJson: (data) => List.from(data).map(ArtistAlbum.tryParse).whereType<ArtistAlbum>().toList(),
     );
     return res.dataOrNull;
@@ -166,25 +166,25 @@ class ArtistPageApi {
   /// null = the request failed.
   Future<List<ArtistTrack>?> audios(String artistId, int page) async {
     final res = await apiCall<List<ArtistTrack>>(
-      () => _dio.get<dynamic>('/api/artist/audio', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
+      () => _dio.get<dynamic>('/api/relationship/artist/audio', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
       fromJson: (data) => List.from(data).map(ArtistTrack.tryParse).whereType<ArtistTrack>().toList(),
     );
     return res.dataOrNull;
   }
 
-  /// The artist's audios that are in no album (GET /api/artist/audio/singles). null = the request failed.
+  /// The artist's audios that are in no album (GET /api/relationship/artist/audio/singles). null = the request failed.
   Future<List<Audio>?> singles(String artistId, int page) async {
     final res = await apiCall<List<Audio>>(
-      () => _dio.get<dynamic>('/api/artist/audio/singles', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
+      () => _dio.get<dynamic>('/api/relationship/artist/audio/singles', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
       fromJson: (data) => [for (final e in List.from(data)) Audio.fromJson(Map<String, dynamic>.from(e as Map))],
     );
     return res.dataOrNull;
   }
 
-  /// An album's audios (GET /api/album/audio). null = the request failed.
+  /// An album's audios (GET /api/relationship/album/audio). null = the request failed.
   Future<List<ArtistTrack>?> albumAudios(String albumId, int page) async {
     final res = await apiCall<List<ArtistTrack>>(
-      () => _dio.get<dynamic>('/api/album/audio', queryParameters: {'albumId': albumId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
+      () => _dio.get<dynamic>('/api/relationship/album/audio', queryParameters: {'albumId': albumId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
       fromJson: (data) => List.from(data).map(ArtistTrack.tryParse).whereType<ArtistTrack>().toList(),
     );
     return res.dataOrNull;
@@ -454,7 +454,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
     }
   }
 
-  /// An album's audios (GET /api/album/audio?albumId). Loaded once per album; a failure isn't cached.
+  /// An album's audios (GET /api/relationship/album/audio?albumId). Loaded once per album; a failure isn't cached.
   Future<List<ArtistTrack>> _audiosOf(ArtistAlbum album) async {
     final albumId = album.id;
     if (albumId == null) throw StateError('the album has no id');

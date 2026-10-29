@@ -4,8 +4,8 @@
 // track), saved with shared_preferences, and applied to the player's engine whenever a track is opened
 // (see AudioPlayerCommands.open). The equalizer panel edits them through [EqualizerStore].
 //
-// Bands differ per engine (Android: the device's, usually 5; web: 10), so the gains are stored per band
-// index. If the number of bands changes (another device) missing gains count as 0 dB.
+// Every engine uses the same 10 octave bands (31 Hz ... 16 kHz, +-12 dB), and the gains are stored per band
+// index. If the number of bands ever changes, missing gains count as 0 dB.
 
 import 'dart:math' as math;
 

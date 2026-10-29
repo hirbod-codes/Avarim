@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:avarim/components/global/system_media_session.dart';
 import 'package:avarim/go_router.dart';
 import 'package:avarim/auth/auth_controller.dart';
 import 'package:avarim/auth/auth_state.dart';
@@ -16,7 +17,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 ProviderContainer container = ProviderContainer();
 
@@ -44,7 +44,7 @@ Future<void> main() async {
 
     if (!kIsWeb) {
       MediaKit.ensureInitialized();
-      JustAudioMediaKit.ensureInitialized();
+      await SystemMediaSession.init(); // notification / lock screen / media keys
     }
 
     TimezoneService.initialize();

@@ -34,15 +34,6 @@ class LibraryController {
     return res.dataOrNull ?? const <Album>[];
   }
 
-  /// PATCH /api/album/owner { albumId, newArtistId } (admin only): makes the artist the album's artist. Without
-  /// [artistId] the album ends up with no artist. A failure is toasted; true = success.
-  Future<bool> setAlbumOwner({required String albumId, String? artistId}) async {
-    final res = await apiCall<dynamic>(
-      () => _dio.patch<dynamic>('/api/album/owner', data: {'albumId': albumId, if (artistId != null) 'newArtistId': artistId}),
-    );
-    return res.isSuccess;
-  }
-
   /// GET /api/artist/info?artistId. null when it doesn't exist or the request failed (silent).
   Future<Artist?> artistById(String artistId) async {
     final res = await apiCall<Artist>(
@@ -69,15 +60,15 @@ class LibraryController {
     return artistByName(name);
   }
 
-  /// POST /api/album?name&artistId (admin only). The route answers `{ albumId }`. [artistId] is optional: an
-  /// album belongs to zero or one artist. null when creating failed (a toast says why).
-  Future<Album?> createAlbum({required String name, String? artistId}) async {
+  /// POST /api/album?name (admin only). The route answers `{ albumId }`. An album has no artist of its own:
+  /// artists are linked through relationships. null when creating failed (a toast says why).
+  Future<Album?> createAlbum({required String name}) async {
     final res = await apiCall<String>(
-      () => _dio.post<dynamic>('/api/album', queryParameters: {'name': name, if (artistId != null) 'artistId': artistId}),
+      () => _dio.post<dynamic>('/api/album', queryParameters: {'name': name}),
       fromJson: (data) => (data as Map)['albumId'].toString(),
     );
     final id = res.dataOrNull;
-    return id == null ? null : Album(id: id, name: name, artistId: artistId);
+    return id == null ? null : Album(id: id, name: name);
   }
 }
 

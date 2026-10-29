@@ -2,8 +2,7 @@
 //
 // A text field that suggests the existing items matching what was typed (debounced search) and, when
 // [onCreate] is given, offers to create a new one ("Create ..."). Picking an entry clears the field.
-// Used to link an audio to artists / albums (audio_links_section.dart) and to set an album's artist
-// (album_owner_section.dart).
+// Used to pick the artist / album of an audio's relationship (audio_links_section.dart).
 
 import 'package:avarim/api/models/with_id.dart';
 import 'package:flutter/material.dart';

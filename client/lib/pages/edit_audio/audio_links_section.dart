@@ -1,24 +1,25 @@
 // audio_links_section.dart
 //
-// The "Artists & albums" part of EditAudioPage. An audio isn't stored with its artists / albums: it is LINKED
-// to them (artist-album-audio links). A link is added / removed right away, one request per change
-// (admin only). The artist / album must already exist, so the autocomplete suggests the existing ones and
-// offers to create a new one first ("Create ...", then it is added).
+// "Artists & albums" of EditAudioPage. An audio isn't stored with its artists / albums: it has relationships
+// (artist-album-audio rows). Each row is a PAIR with both sides optional:
+//   artist + album    the audio is on that album, credited to that artist
+//   artist only       one of the artist's singles
+//   album only        on the album, with no artist
+// Pairs are added / removed right away (admin only). The artist / album must already exist, so the fields
+// suggest existing ones and offer to create a new one first.
 //
-//   artist  GET /api/artist?search   POST /api/artist?name           POST / DELETE /api/audio/artist
-//   album   GET /api/album?search    POST /api/album?name&artistId   POST / DELETE /api/audio/album
-//   lists   GET /api/audio/artist?audioId   GET /api/audio/album?audioId   (audioArtistsProvider / audioAlbumsProvider)
-//
-// An album belongs to zero or one artist and adding it links that artist too. Removing an artist also removes
-// that artist's albums on THIS audio (they would keep the artist on it).
+//   pairs   GET    /api/relationship/audio/...                       (audioLinksProvider)
+//   add     POST   /api/relationship { audioId, artistId?, albumId? }
+//   remove  DELETE /api/relationship { audioId, artistId, albumId }
+//   create  POST   /api/artist?name        POST /api/album?name
 
-import 'dart:async';
-
-import 'package:avarim/api/controllers/audio_controller.dart';
 import 'package:avarim/api/controllers/library_controller.dart';
+import 'package:avarim/api/controllers/relationship_controller.dart';
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
+import 'package:avarim/api/models/audio_link.dart';
 import 'package:avarim/api/providers/audio_links.dart';
+import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/pages/common/link_autocomplete.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,9 +36,14 @@ class AudioLinksSection extends ConsumerStatefulWidget {
 class _AudioLinksSectionState extends ConsumerState<AudioLinksSection> {
   bool _busy = false;
 
+  // The pair being put together (not saved until "Add").
+  Artist? _artist;
+  Album? _album;
+
   String get _id => widget.audioId;
 
   void _refresh() {
+    ref.invalidate(audioLinksProvider(_id));
     ref.invalidate(audioArtistsProvider(_id));
     ref.invalidate(audioAlbumsProvider(_id));
   }
@@ -56,66 +62,60 @@ class _AudioLinksSectionState extends ConsumerState<AudioLinksSection> {
     }
   }
 
-  // ---- artists -------------------------------------------------------------
-
-  Future<void> _addArtist(Artist artist) => _run(() async {
-    await ref.read(audioControllerProvider).addArtist(audioId: _id, artistId: artist.id);
-  });
+  // ---- creating the artist / album ----------------------------------------
 
   Future<void> _createArtist(String name) async {
     if (_busy) return;
-    final ok = await _confirm(context, title: 'Create artist', body: 'Create the artist "$name" and add it to this audio?', action: 'Create');
+    final ok = await _confirm(context, title: 'Create artist', body: 'Create the artist "$name"?', action: 'Create');
     if (!ok || !mounted) return;
 
     await _run(() async {
-      final artist = await ref.read(libraryControllerProvider).createArtist(name);
-      if (artist == null) return; // a toast says why (e.g. the name is taken)
-      await ref.read(audioControllerProvider).addArtist(audioId: _id, artistId: artist.id);
+      final artist = await ref.read(libraryControllerProvider).createArtist(name); // a toast says why it failed
+      if (artist != null && mounted) setState(() => _artist = artist);
     });
   }
 
-  Future<void> _removeArtist(Artist artist, List<Album> albums) async {
+  Future<void> _createAlbum(String name) async {
     if (_busy) return;
-    final owned = albums.where((a) => a.artistId == artist.id).toList();
-    final extra = owned.isEmpty ? '' : ' Its albums on this audio (${owned.map((a) => a.name).join(', ')}) are removed too.';
-    final ok = await _confirm(context, title: 'Remove artist', body: 'Remove "${artist.name}" from this audio?$extra', action: 'Remove');
-    if (!ok || !mounted) return;
+    final chosen = await showDialog<String>(context: context, builder: (_) => _AlbumNameDialog(initialName: name));
+    if (chosen == null || !mounted) return;
 
     await _run(() async {
-      final controller = ref.read(audioControllerProvider);
-      // The artist's own link first, then the links of its albums (they would keep the artist on the audio).
-      if (!await controller.removeArtist(audioId: _id, artistId: artist.id)) return;
-      for (final album in owned) {
-        if (!await controller.removeAlbum(audioId: _id, albumId: album.id, artistId: artist.id)) return;
+      final album = await ref.read(libraryControllerProvider).createAlbum(name: chosen); // a toast says why it failed
+      if (album != null && mounted) setState(() => _album = album);
+    });
+  }
+
+  // ---- add / remove a pair -------------------------------------------------
+
+  Future<void> _add(List<AudioLink> current) async {
+    if (_busy) return;
+    final link = AudioLink(artist: _artist, album: _album);
+    if (link.artist == null && link.album == null) return;
+
+    if (current.contains(link)) {
+      NotificationService.showError(message: 'This audio already has it');
+      return;
+    }
+
+    await _run(() async {
+      final ok = await ref.read(relationshipControllerProvider).create(audioId: _id, artistId: link.artist?.id, albumId: link.album?.id);
+      if (ok && mounted) {
+        setState(() {
+          _artist = null;
+          _album = null;
+        });
       }
     });
   }
 
-  // ---- albums --------------------------------------------------------------
-
-  Future<void> _addAlbum(Album album) => _run(() async {
-    await ref.read(audioControllerProvider).addAlbum(audioId: _id, albumId: album.id);
-  });
-
-  Future<void> _createAlbum(String name) async {
+  Future<void> _remove(AudioLink link, List<AudioLink> current) async {
     if (_busy) return;
-    final result = await showDialog<_NewAlbum>(context: context, builder: (_) => _NewAlbumDialog(initialName: name));
-    if (result == null || !mounted) return;
-
-    await _run(() async {
-      final album = await ref.read(libraryControllerProvider).createAlbum(name: result.name, artistId: result.artist?.id);
-      if (album == null) return; // a toast says why
-      await ref.read(audioControllerProvider).addAlbum(audioId: _id, albumId: album.id);
-    });
-  }
-
-  Future<void> _removeAlbum(Album album) async {
-    if (_busy) return;
-    final ok = await _confirm(context, title: 'Remove album', body: 'Remove "${album.name}" from this audio?', action: 'Remove');
+    final ok = await _confirm(context, title: 'Remove', body: 'Remove ${_describe(link)} from this audio?', action: 'Remove');
     if (!ok || !mounted) return;
 
     await _run(() async {
-      await ref.read(audioControllerProvider).removeAlbum(audioId: _id, albumId: album.id, artistId: album.artistId);
+      await ref.read(relationshipControllerProvider).removeLink(audioId: _id, link: link, current: current);
     });
   }
 
@@ -125,12 +125,34 @@ class _AudioLinksSectionState extends ConsumerState<AudioLinksSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final library = ref.read(libraryControllerProvider);
-    final artists = ref.watch(audioArtistsProvider(_id));
-    final albums = ref.watch(audioAlbumsProvider(_id));
+    final links = ref.watch(audioLinksProvider(_id));
+    final list = links.value ?? const <AudioLink>[];
+    final loading = _busy || links.isLoading;
+    final canAdd = !_busy && (_artist != null || _album != null);
 
-    final artistList = artists.value ?? const <Artist>[];
-    final albumList = albums.value ?? const <Album>[];
-    final loading = _busy || artists.isLoading || albums.isLoading;
+    final artistField = LinkAutocomplete<Artist>(
+      label: 'Artist (optional)',
+      hint: 'Type a name to search',
+      enabled: !_busy,
+      search: library.searchArtists,
+      labelOf: (a) => a.name,
+      onPick: (a) async => setState(() => _artist = a),
+      onCreate: _createArtist,
+      createLabel: 'Create artist',
+    );
+    final albumField = LinkAutocomplete<Album>(
+      label: 'Album (optional)',
+      hint: 'Type a name to search',
+      enabled: !_busy,
+      search: library.searchAlbums,
+      labelOf: (a) => a.name,
+      onPick: (a) async => setState(() => _album = a),
+      onCreate: _createAlbum,
+      createLabel: 'Create album',
+      // album names repeat, so creating one is always offered; the artists tell same-named albums apart
+      alwaysOfferCreate: true,
+      optionSubtitle: (a) => _AlbumArtists(a.id),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,67 +164,52 @@ class _AudioLinksSectionState extends ConsumerState<AudioLinksSection> {
           ],
         ),
         const SizedBox(height: 4),
-        Text('Changes here are saved right away.', style: theme.textTheme.bodySmall),
+        Text('Each row is an artist and / or an album. Changes are saved right away.', style: theme.textTheme.bodySmall),
+        const SizedBox(height: 12),
+
+        if (links.hasError)
+          _LoadError(onRetry: _refresh)
+        else if (list.isEmpty)
+          Text(links.isLoading ? 'Loading...' : 'No artists or albums', style: theme.textTheme.bodyMedium)
+        else
+          for (final link in list) _PairTile(key: ValueKey('pair-${link.key}'), link: link, onRemove: () => _remove(link, list)),
+
         const SizedBox(height: 16),
-
-        Text('Artists', style: theme.textTheme.titleSmall),
+        Text('Add', style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
-        if (artists.hasError)
-          _LoadError(onRetry: _refresh)
-        else if (artistList.isEmpty)
-          Text(artists.isLoading ? 'Loading...' : 'No artists', style: theme.textTheme.bodyMedium)
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              for (final a in artistList)
-                InputChip(key: ValueKey('artist-${a.id}'), avatar: const Icon(Icons.person, size: 18), label: Text(a.name), onDeleted: () => _removeArtist(a, albumList)),
-            ],
-          ),
-        const SizedBox(height: 8),
-        LinkAutocomplete<Artist>(
-          label: 'Add an artist',
-          hint: 'Type a name to search',
-          enabled: !_busy,
-          search: library.searchArtists,
-          labelOf: (a) => a.name,
-          excludeIds: {for (final a in artistList) a.id},
-          onPick: _addArtist,
-          onCreate: _createArtist,
-          createLabel: 'Create artist',
+        LayoutBuilder(
+          builder: (context, box) {
+            if (box.maxWidth >= 560) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: artistField),
+                  const SizedBox(width: 12),
+                  Expanded(child: albumField),
+                ],
+              );
+            }
+            return Column(children: [artistField, const SizedBox(height: 12), albumField]);
+          },
         ),
-
-        const SizedBox(height: 24),
-        Text('Albums', style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
-        if (albums.hasError)
-          _LoadError(onRetry: _refresh)
-        else if (albumList.isEmpty)
-          Text(albums.isLoading ? 'Loading...' : 'No albums', style: theme.textTheme.bodyMedium)
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              for (final a in albumList)
-                InputChip(key: ValueKey('album-${a.id}'), avatar: const Icon(Icons.album, size: 18), label: _AlbumLabel(a), onDeleted: () => _removeAlbum(a)),
-            ],
-          ),
-        const SizedBox(height: 8),
-        LinkAutocomplete<Album>(
-          label: 'Add an album',
-          hint: 'Type a name to search',
-          enabled: !_busy,
-          search: library.searchAlbums,
-          labelOf: (a) => a.name,
-          excludeIds: {for (final a in albumList) a.id},
-          onPick: _addAlbum,
-          onCreate: _createAlbum,
-          createLabel: 'Create album',
-          // album names repeat (they are only unique per artist), so creating one is always offered
-          alwaysOfferCreate: true,
-          optionSubtitle: (a) => a.artistId == null ? const Text('No artist') : _ArtistName(a.artistId!),
+        Row(
+          children: [
+            Expanded(
+              child: (_artist == null && _album == null)
+                  ? Text('Pick an artist and / or an album, then press Add.', style: theme.textTheme.bodySmall)
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        if (_artist != null) InputChip(avatar: const Icon(Icons.person, size: 18), label: Text(_artist!.name), onDeleted: () => setState(() => _artist = null)),
+                        if (_album != null) InputChip(avatar: const Icon(Icons.album, size: 18), label: Text(_album!.name), onDeleted: () => setState(() => _album = null)),
+                      ],
+                    ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(onPressed: canAdd ? () => _add(list) : null, icon: const Icon(Icons.add), label: const Text('Add')),
+          ],
         ),
       ],
     );
@@ -212,6 +219,52 @@ class _AudioLinksSectionState extends ConsumerState<AudioLinksSection> {
 // ---------------------------------------------------------------------------
 // Small widgets
 // ---------------------------------------------------------------------------
+
+/// "Artist" and "Album" of a pair as text, e.g. `"Artist" on "Album"`.
+String _describe(AudioLink link) {
+  final artist = link.artist;
+  final album = link.album;
+  if (artist != null && album != null) return '"${artist.name}" on "${album.name}"';
+  if (artist != null) return '"${artist.name}" (no album)';
+  if (album != null) return '"${album.name}" (no artist)';
+  return 'this';
+}
+
+/// The artists of an album ("No artist" when it has none), shown under a suggestion.
+class _AlbumArtists extends ConsumerWidget {
+  const _AlbumArtists(this.albumId);
+
+  final String albumId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final artists = ref.watch(albumArtistsProvider(albumId));
+    return Text(artists.hasError ? '' : (artistsLabel(artists.value) ?? (artists.isLoading ? '...' : 'No artist')), maxLines: 1, overflow: TextOverflow.ellipsis);
+  }
+}
+
+/// One pair: the artist, the album, and a remove button.
+class _PairTile extends StatelessWidget {
+  const _PairTile({super.key, required this.link, required this.onRemove});
+
+  final AudioLink link;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.onSurfaceVariant);
+
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(link.album != null ? Icons.album_outlined : Icons.person_outline),
+      title: Text(link.artist?.name ?? 'No artist', style: link.artist == null ? muted : null),
+      subtitle: Text(link.album?.name ?? 'No album', style: link.album == null ? muted : null),
+      trailing: IconButton(tooltip: 'Remove', icon: const Icon(Icons.delete_outline), onPressed: onRemove),
+    );
+  }
+}
 
 class _LoadError extends StatelessWidget {
   const _LoadError({required this.onRetry});
@@ -230,32 +283,6 @@ class _LoadError extends StatelessWidget {
   }
 }
 
-/// "Album - Artist" (just "Album" when it has no artist).
-class _AlbumLabel extends ConsumerWidget {
-  const _AlbumLabel(this.album);
-
-  final Album album;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final artistId = album.artistId;
-    final artist = artistId == null ? null : ref.watch(artistByIdProvider(artistId)).value;
-    return Text(artist == null ? album.name : '${album.name} - ${artist.name}');
-  }
-}
-
-class _ArtistName extends ConsumerWidget {
-  const _ArtistName(this.artistId);
-
-  final String artistId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final artist = ref.watch(artistByIdProvider(artistId)).value;
-    return Text(artist?.name ?? '...');
-  }
-}
-
 Future<bool> _confirm(BuildContext context, {required String title, required String body, required String action}) async {
   final result = await showDialog<bool>(
     context: context,
@@ -271,30 +298,18 @@ Future<bool> _confirm(BuildContext context, {required String title, required Str
   return result ?? false;
 }
 
-// ---------------------------------------------------------------------------
-// Create album dialog
-// ---------------------------------------------------------------------------
-
-class _NewAlbum {
-  const _NewAlbum(this.name, this.artist);
-
-  final String name;
-  final Artist? artist;
-}
-
-/// Asks for the new album's name and (optionally) its artist. Pops with a [_NewAlbum].
-class _NewAlbumDialog extends ConsumerStatefulWidget {
-  const _NewAlbumDialog({required this.initialName});
+/// Asks for the name of the album to create. Pops with the trimmed name.
+class _AlbumNameDialog extends StatefulWidget {
+  const _AlbumNameDialog({required this.initialName});
 
   final String initialName;
 
   @override
-  ConsumerState<_NewAlbumDialog> createState() => _NewAlbumDialogState();
+  State<_AlbumNameDialog> createState() => _AlbumNameDialogState();
 }
 
-class _NewAlbumDialogState extends ConsumerState<_NewAlbumDialog> {
+class _AlbumNameDialogState extends State<_AlbumNameDialog> {
   late final TextEditingController _name = TextEditingController(text: widget.initialName);
-  Artist? _artist;
 
   @override
   void dispose() {
@@ -304,40 +319,22 @@ class _NewAlbumDialogState extends ConsumerState<_NewAlbumDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final library = ref.read(libraryControllerProvider);
     final name = _name.text.trim();
-
     return AlertDialog(
       title: const Text('Create album'),
       content: SizedBox(
         width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _name,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Album name', border: OutlineInputBorder()),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 16),
-            if (_artist != null)
-              InputChip(avatar: const Icon(Icons.person, size: 18), label: Text(_artist!.name), onDeleted: () => setState(() => _artist = null))
-            else
-              LinkAutocomplete<Artist>(
-                label: 'Artist (optional)',
-                hint: 'Leave empty for an album without an artist',
-                search: library.searchArtists,
-                labelOf: (a) => a.name,
-                onPick: (a) async => setState(() => _artist = a),
-              ),
-          ],
+        child: TextField(
+          controller: _name,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Album name', border: OutlineInputBorder()),
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) => name.isEmpty ? null : Navigator.pop(context, name),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: name.isEmpty ? null : () => Navigator.pop(context, _NewAlbum(name, _artist)), child: const Text('Create and add')),
+        FilledButton(onPressed: name.isEmpty ? null : () => Navigator.pop(context, name), child: const Text('Create')),
       ],
     );
   }

@@ -7,7 +7,6 @@
 //
 //   - images        -> GET / PUT /api/album/avatar/:albumId   (pages/common/image_section.dart)
 //   - name          -> PATCH /api/album/name  { albumId, albumName }
-//   - artist        -> PATCH /api/album/owner  { albumId, newArtistId }  (album_owner_section.dart)
 //   - "Danger zone" -> delete all the album's audios, one by one (delete_album_audios_section.dart)
 //   - everything else is shown read-only
 //
@@ -20,7 +19,6 @@
 import 'dart:async';
 
 import 'package:avarim/pages/common/image_section.dart';
-import 'package:avarim/pages/edit_album/album_owner_section.dart';
 import 'package:avarim/pages/edit_album/delete_album_audios_section.dart';
 import 'package:avarim/pages/edit_album/edit_album_api.dart';
 import 'package:avarim/pages/edit_album/edit_album_form.dart';
@@ -87,8 +85,6 @@ class _EditAlbumPageState extends ConsumerState<EditAlbumPage> {
             ImageSection(path: albumAvatarPath(s.id!), title: 'Avatar', hint: 'Shown next to this album in lists.'),
             const SizedBox(height: 24),
             EditAlbumForm(key: ValueKey(s.revision), album: s.album!, isSaving: s.isSaving),
-            const SizedBox(height: 32),
-            AlbumOwnerSection(key: ValueKey('owner-${s.id}'), albumId: s.id!, albumName: '${s.album!['name'] ?? ''}', artistId: s.album!['artistId']?.toString()),
             const SizedBox(height: 32),
             DeleteAlbumAudiosSection(albumId: s.id!, albumName: '${s.album!['name'] ?? ''}'),
           ],

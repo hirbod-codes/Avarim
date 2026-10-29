@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:avarim/api/models/audio.dart';
+import 'package:avarim/components/global/system_media_session.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/components/contents/players/audio/audio_info_panels.dart';
 import 'package:avarim/components/contents/players/audio/audio_player_provider.dart';
@@ -110,6 +111,7 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
 
 class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   StreamSubscription<AudioPlayerState>? _completionSub;
+  Object? _sessionToken; // this player's place in the OS media controls
   AudioInfoPanel? _panel;
   bool _equalizerOpen = false;
 
@@ -145,14 +147,40 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
       wasEnded = ended;
     });
 
+    _sessionToken = SystemMediaSession.attach(_sessionTrack(), _sessionControls(commands), commands.stateStream);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await commands.open(widget.url, headers: widget.headers, title: widget.title, artist: widget.artist, albumArtUrl: widget.albumArtUrl);
 
       if (!mounted || !widget.autoPlay || commands.currentState.hasError) return;
-      // Not awaited: just_audio's play() only completes when playback stops.
+      // Not awaited: play() may only complete when playback stops.
       unawaited(commands.play());
     });
+  }
+
+  /// What the OS shows about the track. The cover art needs the access token like every other request.
+  SessionTrack _sessionTrack() => SessionTrack(
+    id: widget.audioId,
+    title: widget.title,
+    artist: widget.artist,
+    artUrl: '${AppConfig.apiUrl}/api/audio/coverArt/${widget.audioId}',
+    artHeaders: widget.headers,
+  );
+
+  SessionControls _sessionControls(AudioPlayerCommands commands) =>
+      SessionControls(play: commands.play, pause: commands.pause, seek: commands.seek, next: widget.onNext, previous: widget.onPrevious);
+
+  @override
+  void didUpdateWidget(AudioPlayerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // The artists arrive after the track, and the next / previous buttons depend on the queue.
+    final token = _sessionToken;
+    if (token != null &&
+        (oldWidget.title != widget.title || oldWidget.artist != widget.artist || (oldWidget.onNext == null) != (widget.onNext == null) || (oldWidget.onPrevious == null) != (widget.onPrevious == null))) {
+      SystemMediaSession.update(token, _sessionTrack(), _sessionControls(ref.read(audioPlayerCommandsProvider.notifier)));
+    }
   }
 
   @override
@@ -163,6 +191,8 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
 
   @override
   void dispose() {
+    final token = _sessionToken;
+    if (token != null) SystemMediaSession.detach(token);
     _completionSub?.cancel();
     super.dispose();
   }

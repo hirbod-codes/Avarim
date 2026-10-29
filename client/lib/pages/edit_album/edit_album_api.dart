@@ -5,7 +5,7 @@
 // shown to the user by GlobalErrorInterceptor (the load is silent: the page shows it inline).
 //
 //   GET  /api/album/info?albumId=...                         => data: album
-//   POST  /api/album?name=...[&artistId=...]                    => data: { albumId }   (create)
+//   POST  /api/album?name=...                                   => data: { albumId }   (create)
 //   PATCH /api/album/name  { albumId, albumName }               (rename)
 //
 // Images:
