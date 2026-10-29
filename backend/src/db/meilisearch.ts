@@ -381,32 +381,32 @@ export class MeiliCrud<T extends Record<string, any>> {
     }
 }
 
-export const meiliAudio = new MeiliCrud<AudioSearch>(meili, isProduction ? audioCollection : `dev_${audioCollection}`, {
+export const meiliAudio = new MeiliCrud<AudioSearch>(meili, isProduction ? `avarim_${audioCollection}` : `dev_avarim_${audioCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'title', 'lyrics'], sortableAttributes: ['_id', 'title', 'lyrics'], searchableAttributes: ['title', 'lyrics'] },
     waitByDefault: true
 });
 
-export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, isProduction ? artistCollection : `dev_${artistCollection}`, {
+export const meiliArtist = new MeiliCrud<ArtistSearch>(meili, isProduction ? `avarim_${artistCollection}` : `dev_avarim_${artistCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
-export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, isProduction ? albumCollection : `dev_${albumCollection}`, {
+export const meiliAlbum = new MeiliCrud<AlbumSearch>(meili, isProduction ? `avarim_${albumCollection}` : `dev_avarim_${albumCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
-export const meiliPlaylist = new MeiliCrud<PlaylistSearch>(meili, isProduction ? playlistCollection : `dev_${playlistCollection}`, {
+export const meiliPlaylist = new MeiliCrud<PlaylistSearch>(meili, isProduction ? `avarim_${playlistCollection}` : `dev_avarim_${playlistCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'name'], sortableAttributes: ['_id', 'name'], searchableAttributes: ['name'] },
     waitByDefault: true
 });
 
 // to be able to search for audios in a playlist
-export const meiliPlaylistAudio = new MeiliCrud<PlaylistAudioSearch>(meili, isProduction ? playlistAudioCollection : `dev_${playlistAudioCollection}`, {
+export const meiliPlaylistAudio = new MeiliCrud<PlaylistAudioSearch>(meili, isProduction ? `avarim_${playlistAudioCollection}` : `dev_avarim_${playlistAudioCollection}`, {
     primaryKey: '_id',
     settings: { filterableAttributes: ['_id', 'playlistId', 'audioId', 'audioTitle'], sortableAttributes: ['_id', 'playlistId', 'audioTitle'], searchableAttributes: ['audioTitle'] },
     waitByDefault: true
