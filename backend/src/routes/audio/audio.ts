@@ -420,8 +420,7 @@ router.patch('/title', auth, isAdminIfAuthenticated, async (req, res) => {
         if (meiliAudioUpsertResult.status !== 'succeeded') {
             log.warn('failed to create audio title in meilisearch')
             await db.abortTransaction()
-            res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-            throw new Error('failed to create artist in meilisearch')
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
         }
 
         // ------------------------------------------------------------------------- update audio title in meilisearch playlist audio
@@ -429,11 +428,10 @@ router.patch('/title', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const meiliPlaylistAudioUpsertResult = await meiliPlaylistAudio.updateBy({ audioId: updates.audioId }, { audioTitle: updates.title }, { wait: true })
         log.debug({ meiliPlaylistAudioUpsertResult })
-        if (meiliPlaylistAudioUpsertResult.task?.status !== 'succeeded') {
-            log.warn('failed to create audio title in meilisearch')
+        if (meiliPlaylistAudioUpsertResult.task !== null && meiliPlaylistAudioUpsertResult.task?.status !== 'succeeded') {
+            log.warn('failed to create audio playlist title in meilisearch')
             await db.abortTransaction()
-            res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-            throw new Error('failed to create artist in meilisearch')
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
         }
 
         await db.commitTransaction()
