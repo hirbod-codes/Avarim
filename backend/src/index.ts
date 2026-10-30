@@ -65,7 +65,7 @@ import { S3Client } from "@aws-sdk/client-s3";
 
 import { Redis } from './db/redis';
 
-import { generalRateLimiter } from './middlewares/rateLimiting';
+// import { generalRateLimiter } from './middlewares/rateLimiting';
 import { toggleDebugMode } from './middlewares/auth';
 import { notFoundHandler } from './middlewares/notFoundHandler';
 import { errorHandler } from './middlewares/errorHandler';
@@ -163,7 +163,7 @@ export const payments = {
     if (isProduction)
         app.set("trust proxy", 1);
 
-    app.use(generalRateLimiter);
+    // app.use(generalRateLimiter);
 
     app.use(toggleDebugMode)
 

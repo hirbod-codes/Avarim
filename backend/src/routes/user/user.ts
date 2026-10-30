@@ -1,5 +1,5 @@
 import express from 'express';
-import { generalRateLimiter } from '../../middlewares/rateLimiting';
+// import { generalRateLimiter } from '../../middlewares/rateLimiting';
 import { UserRepository } from '../../db/MongoDB/UserRepository';
 import { auth } from '../../middlewares/auth';
 import { Upload } from '@aws-sdk/lib-storage';
