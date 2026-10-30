@@ -209,7 +209,7 @@ router.post('/audio', auth, async (req, res) => {
                 return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
             }
 
-            const meiliResult = await meiliPlaylistAudio.create({ _id: `${playlistId}_${audio.toString()}`, audioId: audio._id!.toString(), audioTitle: audio.title, playlistId: playlistId })
+            const meiliResult = await meiliPlaylistAudio.create({ audioId: audio._id!.toString(), audioTitle: audio.title, playlistId: playlistId })
             log.debug({ meiliResult })
             if (meiliResult.status !== 'succeeded') {
                 await db.abortTransaction()
@@ -231,7 +231,7 @@ router.post('/audio', auth, async (req, res) => {
                 return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
             }
 
-            const meiliResult = await meiliPlaylistAudio.create(audios.map(m => ({ _id: `${playlistId}_${m.toString()}`, audioId: m._id!.toString(), audioTitle: m.title, playlistId: playlistId })))
+            const meiliResult = await meiliPlaylistAudio.create(audios.map(m => ({ audioId: m._id!.toString(), audioTitle: m.title, playlistId: playlistId })))
             log.debug({ meiliResult })
             if (meiliResult.status !== 'succeeded') {
                 await db.abortTransaction()

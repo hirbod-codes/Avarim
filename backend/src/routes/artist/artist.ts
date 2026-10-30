@@ -75,7 +75,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
         }
 
-        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
+        const meiliResult = await runWithLogger(log, () => meiliArtist.create({ _id: result.insertedId.toString(), name }))
         log.debug({ meiliResult })
         if (meiliResult.status !== 'succeeded') {
             log.warn('Failed to create artist')

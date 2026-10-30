@@ -4,11 +4,11 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:riverpod/src/framework.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void trustExtraRoot(Dio dio, Ref ref) {
   List<int> rootPemBytes = kDebugMode
-      ? File(p.join(Directory.current.absolute.path, 'lib', 'api', 'dio', "fullchain.pem")).readAsBytesSync()
+      ? File(p.join(Directory.current.absolute.path, '..', 'backend', "localhost+2.pem")).readAsBytesSync()
       : ref.watch(rootPemBytesProvider);
 
   (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {

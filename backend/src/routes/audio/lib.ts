@@ -18,6 +18,8 @@ import ArtistAlbumAudioRepository from "../../db/MongoDB/ArtistAlbumAudioReposit
 import { meiliAlbum, meiliArtist } from "../../db/meilisearch";
 import { AlbumController } from "../../controllers/AlbumController";
 import { ArtistController } from "../../controllers/ArtistController";
+import { Album } from "../../db/models/Album";
+import { WithId } from "../../db/common_schemas";
 
 /**
  * if album provided
@@ -64,16 +66,26 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
                 promises.push((async () => {
                     const artistId = await runWithLogger(log, () => new ArtistController().create(name));
 
-                    let albumId: string | undefined = undefined
-                    if (tags && tags.album) {
-                        albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!))
-                    }
+                    let albums: WithId<Album>[] = !tags.album ? [] : await runWithLogger(log, albumRepository.getByName(tags.album))
+                    log.debug({ albumsLength: albums.length })
+                    if (albums.length < 1) {
+                        let albumId: string | undefined = undefined
+                        if (tags.album)
+                            albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!))
 
-                    const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId, audioId }));
-                    if (!createResult.acknowledged) {
-                        log.warn('Failed to create artistAlbumAudio')
-                        throw new Error('Failed to create artistAlbumAudio')
-                    }
+                        const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId, audioId }));
+                        if (!createResult.acknowledged) {
+                            log.warn('Failed to create artistAlbumAudio')
+                            throw new Error('Failed to create artistAlbumAudio')
+                        }
+                    } else
+                        for (const album of albums) {
+                            const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId: album._id.toString(), audioId }));
+                            if (!createResult.acknowledged) {
+                                log.warn('Failed to create artistAlbumAudio')
+                                throw new Error('Failed to create artistAlbumAudio')
+                            }
+                        }
                 })())
             }
 

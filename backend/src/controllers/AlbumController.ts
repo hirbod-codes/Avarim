@@ -36,7 +36,7 @@ export class AlbumController {
 
         log.info('create meilisearch album')
 
-        const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ name }))
+        const meiliResult = await runWithLogger(log, () => meiliAlbum.create({ _id: dbResult.insertedId.toString(), name }))
         log.debug({ meiliResult })
         if (meiliResult.status !== 'succeeded') {
             log.warn('Failed to create album')

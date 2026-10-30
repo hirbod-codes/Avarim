@@ -41,7 +41,7 @@ export class ArtistController {
 
             log.info('create meilisearch artist')
 
-            const meiliResult = await runWithLogger(log, () => meiliArtist.create({ name }))
+            const meiliResult = await runWithLogger(log, () => meiliArtist.create({ _id: createResult.insertedId.toString(), name }))
             log.debug({ meiliResult })
             if (meiliResult.status !== 'succeeded') {
                 log.warn('Failed to create artist')
