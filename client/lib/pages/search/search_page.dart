@@ -22,6 +22,7 @@ import 'dart:async';
 
 import 'package:avarim/api/api_call.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
+import 'package:avarim/api/dio/global_error_interceptor.dart';
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
@@ -96,6 +97,9 @@ enum LoadMoreMode {
 // Response: { "items": [ {...}, {...} ] }   (a bare JSON array also works)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Requests whose failure the caller words itself (no generic error toast).
+final _silentErrors = Options(extra: {GlobalErrorInterceptor.silentErrorsKey: true});
+
 class MusicSearchApi {
   MusicSearchApi(this._dio);
   final Dio _dio;
@@ -141,6 +145,13 @@ class MusicSearchApi {
     final res = await apiCall(() => _dio.delete<dynamic>('/api/audio/$audioId'));
     return res.isSuccess;
   }
+
+  /// DELETE /api/artist/:artistId (admin). The server refuses (`UNRESOLVED_ALBUMS_AUDIOS`) while any album or
+  /// audio is still linked to the artist. The caller words the failure.
+  Future<ApiCallResult<dynamic>> deleteArtist(String artistId) => apiCall<dynamic>(() => _dio.delete<dynamic>('/api/artist/$artistId', options: _silentErrors));
+
+  /// DELETE /api/album/:albumId (admin). Only the album goes: its audios stay. The caller words the failure.
+  Future<ApiCallResult<dynamic>> deleteAlbum(String albumId) => apiCall<dynamic>(() => _dio.delete<dynamic>('/api/album/$albumId', options: _silentErrors));
 
   /// Ids of every audio of the album [albumId], in order. Null when a request failed
   /// (its error was already shown).
@@ -392,6 +403,46 @@ class MusicSearchNotifier extends Notifier<SearchState> {
 
     // Drops it from the player queue (no-op if it isn't queued; closes the dock if it was the last track).
     AudioPlayerService.remove(id);
+  }
+
+  /// Deletes an artist or an album. While the request runs its id is in [SearchState.deletingIds]; on success it
+  /// disappears from every tab. A failure says why (an artist that still has albums or audios can't go).
+  Future<void> deleteCatalogItem(WithId item) async {
+    final id = item.id;
+    if (state.deletingIds.contains(id)) return;
+    state = state.copyWith(deletingIds: {...state.deletingIds, id});
+
+    ApiCallResult<dynamic>? res;
+    try {
+      final api = ref.read(musicSearchApiProvider);
+      res = item is Artist ? await api.deleteArtist(id) : await api.deleteAlbum(id);
+    } catch (e, st) {
+      talker.error('deleting ${item.runtimeType} failed', e, st);
+    }
+    if (!ref.mounted) return;
+
+    final deleting = {...state.deletingIds}..remove(id);
+
+    if (res == null || !res.isSuccess) {
+      state = state.copyWith(deletingIds: deleting);
+      final code = switch (res) {
+        ApiCallFailure(:final errorCode) => errorCode,
+        _ => null,
+      };
+      NotificationService.showError(
+        message: item is Artist
+            ? (code == 'UNRESOLVED_ALBUMS_AUDIOS'
+                  ? 'This artist still has albums or audios. Delete them or move them to another artist first.'
+                  : 'Could not delete the artist')
+            : 'Could not delete the album',
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      deletingIds: deleting,
+      results: {for (final e in state.results.entries) e.key: e.value.copyWith(items: e.value.items.where((entry) => entry.id != id).toList())},
+    );
   }
 
   // ── internals ──────────────────────────────────────────────────────────────
@@ -651,13 +702,23 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
     }
   }
 
-  Future<void> _delete(Audio audio) async {
+  Future<void> _delete(WithId item) async {
     if (kConfirmBeforeDelete) {
+      final (title, body) = switch (item) {
+        Artist a => (
+          'Delete artist?',
+          '"${a.name}" will be permanently deleted. An artist that still has albums or audios can\'t be deleted: delete them or move them to another artist first.',
+        ),
+        Album a => ('Delete album?', '"${a.name}" will be permanently deleted. Its audios are kept.'),
+        Audio a => ('Delete audio?', '"${a.title}" will be permanently deleted.'),
+        _ => ('Delete?', 'It will be permanently deleted.'),
+      };
+
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Delete audio?'),
-          content: Text('"${audio.title}" will be permanently deleted.'),
+          title: Text(title),
+          content: Text(body),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
             FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
@@ -667,7 +728,12 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
       if (confirmed != true || !mounted) return;
     }
 
-    await ref.read(musicSearchProvider.notifier).deleteAudio(audio.id);
+    final notifier = ref.read(musicSearchProvider.notifier);
+    if (item is Audio) {
+      await notifier.deleteAudio(item.id);
+    } else {
+      await notifier.deleteCatalogItem(item);
+    }
   }
 
   @override
@@ -727,7 +793,7 @@ class _ResultsListState extends ConsumerState<_ResultsList> with AutomaticKeepAl
                         : ((item is Audio || item is Playlist || widget.onItemTap != null) ? () => _onTap(item) : null),
                     onAddToQueue: item is Album || item is Playlist ? () => notifier.addToQueue(item, play: false) : null,
                     onEdit: () => _edit(item),
-                    onDelete: item is Audio ? () => _delete(item) : null,
+                    onDelete: item is Audio || item is Artist || item is Album ? () => _delete(item) : null,
                   ),
                 );
               }
