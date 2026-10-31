@@ -13,6 +13,7 @@ const shape = {
     name: string().required(),
 
     avatarKey: string().optional().url(),
+    doNotUseFirstAudioCoverArt: boolean().optional(), // Added for compatibility
 
     temporaryAvatar: boolean().optional(),
 

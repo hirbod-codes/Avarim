@@ -210,12 +210,25 @@ router.get('/avatar/:albumId', auth, async (req, res) => {
             log.info('Rejected avatar request: album not found or has no avatar');
             return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' });
         }
-        if (!album.avatarKey) {
+
+        let avatarKey = album.avatarKey
+        if (!avatarKey && album.doNotUseFirstAudioCoverArt !== true) {
+            log.info('trying to use first cover art of the first audio of this album audios as avatar');
+
+            const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+            const audio = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(album._id.toString(), 0, 1))
+            log.debug({ audio });
+
+            avatarKey = audio[0]?.coverArtKey
+        }
+
+        if (!avatarKey) {
             log.info('Rejected avatar request: album not found or has no avatar');
             return res.status(404).json({ status: 'error', error_code: 'AVATAR_NOT_FOUND' });
         }
 
-        const result = await getS3ObjectStream(album.avatarKey);
+        const result = await getS3ObjectStream(avatarKey);
         log.debug({ result });
         if (!result) {
             log.warn('avatar object has no body');

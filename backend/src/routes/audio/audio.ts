@@ -236,7 +236,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 
                 // ------------------------------------------------------------------------- prepare audio in db
                 log.info('prepare audio in db')
-                await runWithLogger(log, () => prepareAudioInDb(audioId, metadata))
+                await runWithLogger(log, () => prepareAudioInDb(audioId, metadata, cover ? coverArtBucketKey : undefined))
 
                 // ------------------------------------------------------------------------- update audio info in DB, make it permanent and set content type
                 log.info('update audio info in DB, make it permanent and set content type')

@@ -30,7 +30,7 @@ import { WithId } from "../../db/common_schemas";
  *      create meilisearch album
  * create ArtistAlbumAudio records
  */
-export async function prepareAudioInDb(audioId: string, metadata: ExtractionResult) {
+export async function prepareAudioInDb(audioId: string, metadata: ExtractionResult, avatarKey?: string) {
     let log = getLogger().child({ step: 'prepareAudioInDb' });
 
     let db;
@@ -71,7 +71,7 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
                     if (albums.length < 1) {
                         let albumId: string | undefined = undefined
                         if (tags.album)
-                            albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!))
+                            albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!, avatarKey))
 
                         const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId, audioId }));
                         if (!createResult.acknowledged) {
