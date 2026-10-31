@@ -47,6 +47,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:avarim/api/controllers/audio_controller.dart';
+import 'package:avarim/components/global/playback_controller.dart';
 import 'package:avarim/pages/search/album_playlist_menu.dart' show SaveAsPlaylistButton;
 import 'package:avarim/api/providers/audio_links.dart';
 import 'package:avarim/api/models/audio.dart';
@@ -446,7 +447,8 @@ class _Dock extends StatelessWidget {
     // and the mini bar, so the bar's play/pause controls the very same player.
     Widget dock = ProviderScope(
       key: ValueKey('${state.currentId}#${state.session}'),
-      overrides: [audioPlayerCommandsProvider],
+      // The engine belongs to PlaybackController (it keeps playing while the window is minimized): the dock only shares it.
+      overrides: [audioPlayerCommandsProvider, sharedAudioPlayerProvider.overrideWithValue(PlaybackController.instance.player)],
       child: _DockBody(state: state),
     );
 
@@ -512,7 +514,7 @@ class _DockBody extends StatelessWidget {
                             borderRadius: BorderRadius.zero,
                             ownPlayerScope: false, // the dock's ProviderScope is shared with the mini bar
                             autoPlay: state.autoPlay,
-                            onCompleted: AudioPlayerService.next,
+                            managed: true, // PlaybackController opens the track and advances the queue
                             // Keep the controls clear of the status bar, the top-right buttons and the nav bar.
                             contentPadding: EdgeInsets.only(top: insets.top + kPlayerTopBarHeight, bottom: insets.bottom),
                             showQueueControls: state.ids.length > 1,

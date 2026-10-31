@@ -75,6 +75,7 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
     this.onPrevious,
     this.onNext,
     this.extraActions = const [],
+    this.managed = false,
   });
 
   final String audioId;
@@ -104,6 +105,10 @@ class AudioPlayerScreen extends ConsumerStatefulWidget {
 
   /// Extra buttons shown next to the playback speed button (the global player puts its queue button here).
   final List<Widget> extraActions;
+
+  /// The track is opened, advanced and shown to the OS by PlaybackController (the global player), not by this
+  /// screen: it only shows the engine and sends it commands. [url], [autoPlay] and [onCompleted] are ignored.
+  final bool managed;
 
   @override
   ConsumerState<AudioPlayerScreen> createState() => _AudioPlayerScreenState();
@@ -137,6 +142,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
     super.initState();
 
     final commands = ref.read(audioPlayerCommandsProvider.notifier);
+    if (widget.managed) return;
 
     // Fires onCompleted once per transition into `ended` (position ticks that
     // keep the status at `ended` don't re-fire it).

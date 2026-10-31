@@ -47,6 +47,10 @@ class AudioContainer extends ConsumerStatefulWidget {
   /// bar can control the same player.
   final bool ownPlayerScope;
 
+  /// The global player: PlaybackController opens the track and moves through the queue (it keeps working while
+  /// the window is minimized), so this only shows it and doesn't build the stream URL.
+  final bool managed;
+
   /// Pass `double.infinity` to fill the space the parent gives (tight constraints required).
   const AudioContainer({
     super.key,
@@ -61,6 +65,7 @@ class AudioContainer extends ConsumerStatefulWidget {
     this.onNext,
     this.extraActions = const [],
     this.ownPlayerScope = true,
+    this.managed = false,
   });
 
   @override
@@ -90,7 +95,7 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
       if (!mounted) return;
 
       String? signedToken;
-      if (kIsWeb) {
+      if (kIsWeb && !widget.managed) {
         signedToken = await ref.read(audioControllerProvider).getSignedToken(audioId: widget.audioId);
         if (!mounted) return;
       }
@@ -100,7 +105,7 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
           _token = token;
         }
         _audio = audio;
-        _url = '${AppConfig.apiUrl}/api/audio/file${kIsWeb ? '/web' : ''}/${_audio!.id}${signedToken == null ? '' : '/$signedToken'}';
+        _url = widget.managed ? '' : '${AppConfig.apiUrl}/api/audio/file${kIsWeb ? '/web' : ''}/${_audio!.id}${signedToken == null ? '' : '/$signedToken'}';
         _loading = false;
       });
     } catch (e) {
@@ -169,6 +174,7 @@ class _AudioContainerState extends ConsumerState<AudioContainer> {
       audio: _audio,
       autoPlay: widget.autoPlay,
       onCompleted: widget.onCompleted,
+      managed: widget.managed,
       contentPadding: widget.contentPadding,
       showQueueControls: widget.showQueueControls,
       onPrevious: widget.onPrevious,

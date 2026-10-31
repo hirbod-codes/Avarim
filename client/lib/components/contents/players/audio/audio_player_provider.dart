@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:avarim/components/contents/players/audio/audio_player_factory.dart';
@@ -8,14 +9,24 @@ import 'package:avarim/components/contents/players/audio/equalizer_settings.dart
 
 part 'audio_player_provider.g.dart';
 
+/// The engine the global player's widgets share, set in the dock's scope. PlaybackController owns it (it opens the
+/// tracks and moves through the queue without any widget), so the commands neither create nor dispose their own.
+/// null (the default): the commands create their own engine, as a stand-alone player would.
+final sharedAudioPlayerProvider = Provider<AppAudioPlayer?>((ref) => null);
+
 @riverpod
 class AudioPlayerCommands extends _$AudioPlayerCommands {
-  late final AppAudioPlayer _player;
+  late AppAudioPlayer _player;
 
   @override
   void build() {
-    _player = createAudioPlayer();
-    ref.onDispose(_player.dispose);
+    final shared = ref.read(sharedAudioPlayerProvider);
+    if (shared != null) {
+      _player = shared;
+    } else {
+      _player = createAudioPlayer();
+      ref.onDispose(_player.dispose);
+    }
   }
 
   // Expose state stream for widgets to watch

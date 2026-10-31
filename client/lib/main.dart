@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:avarim/components/global/playback_controller.dart';
 import 'package:avarim/components/global/system_media_session.dart';
 import 'package:avarim/go_router.dart';
 import 'package:avarim/auth/auth_controller.dart';
@@ -50,6 +51,8 @@ Future<void> main() async {
     TimezoneService.initialize();
     themeModeNotifier.value = await loadThemeMode();
     themeModeNotifier.addListener(() => saveThemeMode(themeModeNotifier.value));
+
+    PlaybackController.instance.start(container); // plays the queue, also while the window is minimized
 
     runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
   }, (e, s) => _log('Zone: $e\n$s'));
