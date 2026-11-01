@@ -9,13 +9,14 @@ import 'package:avarim/api/dio/refresh_interceptor.dart';
 import 'package:avarim/api/dio/global_error_interceptor.dart';
 import 'package:avarim/auth/token_storage.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:avarim/api/dio/configure_ssl.dart' if (dart.library.js_interop) 'package:avarim/api/dio/configure_ssl_stub.dart';
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
 
-  if(Platform.isWindows || Platform.isMacOS) trustExtraRoot(dio, ref);
+  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS)) trustExtraRoot(dio, ref);
 
   configureDioForWeb(dio);
 
@@ -33,7 +34,7 @@ final authDioProvider = Provider<Dio>((ref) {
 
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
 
-  if(Platform.isWindows || Platform.isMacOS)trustExtraRoot(dio, ref);
+  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS)) trustExtraRoot(dio, ref);
 
   configureDioForWeb(dio);
 
