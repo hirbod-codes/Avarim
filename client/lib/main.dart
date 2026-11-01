@@ -27,7 +27,7 @@ Future<void> main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    if (!kDebugMode) {
+    if (Platform.isWindows || Platform.isMacOS) {
       final data = await rootBundle.load('assets/certs/fullchain.pem');
       final pem = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 

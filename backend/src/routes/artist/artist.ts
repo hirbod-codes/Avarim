@@ -269,7 +269,7 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
 
         const updateArtistResult = await runWithLogger(log, () => artistRepository.unsafeUpdate(artist._id.toString(), { name: artistName }));
         log.debug({ updateArtistResult });
-        if (updateArtistResult) {
+        if (!updateArtistResult.acknowledged) {
             log.info('failed to update artist');
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
         }

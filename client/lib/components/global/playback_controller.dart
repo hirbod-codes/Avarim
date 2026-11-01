@@ -14,6 +14,7 @@
 import 'dart:async';
 
 import 'package:avarim/api/controllers/audio_controller.dart';
+import 'package:avarim/api/controllers/relationship_controller.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/providers/audio_links.dart';
 import 'package:avarim/api/root_navigator_key.dart';
@@ -189,7 +190,8 @@ class PlaybackController {
 
         List<Artist>? artists;
         try {
-          artists = await container.read(audioArtistsProvider(audioId).future);
+          // Its own request, not audioArtistsProvider: what the UI shows must not depend on this one.
+          artists = await container.read(relationshipControllerProvider).artistsOfAudio(audioId);
         } catch (_) {
           // no artists: the title alone is fine
         }

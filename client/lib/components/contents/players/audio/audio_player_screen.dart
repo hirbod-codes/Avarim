@@ -350,7 +350,9 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                           // Full width, so that the text starts at the left edge instead of being centered.
                           SizedBox(
                             width: double.infinity,
-                            child: _TrackInfo(title: state.title, artist: state.artist),
+                            // The title is the audio's, the artist(s) come from its relationships: both are loaded by AudioContainer. The engine's
+                            // own title / artist are never read, PlaybackController opens the track without them.
+                            child: _TrackInfo(title: widget.title, artist: widget.artist),
                           ),
                           const SizedBox(height: 32),
                         ],

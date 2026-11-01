@@ -42,7 +42,7 @@ final class AudioPlayerCommandsProvider
 }
 
 String _$audioPlayerCommandsHash() =>
-    r'3e8aebc87b2e67df454a3954b00891921880a302';
+    r'e4d64f623f44c1480ef69685a235f62b4240b340';
 
 abstract class _$AudioPlayerCommands extends $Notifier<void> {
   void build();

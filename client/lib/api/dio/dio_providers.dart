@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:avarim/api/dio/plan_limit_interceptor.dart';
 import 'package:avarim/api/dio/web/dio_web_config.dart';
 import 'package:avarim/app_config.dart';
@@ -13,7 +15,7 @@ import 'package:avarim/api/dio/configure_ssl.dart' if (dart.library.js_interop) 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
 
-  trustExtraRoot(dio, ref);
+  if(Platform.isWindows || Platform.isMacOS) trustExtraRoot(dio, ref);
 
   configureDioForWeb(dio);
 
@@ -31,7 +33,7 @@ final authDioProvider = Provider<Dio>((ref) {
 
   final dio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
 
-  trustExtraRoot(dio, ref);
+  if(Platform.isWindows || Platform.isMacOS)trustExtraRoot(dio, ref);
 
   configureDioForWeb(dio);
 

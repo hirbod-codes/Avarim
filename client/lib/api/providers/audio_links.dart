@@ -5,6 +5,7 @@ import 'package:avarim/api/controllers/relationship_controller.dart';
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio_link.dart';
+import 'package:avarim/lib/talker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // An audio's artists and albums are not stored on the audio document. They are resolved from the
@@ -16,14 +17,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _kKeepFor = Duration(minutes: 5);
 
-Future<T> _keepFor<T>(Ref ref, Future<T> Function() fetch) async {
+Future<T> _keepFor<T>(Ref ref, String what, Future<T> Function() fetch) async {
   final link = ref.keepAlive();
   final timer = Timer(_kKeepFor, link.close);
   ref.onDispose(timer.cancel);
 
   try {
     return await fetch();
-  } catch (_) {
+  } catch (e, st) {
+    talker.error('could not load $what', e, st);
     link.close(); // don't keep failures around
     rethrow;
   }
@@ -31,17 +33,17 @@ Future<T> _keepFor<T>(Ref ref, Future<T> Function() fetch) async {
 
 /// The artists the audio is linked to (with or without an album).
 final audioArtistsProvider = FutureProvider.autoDispose.family<List<Artist>, String>((ref, audioId) {
-  return _keepFor(ref, () => ref.read(relationshipControllerProvider).artistsOfAudio(audioId));
+  return _keepFor(ref, 'the artists of audio $audioId', () => ref.read(relationshipControllerProvider).artistsOfAudio(audioId));
 });
 
 /// The albums the audio is linked to.
 final audioAlbumsProvider = FutureProvider.autoDispose.family<List<Album>, String>((ref, audioId) {
-  return _keepFor(ref, () => ref.read(relationshipControllerProvider).albumsOfAudio(audioId));
+  return _keepFor(ref, 'the albums of audio $audioId', () => ref.read(relationshipControllerProvider).albumsOfAudio(audioId));
 });
 
 /// The artists of an album, to tell albums with the same name apart.
 final albumArtistsProvider = FutureProvider.autoDispose.family<List<Artist>, String>((ref, albumId) {
-  return _keepFor(ref, () => ref.read(relationshipControllerProvider).artistsOfAlbum(albumId));
+  return _keepFor(ref, 'the artists of album $albumId', () => ref.read(relationshipControllerProvider).artistsOfAlbum(albumId));
 });
 
 /// Every pair (artist and / or album) of the audio, for the edit page. Not kept: it must show the latest state.
@@ -51,7 +53,7 @@ final audioLinksProvider = FutureProvider.autoDispose.family<List<AudioLink>, St
 
 /// One artist by id. null when it can't be found.
 final artistByIdProvider = FutureProvider.autoDispose.family<Artist?, String>((ref, artistId) {
-  return _keepFor(ref, () => ref.read(libraryControllerProvider).artistById(artistId));
+  return _keepFor(ref, 'artist $artistId', () => ref.read(libraryControllerProvider).artistById(artistId));
 });
 
 /// "Artist A, Artist B", or null when there is none (or they aren't loaded yet).

@@ -20,7 +20,6 @@ import 'package:avarim/l10n/app_localizations.dart';
 import 'package:avarim/localization/calendars/calendar_controller.dart';
 import 'package:avarim/localization/locale_controller.dart';
 import 'package:avarim/localization/timezone/timezone_controller.dart';
-import 'package:avarim/subscription/subscription_notifier.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
