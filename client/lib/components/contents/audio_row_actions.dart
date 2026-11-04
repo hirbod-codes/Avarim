@@ -6,7 +6,7 @@
 
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/pages/search/album_playlist_menu.dart';
+import 'package:avarim/pages/search/save_to_playlist/ui/add_audios_to_playlist_menu.dart';
 import 'package:flutter/material.dart';
 
 class AudioRowActions extends StatelessWidget {
@@ -32,7 +32,7 @@ class AudioRowActions extends StatelessWidget {
             NotificationService.showSuccess(message: 'Added 1 audio to the queue');
           },
         ),
-        AudioPlaylistMenu(audioIds: () => [audioId], initialName: initialPlaylistName),
+        AddAudiosToPlaylistMenu(readAudioIds: () => [audioId], suggestedPlaylistName: initialPlaylistName),
       ],
     );
   }

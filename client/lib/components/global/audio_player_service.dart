@@ -48,13 +48,13 @@ import 'dart:math' as math;
 
 import 'package:avarim/api/controllers/audio_controller.dart';
 import 'package:avarim/components/global/playback_controller.dart';
-import 'package:avarim/pages/search/album_playlist_menu.dart' show SaveAsPlaylistButton;
 import 'package:avarim/api/providers/audio_links.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/root_navigator_key.dart';
 import 'package:avarim/components/contents/audio_container.dart';
 import 'package:avarim/components/contents/players/audio/audio_player_interface.dart';
 import 'package:avarim/components/contents/players/audio/audio_player_provider.dart';
+import 'package:avarim/pages/search/save_to_playlist/ui/save_audios_as_new_playlist_button.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -634,7 +634,7 @@ class _QueuePanel extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(child: Text('Queue · ${ids.length}', style: theme.textTheme.titleMedium)),
-                SaveAsPlaylistButton(tooltip: 'Save the queue as a playlist', audioIds: () => List<String>.of(AudioPlayerService.queue.value.ids)),
+                SaveAudiosAsNewPlaylistButton(tooltip: 'Save the queue as a playlist', readAudioIds: () => List<String>.of(AudioPlayerService.queue.value.ids)),
                 IconButton(tooltip: 'Close queue', icon: const Icon(Icons.keyboard_arrow_down), onPressed: () => AudioPlayerService.setQueueVisible(false)),
               ],
             ),
