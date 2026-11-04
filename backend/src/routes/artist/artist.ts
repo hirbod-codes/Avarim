@@ -15,6 +15,7 @@ import { MongoDB } from '../../db/MongoDB/mongodb';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
 import AudioRepository from '../../db/MongoDB/AudioRepository';
 import { ArtistController } from '../../controllers/ArtistController';
+import { pipeline } from 'node:stream/promises';
 
 const router = express.Router();
 
@@ -215,7 +216,7 @@ router.get('/avatar/:artistId', auth, async (req, res) => {
         res.setHeader('Content-Length', contentLength ?? '');
 
         log.info('Streaming avatar to client');
-        stream.pipe(res);
+        await pipeline(stream, res);
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }
@@ -420,7 +421,7 @@ router.get('/banner/:artistId', auth, async (req, res) => {
         res.setHeader('Content-Length', contentLength ?? '');
 
         log.info('Streaming banner to client');
-        stream.pipe(res);
+        await pipeline(stream, res);
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

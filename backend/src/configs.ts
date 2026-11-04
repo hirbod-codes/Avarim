@@ -79,6 +79,7 @@ export const smsProvider = {
         apiKey: getStringEnv('MELIPAYAMAK_API_KEY', 'The MELIPAYAMAK_API_KEY environment variable is not provided', s => s.optional()),
         from: getStringEnv('MELIPAYAMAK_FROM', 'The MELIPAYAMAK_FROM environment variable is not provided', s => s.optional()),
         verificationMessageReferenceAddress: getStringEnv('MELIPAYAMAK_VERIFICATION_MESSAGE_REFERENCE_ADDRESS', 'The SMS_PROVIDER_VERIFICATION_MESSAGE_REFERENCE_ADDRESS environment variable is not provided', s => s.optional()),
+        bodyId: getIntegerEnv('MELIPAYAMAK_BODY_ID', 'The MELIPAYAMAK_BODY_ID environment variable is not provided')
     }
 }
 

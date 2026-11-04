@@ -18,10 +18,12 @@ export function handleError(res: Response, err: any, log?: Logger) {
 
         if (err.name === 'ValidationError') {
             log.info({ errors: err.errors ?? err.message }, 'request input validation failed');
+            if (res.destroyed) return;
             try { return res.status(400).json({ status: 'error', error: err.errors ?? err.message }); } catch (_) { }
         }
 
         log.error({ err }, 'Unhandled error');
+        if (res.destroyed) return;
         try { return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' }); } catch (_) { }
     } catch (err) {
         console.error('handleError function threw Error!!!', err)

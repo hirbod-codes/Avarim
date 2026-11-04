@@ -19,6 +19,7 @@ import { Audio } from '../../db/models/Audio';
 import { AlbumController } from '../../controllers/AlbumController';
 import { AudioController } from '../../controllers/AudioController';
 import { ArtistAlbumAudioController } from '../../controllers/ArtistAlbumAudioController';
+import { pipeline } from 'node:stream/promises';
 
 const router = express.Router();
 
@@ -249,7 +250,7 @@ router.get('/avatar/:albumId', auth, async (req, res) => {
         res.setHeader('Content-Length', contentLength ?? '');
 
         log.info('Streaming avatar to client');
-        stream.pipe(res);
+        await pipeline(stream, res);
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

@@ -16,6 +16,7 @@ import PlaylistAudioRepository from '../../db/MongoDB/PlaylistAudioRepository';
 import { Audio } from '../../db/models/Audio';
 import { WithId } from '../../db/common_schemas';
 import AudioRepository from '../../db/MongoDB/AudioRepository';
+import { pipeline } from 'node:stream/promises';
 
 const PLAYLIST_NAME_SEPARATOR = '__PLAYLIST_NAME_SEPARATOR__'
 
@@ -402,7 +403,7 @@ router.get('/avatar/:playlistId', auth, async (req, res) => {
         res.setHeader('Content-Length', contentLength ?? '');
 
         log.info('Streaming avatar to client');
-        stream.pipe(res);
+        await pipeline(stream, res);
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

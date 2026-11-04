@@ -9,13 +9,15 @@ export class Melipayamak implements IOtp {
     private password: string
     private from: string
     private verificationMessageReferenceAddress: string
+    private bodyId: number
 
-    constructor({ baseEndpoint, username, password, from, verificationMessageReferenceAddress }: { baseEndpoint: string, username: string, password: string, from: string, verificationMessageReferenceAddress: string }) {
+    constructor({ baseEndpoint, username, password, from, verificationMessageReferenceAddress, bodyId }: { baseEndpoint: string, username: string, password: string, from: string, verificationMessageReferenceAddress: string, bodyId: number }) {
         this.baseEndpoint = baseEndpoint
         this.username = username
         this.password = password
         this.from = from
         this.verificationMessageReferenceAddress = verificationMessageReferenceAddress
+        this.bodyId = bodyId
     }
 
     async sendVerificationMessage(code: string, toPhoneNumber: string, locale: 'en' | 'fa'): Promise<boolean> {
@@ -24,19 +26,34 @@ export class Melipayamak implements IOtp {
         try {
             log.debug({ ...(isProduction ? {} : { code }), toPhoneNumber, locale })
 
-            const message = locale === 'en'
-                ? `Your verification code: 
-${code}
+            const result = await httpsRequest({
+                host: `${this.baseEndpoint.replace('https://', '')}`,
+                path: '/api/SendSMS/BaseServiceNumber',
+                method: 'post',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }, JSON.stringify({
+                username: this.username,
+                password: this.password,
+                from: this.from,
+                to: toPhoneNumber,
+                text: code,
+                bodyId: this.bodyId
+            }))
+            log.debug({ statusCode: result.response.statusCode })
 
-لغو 11
-`
-                : `کد ورود شما: 
-${code}
+            if (result.response.statusCode && result.response.statusCode > 199 && result.response.statusCode < 300) {
+                const data = JSON.parse(result.data)
+                log.debug({ data })
+                if (data.RetStatus === 1) {
+                    log.info('successfully sent verification code')
+                    return true
+                }
+            }
 
-لغو 11
-`
-
-            return await runWithLogger(log, () => this.sendMessage(message, toPhoneNumber))
+            log.info('failed to send verification code')
+            return false
         } catch (error) {
             log.error({ error }, 'failed to send verification code')
             return false

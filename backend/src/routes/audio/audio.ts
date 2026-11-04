@@ -793,7 +793,7 @@ router.get('/coverArt/:audioId', auth, async (req, res) => {
         res.setHeader('Content-Length', contentLength ?? '');
 
         log.info('Streaming cover art to client');
-        stream.pipe(res);
+        await pipeline(stream, res);
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

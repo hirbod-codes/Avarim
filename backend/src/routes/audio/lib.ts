@@ -15,11 +15,12 @@ import { MongoDB } from "../../db/MongoDB/mongodb";
 import ArtistRepository from "../../db/MongoDB/ArtistRepository";
 import AlbumRepository from "../../db/MongoDB/AlbumRepository";
 import ArtistAlbumAudioRepository from "../../db/MongoDB/ArtistAlbumAudioRepository";
-import { meiliAlbum, meiliArtist } from "../../db/meilisearch";
 import { AlbumController } from "../../controllers/AlbumController";
 import { ArtistController } from "../../controllers/ArtistController";
 import { Album } from "../../db/models/Album";
 import { WithId } from "../../db/common_schemas";
+import { parseByteRangeHeader } from "../schemas";
+import { pipeline } from "node:stream/promises";
 
 /**
  * if album provided
@@ -126,9 +127,21 @@ export async function streamAudioFile(audioId: string, userId: string, req: Requ
         return res.status(404).json({ status: 'error', message: 'Audio not found' });
     }
 
-    const range = req.headers.range;
+    const range = req.headers.range
+    const rangeValidation = parseByteRangeHeader(range);
+
+    if (rangeValidation.kind === 'malformed') {
+        log.info('malformed range header provided')
+        return res.sendStatus(400);
+    }
+
+    if (rangeValidation.kind === 'unsatisfiable') {
+        log.info('unsatisfiable range header provided')
+        return res.sendStatus(416);
+    }
+
     const key = isWeb ? (audio.webBucketKey ?? audio.bucketKey!) : audio.bucketKey!;
-    log.debug({ key, range, download });
+    log.debug({ key, range: rangeValidation, download });
 
     const result = await getS3ObjectStream(key, { range })
     log.debug({ result });
@@ -136,7 +149,7 @@ export async function streamAudioFile(audioId: string, userId: string, req: Requ
 
     if (!result || !result.stream) {
         log.warn('Storage object has no body');
-        return res.status(404).json({ status: 'error', message: 'Audio not found' });
+        return res.status(404).json({ status: 'error', error_code: 'AUDIO_NOT_FOUND' });
     }
 
     const body = result.stream
@@ -146,14 +159,14 @@ export async function streamAudioFile(audioId: string, userId: string, req: Requ
         res.destroy();
     });
 
-    res.status(range ? 206 : 200);
+    res.status(rangeValidation ? 206 : 200);
     res.setHeader('Content-Type', isWeb ? 'audio/m4a' : (audio.contentType?.mimeType ?? 'audio/m4a'));
     res.setHeader('Accept-Ranges', 'bytes');
     if (result.contentRange) res.setHeader('Content-Range', result.contentRange);
     if (result.contentLength) res.setHeader('Content-Length', result.contentLength);
 
     log.info('Streaming audio file to client');
-    body.pipe(res);
+    await pipeline(body, res);
 }
 
 /* ------------------------------------------------------------------ */

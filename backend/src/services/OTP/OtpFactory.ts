@@ -11,7 +11,8 @@ export class OtpFactory {
                     username: smsProvider.melipayamak.username!,
                     password: smsProvider.melipayamak.apiKey!,
                     from: smsProvider.melipayamak.from!,
-                    verificationMessageReferenceAddress: smsProvider.melipayamak.verificationMessageReferenceAddress!
+                    verificationMessageReferenceAddress: smsProvider.melipayamak.verificationMessageReferenceAddress!,
+                    bodyId: smsProvider.melipayamak.bodyId
                 })
 
             default:

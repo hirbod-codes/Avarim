@@ -10,8 +10,9 @@ import { getLogger, runWithLogger } from '../../observability/requestLoggerConte
 import { handleError, validate } from '../../lib';
 import { fetchAvatarSchema, preferencesSchema, uploadAvatarSchema } from './schemas';
 import UsageRepository from '../../db/MongoDB/UsageRepository';
-import { deleteFromS3 } from '../../lib/file_management';
+import { deleteFromS3, getS3ObjectStream } from '../../lib/file_management';
 import { MongoDB } from '../../db/MongoDB/mongodb';
+import { pipeline } from 'node:stream/promises';
 
 const router = express.Router();
 
@@ -155,25 +156,28 @@ router.get('/avatar', async (req, res) => {
         }
         log.info('user fetched')
 
-        const s3Result = await s3.send(new GetObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: user.avatarKey,
-            ResponseContentDisposition: download ? `attachment; filename="user_avatar.jpg"` : undefined,
-        }));
-        log.debug({ s3ResultMetaData: s3Result.Metadata, s3ResultContentType: s3Result.ContentType, s3ResultContentLength: s3Result.ContentLength })
-
-        const stream = s3Result.Body;
-        if (stream === undefined || stream === null) {
-            log.warn('avatar not found in the cloud s3 storage')
+        const result = await getS3ObjectStream(user.avatarKey);
+        log.debug({ result });
+        if (!result) {
+            log.warn('banner object has no body');
             return res.status(404).json({ status: 'error', error_code: 'AVATAR_NOT_FOUND' });
         }
 
-        res.setHeader("Content-Type", s3Result.ContentType || "image/jpg");
-        res.setHeader("Content-Length", s3Result.ContentLength ?? "");
+        const { stream, contentLength, contentType } = result
+        log.debug({ stream, contentLength, contentType });
+
+        if (!stream) {
+            log.warn('banner object has no body');
+            return res.status(404).json({ status: 'error', error_code: 'AVATAR_NOT_FOUND' });
+        }
+
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Type', contentType || 'application/octet-stream');
+        res.status(200);
+        res.setHeader('Content-Length', contentLength ?? '');
 
         res.status(200);
-        (stream as any).pipe(res);
-
+        await pipeline(stream, res);
     } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
