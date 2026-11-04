@@ -14,7 +14,7 @@ import 'dart:async';
 
 import 'package:avarim/api/controllers/audio_controller.dart';
 import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/pages/search/search_page.dart' show musicSearchApiProvider;
+import 'package:avarim/pages/search/music_search/data/music_search_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -64,7 +64,7 @@ class _DeleteAlbumAudiosSectionState extends ConsumerState<DeleteAlbumAudiosSect
       _total = 0;
     });
 
-    final ids = await ref.read(musicSearchApiProvider).albumAudioIds(widget.albumId);
+    final ids = await ref.read(musicSearchApiProvider).fetchAllAudioIdsOfAlbum(widget.albumId);
     if (!mounted) return;
 
     if (ids == null) {

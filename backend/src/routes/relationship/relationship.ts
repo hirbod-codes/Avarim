@@ -311,7 +311,7 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
         if (filter.audioId === null) delete filter.audioId
         log.debug({ filter })
 
-        if (!filter.audioId && !filter.artistId && !filter.albumId){
+        if (!filter.audioId && !filter.artistId && !filter.albumId) {
             log.info('there is no filter');
             return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
         }

@@ -582,6 +582,90 @@ router.get('/info/', auth, async (req, res) => {
     }
 });
 
+/**
+ * to fetch a list of albums that the audio belongs to. 
+ */
+router.get('/no_artist', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'relationship', route: 'GET /api/audio/no_artist' });
+
+    try {
+        log.info('relationship audio no artist request received');
+
+        log.debug({ query: req.query });
+        const { page, pageSize, search } = await runWithLogger(log, () => validate(listQuerySchema, req.query));
+        log.debug({ page, pageSize, search });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        let audios: Audio[]
+        if (search) {
+            log.info('search in meilisearch')
+
+            const searchResult = await meiliAudio.search(search, { page, hitsPerPage: pageSize })
+            const { totalHits, totalPages, hits } = searchResult
+            log.debug({ totalHits, totalPages, hits })
+
+            const ids = hits.map(m => m._id)
+
+            log.info('fetch from audioRepository')
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioWithNoArtist(ids, (page - 1) * pageSize, pageSize))
+        } else {
+            log.info('fetch from audioRepository')
+
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioWithNoArtist(undefined, (page - 1) * pageSize, pageSize))
+        }
+        log.debug({ count: audios.length });
+
+        log.info('audios successfully fetched');
+        res.status(200).json({ status: 'success', data: audios });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
+/**
+ * to fetch a list of albums that the audio belongs to. 
+ */
+router.get('/no_album', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'relationship', route: 'GET /api/audio/no_album' });
+
+    try {
+        log.info('relationship audio no album request received');
+
+        log.debug({ query: req.query });
+        const { page, pageSize, search } = await runWithLogger(log, () => validate(listQuerySchema, req.query));
+        log.debug({ page, pageSize, search });
+        log.info('Input validated');
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        let audios: Audio[]
+        if (search) {
+            log.info('search in meilisearch')
+
+            const searchResult = await meiliAudio.search(search, { page, hitsPerPage: pageSize })
+            const { totalHits, totalPages, hits } = searchResult
+            log.debug({ totalHits, totalPages, hits })
+
+            const ids = hits.map(m => m._id)
+
+            log.info('fetch from audioRepository')
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioWithNoAlbum(ids, (page - 1) * pageSize, pageSize))
+        } else {
+            log.info('fetch from audioRepository')
+
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioWithNoAlbum(undefined, (page - 1) * pageSize, pageSize))
+        }
+        log.debug({ count: audios.length });
+
+        log.info('audios successfully fetched');
+        res.status(200).json({ status: 'success', data: audios });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
 router.get('/singed_token', auth, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'GET /api/audio/singed_token' });
 

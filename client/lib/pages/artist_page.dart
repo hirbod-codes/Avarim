@@ -55,11 +55,11 @@ import 'package:avarim/components/contents/audio_row_actions.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/lib/talker.dart';
+import 'package:avarim/pages/search/music_search/ui/authenticated_thumbnail.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart' hide Thumb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:avarim/pages/search/search_page.dart' show Thumb;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -981,7 +981,7 @@ class _SingleTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       onTap: onPlay,
-      leading: Thumb(url: '${AppConfig.apiUrl}/api/audio/coverArt/${audio.id}', icon: Icons.music_note),
+      leading: AuthenticatedThumbnail(imageUrl: '${AppConfig.apiUrl}/api/audio/coverArt/${audio.id}', placeholderIcon: Icons.music_note),
       title: Text(audio.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: AudioRowActions(audioId: audio.id, initialPlaylistName: audio.title),
     );

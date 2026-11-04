@@ -286,6 +286,52 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .toArray() as WithId<Artist>[]
     }
 
+    async getManyAudioWithNoArtist(audioIds: string[] | undefined, skip: number, limit: number): Promise<WithId<Audio>[]> {
+        return await ArtistAlbumAudioRepository.collection!
+            .aggregate([
+                { $match: { artistId: null, ...(audioIds === undefined ? {} : { audioId: { $in: audioIds } }) } },
+                { $group: { _id: { $toObjectId: '$audioId' } } },
+                {
+                    $lookup: {
+                        from: audioCollection,
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'audio'
+                    }
+                },
+                { $unwind: '$audio' },
+                { $replaceRoot: { newRoot: '$audio' } },
+
+                { $sort: { createdAt: -1, _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+            ])
+            .toArray() as WithId<Audio>[]
+    }
+
+    async getManyAudioWithNoAlbum(audioIds: string[] | undefined, skip: number, limit: number): Promise<WithId<Audio>[]> {
+        return await ArtistAlbumAudioRepository.collection!
+            .aggregate([
+                { $match: { albumId: null, ...(audioIds === undefined ? {} : { audioId: { $in: audioIds } }) } },
+                { $group: { _id: { $toObjectId: '$audioId' } } },
+                {
+                    $lookup: {
+                        from: audioCollection,
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'audio'
+                    }
+                },
+                { $unwind: '$audio' },
+                { $replaceRoot: { newRoot: '$audio' } },
+
+                { $sort: { createdAt: -1, _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+            ])
+            .toArray() as WithId<Audio>[]
+    }
+
     async getManyByAlbumIdByAudioId(albumId?: string, audioId?: string): Promise<WithId<ArtistAlbumAudio>[]> {
         return await ArtistAlbumAudioRepository.collection!.find({ albumId, audioId }, { session: this.session }).toArray()
     }

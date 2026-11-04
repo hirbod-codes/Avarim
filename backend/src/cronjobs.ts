@@ -122,7 +122,7 @@ export const runCronjobs = async () => {
             for await (const artist of artistCursor)
                 artistDeleteAvatarPromises.push((async () => {
                     try {
-                        log.info(`Deleting user id: ${artist._id!.toString()} ...`);
+                        log.info(`Deleting artist id: ${artist._id!.toString()} ...`);
 
                         log.info({ artist })
 
@@ -170,7 +170,7 @@ export const runCronjobs = async () => {
                     const album: Album | undefined = albumId ? await runWithLogger(log, albumRepo.get(albumId)) : undefined
                     const audio: Audio | undefined = audioId ? await runWithLogger(log, audioRepo.get(audioId)) : undefined
 
-                    if (!artist || !album || !audio) {
+                    if ((artistId && !artist) || (albumId && !album) || !audio) {
                         const result = await runWithLogger(log, artistAlbumAudioRepository.deleteBy({ artistId, albumId, audioId }))
                         log.debug({ result })
                         if (!result?.acknowledged) {
@@ -182,14 +182,33 @@ export const runCronjobs = async () => {
 
             await Promise.allSettled(danglingArtistAlbumAudioPromises)
 
+            log.info('fixing audios with no artistAlbumAudio document associated...');
+
+            const brokenAudiosPromises = []
+            let brokenAudioCursor = audioRepo.getFromCursor(from)
+            for await (const brokenAudio of brokenAudioCursor)
+                brokenAudiosPromises.push((async () => {
+                    log.debug({ brokenAudio })
+                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ audioId: brokenAudio._id.toString() }))
+                    log.debug({ artistAlbumAlbumDeleteResult })
+                    if (artistAlbumAlbumDeleteResult.length === 0) {
+                        const insertResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ audioId: brokenAudio._id.toString(), artistId: undefined, albumId: undefined }))
+                        log.debug({ insertResult })
+                    }
+                })())
+
+            await Promise.allSettled(brokenAudiosPromises)
+
             log.info('Deleting dangling albums...');
 
             const danglingAlbumsPromises = []
             let danglingAlbumCursor = albumRepo.getFromCursor(from)
             for await (const danglingAlbum of danglingAlbumCursor)
                 danglingAlbumsPromises.push((async () => {
-                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ albumId: danglingAlbum._id.toString() }))
-                    if (artistAlbumAlbumDeleteResult.length === 0)
+                    log.debug({ danglingAlbum })
+                    const artistAlbumAlbumFetchResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ albumId: danglingAlbum._id.toString() }))
+                    log.debug({ artistAlbumAlbumFetchResult })
+                    if (artistAlbumAlbumFetchResult.length === 0)
                         await new AlbumController().delete(danglingAlbum)
                 })())
 
@@ -201,8 +220,10 @@ export const runCronjobs = async () => {
             let danglingArtistCursor = artistRepo.getFromCursor(from)
             for await (const danglingArtist of danglingArtistCursor)
                 danglingArtistsPromises.push((async () => {
-                    const artistAlbumAlbumDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ artistId: danglingArtist._id.toString() }))
-                    if (artistAlbumAlbumDeleteResult.length === 0)
+                    log.debug({ danglingArtist })
+                    const artistAlbumAlbumFetchResult = await runWithLogger(log, () => artistAlbumAudioRepository.getBy({ artistId: danglingArtist._id.toString() }))
+                    log.debug({ artistAlbumAlbumFetchResult })
+                    if (artistAlbumAlbumFetchResult.length === 0)
                         await new ArtistController().delete(danglingArtist)
                 })())
 
