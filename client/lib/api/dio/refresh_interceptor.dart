@@ -15,67 +15,75 @@ class RefreshInterceptor extends Interceptor {
 
   RefreshInterceptor({required this.dio, required this.storage, required this.ref, required this.logout, required this.refresh});
 
-  bool _isRefreshing = false;
+  static const _retriedKey = 'refresh_interceptor_retried';
 
-  bool _isSilent = false;
-
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler? handler) {
-    _isSilent = options.extra[GlobalErrorInterceptor.silentErrorsKey] == true;
-
-    handler?.next(options);
-  }
+  /// Shared by all callers that 401 while a refresh is running.
+  Future<String?>? _refreshFuture;
 
   @override
   Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
-    final requestOptions = err.requestOptions;
+    final options = err.requestOptions;
+    final silent = options.extra[GlobalErrorInterceptor.silentErrorsKey] == true;
 
-    if (err.response?.statusCode != 401 || requestOptions.path == '/api/auth/refresh') {
+    if (err.response?.statusCode != 401 || options.path.endsWith('/auth/refresh') || options.extra[_retriedKey] == true) {
       handler.next(err);
       return;
     }
-
-    if (_isRefreshing) {
-      handler.next(err);
-      return;
-    }
-
-    _isRefreshing = true;
 
     try {
-      final refreshToken = await storage.getRefreshToken();
+      final sentAuth = options.headers['Authorization'];
+      final currentToken = await storage.getAccessToken();
 
-      if (!kIsWeb && refreshToken == null) throw err;
+      String? newToken;
+      if (currentToken != null && sentAuth != 'Bearer $currentToken') {
+        // Token was already refreshed after this request was sent; just retry.
+        newToken = currentToken;
+      } else {
+        newToken = await _refreshOnce(silent);
+      }
 
-      final response = await refresh(refreshToken, silent: _isSilent);
-      if (response == null) {
-        await storage.clear();
-        await logout(silent: _isSilent);
+      if (newToken == null) {
         handler.next(err);
         return;
       }
 
-      final accessToken = response.accessToken;
-      await storage.saveAccessToken(accessToken);
-
-      if (response.refreshToken != null) await storage.saveRefreshToken(response.refreshToken!);
-
-      requestOptions.headers['Authorization'] = 'Bearer $accessToken';
+      options.headers['Authorization'] = 'Bearer $newToken';
+      options.extra[_retriedKey] = true;
 
       try {
-        final retryResponse = await dio.fetch(requestOptions);
-        handler.resolve(retryResponse);
+        handler.resolve(await dio.fetch(options));
       } on DioException catch (retryErr) {
-        // The retry already ran the full interceptor chain (toast included),
-        // so pass its real error up without running error interceptors again.
         handler.reject(retryErr);
       }
     } catch (e) {
       talker.error('error caught in RefreshInterceptor, onError', e);
-
       handler.next(err);
-    } finally {
-      _isRefreshing = false;
     }
+  }
+
+  Future<String?> _refreshOnce(bool silent) {
+    final inFlight = _refreshFuture;
+    if (inFlight != null) return inFlight;
+
+    final future = _doRefresh(silent).whenComplete(() => _refreshFuture = null);
+    _refreshFuture = future;
+    return future;
+  }
+
+  Future<String?> _doRefresh(bool silent) async {
+    final refreshToken = await storage.getRefreshToken();
+    if (!kIsWeb && refreshToken == null) return null;
+
+    final response = await refresh(refreshToken, silent: silent);
+    if (response == null) {
+      await storage.clear();
+      await logout(silent: silent);
+      return null;
+    }
+
+    await storage.saveAccessToken(response.accessToken);
+    if (response.refreshToken != null) await storage.saveRefreshToken(response.refreshToken!);
+
+    return response.accessToken;
   }
 }
