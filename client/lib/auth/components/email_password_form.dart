@@ -12,8 +12,9 @@ class EmailPasswordForm extends ConsumerStatefulWidget {
   final AuthMode mode;
   final ValueChanged<AuthMode> onModeChanged;
   final ValueChanged<AuthTokens>? onAuthenticated;
+  final bool noVerificationCode;
 
-  const EmailPasswordForm({super.key, required this.mode, required this.onModeChanged, this.onAuthenticated});
+  const EmailPasswordForm({super.key, required this.mode, required this.onModeChanged, this.onAuthenticated, this.noVerificationCode = false});
 
   @override
   ConsumerState<EmailPasswordForm> createState() => _EmailPasswordFormState();
@@ -60,6 +61,12 @@ class _EmailPasswordFormState extends ConsumerState<EmailPasswordForm> {
     final api = ref.read(authControllerProvider.notifier);
     final controller = ref.read(authActionControllerProvider.notifier);
 
+    if (widget.noVerificationCode) {
+      AuthTokens tokens = await api.signUpWithEmailWithoutVerificationCode(email: email, password: _passwordController.text);
+      widget.onAuthenticated?.call(tokens);
+      return;
+    }
+
     // Step 1: create the (unverified) account and trigger the code email.
     await controller.run(() => api.signUpWithEmail(email: email, password: _passwordController.text));
     final sendState = ref.read(authActionControllerProvider);
@@ -80,9 +87,7 @@ class _EmailPasswordFormState extends ConsumerState<EmailPasswordForm> {
       onResend: () => api.signUpWithEmail(email: email, password: _passwordController.text),
     );
 
-    if (verified == true && tokens != null) {
-      widget.onAuthenticated?.call(tokens!);
-    }
+    if (verified == true && tokens != null) widget.onAuthenticated?.call(tokens!);
   }
 
   @override

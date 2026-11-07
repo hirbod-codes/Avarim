@@ -220,6 +220,17 @@ class AuthController extends Notifier<AuthState> implements AuthApi {
   }
 
   @override
+  Future<AuthTokens> signUpWithEmailWithoutVerificationCode({required String email, required String password}) async {
+    final response = await _authDio
+        .post('/api/auth/email_Without_verification_code/register', data: {'email': email, 'password': password, 'client': _client})
+        .notifyOnSuccess(
+          rootContext == null ? "You're all set! Account created." : AppLocalizations.of(rootContext!)?.account_created ?? "You're all set! Account created.",
+        );
+    final result = LoginResponse.fromJson(response.data['data']);
+    return _completeAuthentication(result.accessToken, result.refreshToken);
+  }
+
+  @override
   Future<void> signUpWithEmail({required String email, required String password}) async {
     await _authDio
         .post('/api/auth/email/register', data: {'email': email, 'password': password, 'client': _client})

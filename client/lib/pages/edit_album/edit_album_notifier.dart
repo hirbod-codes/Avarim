@@ -80,21 +80,33 @@ class EditAlbumNotifier extends Notifier<EditAlbumState> {
   }
 
   /// Sends the new name. Returns true on success (on failure the error was already shown).
-  Future<bool> save({required String name}) async {
+  Future<bool> save({required String name, String? publishedYear, String? publishedMonth, bool doNotUseFirstAudioCoverArt = true}) async {
     final album = state.album;
     final id = _id;
     if (album == null || id == null || state.isSaving) return false;
 
     state = state.copyWith(isSaving: true);
-    final result = await _api.update(albumId: id, name: name);
-    if (!ref.mounted) return !result.isFailure;
+    final updateNameResult = await _api.updateName(albumId: id, name: name);
+    if (!ref.mounted) return !updateNameResult.isFailure;
 
-    if (result.isFailure) {
+    if (updateNameResult.isFailure) {
       state = state.copyWith(isSaving: false);
       return false;
     }
 
-    state = state.copyWith(isSaving: false, revision: state.revision + 1, album: {...album, 'name': name});
+    final updateResult = await _api.update(
+      albumId: id,
+      publishedYear: publishedYear,
+      publishedMonth: publishedMonth,
+      doNotUseFirstAudioCoverArt: doNotUseFirstAudioCoverArt,
+    );
+
+    if (updateResult.isFailure) {
+      state = state.copyWith(isSaving: false);
+      return false;
+    }
+
+    state = state.copyWith(isSaving: false, revision: state.revision + 1, album: {...album, 'name': name, 'publishedYear': publishedYear});
     return true;
   }
 }

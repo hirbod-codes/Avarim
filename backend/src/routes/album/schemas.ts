@@ -3,6 +3,7 @@ import { string } from "yup";
 import { object } from "yup";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from "../schemas";
 import { boolean } from "yup";
+import { albumUpdateSchema } from "../../db/models/Album";
 
 export const postSchema = object().required().shape({
     name: string().required().label('Name'),
@@ -15,6 +16,10 @@ export const audioListQuerySchema = object().required().shape({
 export const albumIdArtistNameSchema = object().required().shape({
     albumId: string().objectIdString().required().label('Album id'),
     albumName: string().required().label('Album Name'),
+}).stripUnknown().required()
+
+export const albumUpdateInputSchema = albumUpdateSchema.pick(['publishYear', 'publishMonth', 'doNotUseFirstAudioCoverArt']).shape({
+    albumId: string().objectIdString().required().label('Album id'),
 }).stripUnknown().required()
 
 export const albumOwnerSchema = object().required().shape({

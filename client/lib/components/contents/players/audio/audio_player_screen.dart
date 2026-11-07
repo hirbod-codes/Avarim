@@ -184,7 +184,10 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
     // The artists arrive after the track, and the next / previous buttons depend on the queue.
     final token = _sessionToken;
     if (token != null &&
-        (oldWidget.title != widget.title || oldWidget.artist != widget.artist || (oldWidget.onNext == null) != (widget.onNext == null) || (oldWidget.onPrevious == null) != (widget.onPrevious == null))) {
+        (oldWidget.title != widget.title ||
+            oldWidget.artist != widget.artist ||
+            (oldWidget.onNext == null) != (widget.onNext == null) ||
+            (oldWidget.onPrevious == null) != (widget.onPrevious == null))) {
       SystemMediaSession.update(token, _sessionTrack(), _sessionControls(ref.read(audioPlayerCommandsProvider.notifier)));
     }
   }
@@ -221,10 +224,16 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
     final alignment = Alignment(center.dx / size.width * 2 - 1, center.dy / size.height * 2 - 1);
 
     // RadialGradient.radius is a fraction of the shortest side; reach (a share of) the farthest corner.
-    final farthest = [Offset.zero, Offset(size.width, 0), Offset(0, size.height), Offset(size.width, size.height)].map((c) => (c - center).distance).reduce(math.max);
+    final farthest = [
+      Offset.zero,
+      Offset(size.width, 0),
+      Offset(0, size.height),
+      Offset(size.width, size.height),
+    ].map((c) => (c - center).distance).reduce(math.max);
     final radius = farthest * kCoverGradientReach / size.shortestSide;
 
-    final unchanged = (alignment.x - _gradientCenter.x).abs() < 0.002 && (alignment.y - _gradientCenter.y).abs() < 0.002 && (radius - _gradientRadius).abs() < 0.002;
+    final unchanged =
+        (alignment.x - _gradientCenter.x).abs() < 0.002 && (alignment.y - _gradientCenter.y).abs() < 0.002 && (radius - _gradientRadius).abs() < 0.002;
     if (unchanged) return;
 
     setState(() {
@@ -291,147 +300,157 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
       child: Material(
         type: MaterialType.transparency,
         child: StreamBuilder<AudioPlayerState>(
-      stream: notifier.stateStream,
-      initialData: notifier.currentState,
-      builder: (context, snapshot) {
-        final state = snapshot.data ?? const AudioPlayerState();
-        if (state.hasError) {
-          return _ErrorView(message: state.error ?? 'Unknown error');
-        }
-        return Padding(
-          padding: widget.contentPadding,
-          child: LayoutBuilder(
-            builder: (context, box) {
-              // The layout changed -> re-measure where the cover art ended up.
-              if (_lastLayout != box) {
-                _lastLayout = box;
-                WidgetsBinding.instance.addPostFrameCallback((_) => _measureGradientCenter());
-              }
-              // The controls take the height they need (no fixed layout height to outgrow). If that is
-              // more than is available they are scaled down to fit, never up; if it is less they are
-              // centered vertically. The background / gradient is outside this and always fills everything.
-              return Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: SizedBox(
-                    width: box.maxWidth,
-                    child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: kAudioPlayerContentMaxWidth),
-            child: SizedBox(
-              width: double.infinity,
-              child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Album art + track info. An open info panel takes over exactly this area
-              // (the original stays laid out underneath so nothing jumps).
-              SizedBox(
-                width: double.infinity,
-                child: Stack(
-                  alignment: Alignment.topCenter,
-                  children: [
-                    Visibility(
-                      visible: !infoOpen && !equalizerOpen,
-                      maintainSize: true,
-                      maintainAnimation: true,
-                      maintainState: true,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 24),
-                          Container(
-                            key: _artKey,
-                            constraints: BoxConstraints(maxHeight: 300),
-                            child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
+          stream: notifier.stateStream,
+          initialData: notifier.currentState,
+          builder: (context, snapshot) {
+            final state = snapshot.data ?? const AudioPlayerState();
+            if (state.hasError) {
+              return _ErrorView(message: state.error ?? 'Unknown error');
+            }
+            return Padding(
+              padding: widget.contentPadding,
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  // The layout changed -> re-measure where the cover art ended up.
+                  if (_lastLayout != box) {
+                    _lastLayout = box;
+                    WidgetsBinding.instance.addPostFrameCallback((_) => _measureGradientCenter());
+                  }
+                  // The controls take the height they need (no fixed layout height to outgrow). If that is
+                  // more than is available they are scaled down to fit, never up; if it is less they are
+                  // centered vertically. The background / gradient is outside this and always fills everything.
+                  return Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: SizedBox(
+                        width: box.maxWidth,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: kAudioPlayerContentMaxWidth),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    // Album art + track info. An open info panel takes over exactly this area
+                                    // (the original stays laid out underneath so nothing jumps).
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: Stack(
+                                        alignment: Alignment.topCenter,
+                                        children: [
+                                          Visibility(
+                                            visible: !infoOpen && !equalizerOpen,
+                                            maintainSize: true,
+                                            maintainAnimation: true,
+                                            maintainState: true,
+                                            child: Column(
+                                              children: [
+                                                const SizedBox(height: 24),
+                                                Container(
+                                                  key: _artKey,
+                                                  constraints: BoxConstraints(maxHeight: 300),
+                                                  child: _AlbumArt(audioId: widget.audioId, accessToken: widget.accessToken),
+                                                ),
+                                                const SizedBox(height: 40),
+                                                // Full width, so that the text starts at the left edge instead of being centered.
+                                                SizedBox(
+                                                  width: double.infinity,
+                                                  // The title is the audio's, the artist(s) come from its relationships: both are loaded by AudioContainer. The engine's
+                                                  // own title / artist are never read, PlaybackController opens the track without them.
+                                                  child: _TrackInfo(title: widget.title, artist: widget.artist),
+                                                ),
+                                                const SizedBox(height: 32),
+                                              ],
+                                            ),
+                                          ),
+                                          if (infoOpen)
+                                            Positioned.fill(
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                                child: AudioInfoPanelView(
+                                                  key: ValueKey(_panel),
+                                                  audio: widget.audio!,
+                                                  panel: _panel!,
+                                                  onClose: () => setState(() => _panel = null),
+                                                ),
+                                              ),
+                                            ),
+                                          if (equalizerOpen)
+                                            Positioned.fill(
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                                child: EqualizerPanel(engine: equalizer, onClose: () => setState(() => _equalizerOpen = false)),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      children: [
+                                        Row(
+                                          children: [
+                                            if (widget.audio != null)
+                                              AudioInfoButtons(
+                                                audio: widget.audio!,
+                                                selected: _panel,
+                                                onSelected: (p) => setState(() {
+                                                  _panel = p;
+                                                  if (p != null) _equalizerOpen = false;
+                                                }),
+                                              ),
+                                            if (equalizer != null)
+                                              IconButton(
+                                                tooltip: 'Equalizer',
+                                                visualDensity: VisualDensity.compact,
+                                                isSelected: equalizerOpen,
+                                                icon: const Icon(Icons.equalizer),
+                                                style: IconButton.styleFrom(
+                                                  foregroundColor: equalizerOpen ? Theme.of(context).colorScheme.onPrimaryContainer : null,
+                                                  backgroundColor: equalizerOpen ? Theme.of(context).colorScheme.primaryContainer : null,
+                                                ),
+                                                onPressed: () => setState(() {
+                                                  _equalizerOpen = !_equalizerOpen;
+                                                  if (_equalizerOpen) _panel = null;
+                                                }),
+                                              ),
+                                            const Spacer(),
+                                            ...widget.extraActions,
+                                            _SpeedControls(state: state),
+                                          ],
+                                        ),
+                                        // Waveform when the audio has one, otherwise the plain slider.
+                                        if (waveform.isNotEmpty) _WaveformSeekBar(state: state, waveform: waveform) else _SeekBar(state: state),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 24),
+                                    _MainControls(
+                                      state: state,
+                                      showQueueControls: widget.showQueueControls,
+                                      onPrevious: widget.onPrevious,
+                                      onNext: widget.onNext,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    _VolumeControls(state: state),
+                                    const SizedBox(height: 32),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 40),
-                          // Full width, so that the text starts at the left edge instead of being centered.
-                          SizedBox(
-                            width: double.infinity,
-                            // The title is the audio's, the artist(s) come from its relationships: both are loaded by AudioContainer. The engine's
-                            // own title / artist are never read, PlaybackController opens the track without them.
-                            child: _TrackInfo(title: widget.title, artist: widget.artist),
-                          ),
-                          const SizedBox(height: 32),
-                        ],
+                        ),
                       ),
                     ),
-                    if (infoOpen)
-                      Positioned.fill(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: AudioInfoPanelView(key: ValueKey(_panel), audio: widget.audio!, panel: _panel!, onClose: () => setState(() => _panel = null)),
-                        ),
-                      ),
-                    if (equalizerOpen)
-                      Positioned.fill(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: EqualizerPanel(engine: equalizer, onClose: () => setState(() => _equalizerOpen = false)),
-                        ),
-                      ),
-                  ],
-                ),
+                  );
+                },
               ),
-              Column(
-                children: [
-                  Row(
-                    children: [
-                      if (widget.audio != null)
-                        AudioInfoButtons(
-                          audio: widget.audio!,
-                          selected: _panel,
-                          onSelected: (p) => setState(() {
-                            _panel = p;
-                            if (p != null) _equalizerOpen = false;
-                          }),
-                        ),
-                      if (equalizer != null)
-                        IconButton(
-                          tooltip: 'Equalizer',
-                          visualDensity: VisualDensity.compact,
-                          isSelected: equalizerOpen,
-                          icon: const Icon(Icons.equalizer),
-                          style: IconButton.styleFrom(
-                            foregroundColor: equalizerOpen ? Theme.of(context).colorScheme.onPrimaryContainer : null,
-                            backgroundColor: equalizerOpen ? Theme.of(context).colorScheme.primaryContainer : null,
-                          ),
-                          onPressed: () => setState(() {
-                            _equalizerOpen = !_equalizerOpen;
-                            if (_equalizerOpen) _panel = null;
-                          }),
-                        ),
-                      const Spacer(),
-                      ...widget.extraActions,
-                      _SpeedControls(state: state),
-                    ],
-                  ),
-                  // Waveform when the audio has one, otherwise the plain slider.
-                  if (waveform.isNotEmpty) _WaveformSeekBar(state: state, waveform: waveform) else _SeekBar(state: state),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _MainControls(state: state, showQueueControls: widget.showQueueControls, onPrevious: widget.onPrevious, onNext: widget.onNext),
-              const SizedBox(height: 24),
-              _VolumeControls(state: state),
-              const SizedBox(height: 32),
-            ],
-          ),
-              ),
-            ),
-          ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    ),
-    ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

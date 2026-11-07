@@ -24,6 +24,7 @@ export const appSettingsSchema = object().required().stripUnknown().strict(true)
     key: string().required().oneOf<AppSettingsKey>(['auth', 'pricing', 'expiration']),
 
     // auth
+    allowEmailWithoutVerificationCodeRegistration: boolean().when('key', { is: 'auth', then(s) { return s.required() }, otherwise(s) { return s.optional(); } }),
     allowEmailRegistration: boolean().when('key', { is: 'auth', then(s) { return s.required() }, otherwise(s) { return s.optional(); } }),
     allowOtp: boolean().when('key', { is: 'auth', then(s) { return s.required() }, otherwise(s) { return s.optional(); } }),
 

@@ -28,6 +28,8 @@ AuthMethod? _parseMethod(String value) {
   switch (value) {
     case 'email':
       return AuthMethod.email;
+    case 'emailWithoutVerificationCode':
+      return AuthMethod.emailWithoutVerificationCode;
     case 'phone':
       return AuthMethod.phone;
     default:

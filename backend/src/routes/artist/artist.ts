@@ -196,24 +196,18 @@ router.get('/avatar/:artistId', auth, async (req, res) => {
         }
 
         const result = await getS3ObjectStream(artist.avatarKey);
-        log.debug({ result });
-        if (!result) {
+        if (!result?.stream) {
             log.warn('avatar object has no body');
             return res.status(404).json({ status: 'error', error_code: 'AVATAR_NOT_FOUND' });
         }
 
-        const { stream, contentLength, contentType } = result
-        log.debug({ stream, contentLength, contentType });
+        const { stream, contentLength, contentType } = result;
+        log.debug({ contentLength, contentType });
 
-        if (!stream) {
-            log.warn('avatar object has no body');
-            return res.status(404).json({ status: 'error', error_code: 'AVATAR_NOT_FOUND' });
-        }
-
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Content-Type', contentType || 'application/octet-stream');
         res.status(200);
-        res.setHeader('Content-Length', contentLength ?? '');
+        res.setHeader('Content-Type', contentType || 'application/octet-stream');
+        if (contentLength) res.setHeader('Content-Length', contentLength);
+        res.setHeader('Cache-Control', 'private, max-age=3600'); // fewer repeat requests while scrolling
 
         log.info('Streaming avatar to client');
         await pipeline(stream, res);

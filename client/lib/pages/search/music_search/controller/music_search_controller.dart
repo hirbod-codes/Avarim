@@ -122,6 +122,40 @@ class MusicSearchController extends Notifier<MusicSearchState> {
     }
   }
 
+  Future<void> replaceAlbumOrPlaylistToQueue(WithId item, {required bool playImmediately}) async {
+    if (state.idsBeingAddedToQueue.contains(item.id)) return;
+    state = state.copyWith(idsBeingAddedToQueue: {item.id});
+
+    List<String>? audioIds;
+    try {
+      final api = ref.read(musicSearchApiProvider);
+      audioIds = switch (item) {
+        Album album => await api.fetchAllAudioIdsOfAlbum(album.id),
+        Playlist playlist => await api.fetchAllAudioIdsOfPlaylist(playlist.id),
+        _ => const <String>[],
+      };
+    } catch (error, stackTrace) {
+      talker.error('fetching the audios to queue failed', error, stackTrace);
+    }
+
+    // audioIds == null: a request failed and its error was already shown.
+    if (audioIds != null) {
+      if (audioIds.isEmpty) {
+        NotificationService.showError(message: 'There are no audios to add');
+      } else {
+        // The player is global, so this works even if the user already left the page.
+        AudioPlayerService.replace(audioIds: audioIds, play: playImmediately);
+        if (!playImmediately) {
+          NotificationService.showSuccess(message: audioIds.length == 1 ? 'Added 1 audio to the queue' : 'Added ${audioIds.length} audios to the queue');
+        }
+      }
+    }
+
+    if (ref.mounted) {
+      state = state.copyWith(idsBeingAddedToQueue: {...state.idsBeingAddedToQueue}..remove(item.id));
+    }
+  }
+
   /// Deletes an audio. While the request runs its id is in [MusicSearchState.idsBeingDeleted];
   /// on success it disappears from every tab (and from the floating player if it was playing).
   Future<void> deleteAudio(String audioId) async {

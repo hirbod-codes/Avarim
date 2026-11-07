@@ -12,6 +12,9 @@ const shape = {
 
     name: string().required(),
 
+    publishYear: string().optional(),
+    publishMonth: string().optional(),
+
     avatarKey: string().optional().url(),
     doNotUseFirstAudioCoverArt: boolean().optional(), // Added for compatibility
 

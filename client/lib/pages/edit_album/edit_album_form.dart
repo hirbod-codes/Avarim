@@ -22,25 +22,31 @@ class _EditAlbumFormState extends ConsumerState<EditAlbumForm> {
   final _formKey = GlobalKey<FormState>();
 
   late final String _baseName;
+  late final String _basePublishedYear;
   late final TextEditingController _name;
-
+  late final TextEditingController _publishedYear;
   @override
   void initState() {
     super.initState();
     _baseName = (widget.album['name'] as String? ?? '').trim();
     _name = TextEditingController(text: _baseName)..addListener(() => setState(() {}));
+    _basePublishedYear = (widget.album['publishedYear'] as String? ?? '').trim();
+    _publishedYear = TextEditingController(text: _basePublishedYear)..addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _name.dispose();
+    _publishedYear.dispose();
     super.dispose();
   }
 
   /// Only a changed, non-empty name is sent.
   bool get _dirty {
     final n = _name.text.trim();
-    return n.isNotEmpty && n != _baseName;
+    final py = _publishedYear.text.trim();
+
+    return (n.isNotEmpty && n != _baseName) || (py.isNotEmpty && py != _basePublishedYear);
   }
 
   String? _validateName(String? value) {
@@ -53,7 +59,7 @@ class _EditAlbumFormState extends ConsumerState<EditAlbumForm> {
 
     // The form is rebuilt after a successful save, so grab the messenger first.
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await ref.read(editAlbumProvider.notifier).save(name: _name.text.trim());
+    final ok = await ref.read(editAlbumProvider.notifier).save(name: _name.text.trim(), publishedYear: _publishedYear.text.trim());
     if (ok) messenger.showSnackBar(const SnackBar(content: Text('Album updated')));
   }
 
@@ -75,11 +81,16 @@ class _EditAlbumFormState extends ConsumerState<EditAlbumForm> {
             validator: _validateName,
             decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
           ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _publishedYear,
+            decoration: const InputDecoration(labelText: 'Year', border: OutlineInputBorder()),
+          ),
           const SizedBox(height: 24),
           ReadOnlyDetails(
             data: widget.album,
             // `name` is editable above; the schema bookkeeping isn't useful here.
-            hiddenKeys: const {'name', 'schemaVersion', 'deletionQueued'},
+            hiddenKeys: const {'name', 'schemaVersion', 'deletionQueued', 'publishedYear', 'publishedMonth', 'doNotUseFirstAudioCoverArt'},
             title: 'Album details (read-only)',
           ),
           const SizedBox(height: 24),

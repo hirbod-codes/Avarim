@@ -1,5 +1,5 @@
 /// Which credential the user is authenticating with.
-enum AuthMethod { email, phone }
+enum AuthMethod { email, emailWithoutVerificationCode, phone }
 
 /// Which action the current form is performing.
 /// Only meaningful for [AuthMethod.email] — phone auth is passwordless

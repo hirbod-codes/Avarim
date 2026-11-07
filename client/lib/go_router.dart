@@ -17,7 +17,6 @@ import 'package:avarim/pages/plan/pricing_page.dart';
 import 'package:avarim/pages/search/music_search/ui/search_page.dart';
 import 'package:avarim/pages/settings/settings_page.dart';
 import 'package:avarim/pages/test/test_page.dart';
-import 'package:avarim/pages/web/landing_page.dart';
 import 'package:avarim/private_gate.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -66,7 +65,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           return (from != null && from.isNotEmpty) ? from : '/app';
         }
 
-        return null;
+        // Temporarily, there is no landing page 
+        // return null;
       }
 
       // Non-web: no landing page, so a bare '/' is never a real
@@ -99,12 +99,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      if (kIsWeb)
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const AppShell(child: LandingPage()),
-        ),
-      if (!kIsWeb) GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingPage()),
+      // if (kIsWeb)
+      //   GoRoute(
+      //     path: '/',
+      //     builder: (context, state) => const AppShell(child: LandingPage()),
+      //   ),
+      // if (!kIsWeb)
+      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingPage()),
       GoRoute(
         path: '/login',
         builder: (context, state) {

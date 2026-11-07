@@ -35,6 +35,8 @@ class _SearchPageState extends ConsumerState<SearchPage> with SingleTickerProvid
   late final TabController _tabController = TabController(length: SearchTab.values.length, vsync: this);
   final _searchTextController = TextEditingController();
 
+  bool _isRefreshing = false;
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +93,28 @@ class _SearchPageState extends ConsumerState<SearchPage> with SingleTickerProvid
         actions: userInfo?.role != 'admin'
             ? null
             : [
+                _isRefreshing
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    : IconButton(
+                        tooltip: 'Refresh',
+                        icon: const Icon(Icons.refresh),
+                        selectedIcon: const Icon(Icons.check),
+                        onPressed: () async {
+                          setState(() {
+                            _isRefreshing = true;
+                          });
+
+                          await ref.read(musicSearchControllerProvider.notifier).reloadFirstPage(selectedTab);
+                          if (!mounted) return;
+
+                          setState(() {
+                            _isRefreshing = false;
+                          });
+                        },
+                      ),
                 IconButton(
                   tooltip: isEditModeEnabled ? 'Done' : 'Edit mode',
                   isSelected: isEditModeEnabled,

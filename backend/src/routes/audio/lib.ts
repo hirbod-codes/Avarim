@@ -74,14 +74,14 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
                         if (tags.album)
                             albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!, avatarKey))
 
-                        const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId, audioId }));
+                        const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId: artistId ?? null, albumId: albumId ?? null, audioId }));
                         if (!createResult.acknowledged) {
                             log.warn('Failed to create artistAlbumAudio')
                             throw new Error('Failed to create artistAlbumAudio')
                         }
                     } else
                         for (const album of albums) {
-                            const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId, albumId: album._id.toString(), audioId }));
+                            const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId: artistId ?? null, albumId: album._id.toString(), audioId }));
                             if (!createResult.acknowledged) {
                                 log.warn('Failed to create artistAlbumAudio')
                                 throw new Error('Failed to create artistAlbumAudio')
@@ -98,7 +98,7 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
                 albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!))
             }
 
-            const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId: undefined, albumId, audioId }));
+            const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId: null, albumId: albumId ?? null, audioId }));
             if (!createResult.acknowledged) {
                 log.warn('Failed to create artistAlbumAudio')
                 throw new Error('Failed to create artistAlbumAudio')

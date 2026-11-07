@@ -78,6 +78,75 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         return await ArtistAlbumAudioRepository.collection!.find({ artistId }, { session: this.session }).toArray()
     }
 
+    async getManyArtist(filter: Filter<ArtistAlbumAudioUpdate>, skip: number, limit: number): Promise<WithId<Artist>[]> {
+        return await ArtistAlbumAudioRepository.collection!
+            .aggregate([
+                { $match: filter },
+                { $group: { _id: { $toObjectId: '$artistId' } } },
+                {
+                    $lookup: {
+                        from: artistCollection,
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'artist'
+                    }
+                },
+                { $unwind: '$artist' },
+                { $replaceRoot: { newRoot: '$artist' } },
+
+                { $sort: { createdAt: -1, _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+            ])
+            .toArray() as WithId<Artist>[]
+    }
+
+    async getManyAlbum(filter: Filter<ArtistAlbumAudioUpdate>, skip: number, limit: number): Promise<WithId<Album>[]> {
+        return await ArtistAlbumAudioRepository.collection!
+            .aggregate([
+                { $match: filter },
+                { $group: { _id: { $toObjectId: '$albumId' } } },
+                {
+                    $lookup: {
+                        from: albumCollection,
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'album'
+                    }
+                },
+                { $unwind: '$album' },
+                { $replaceRoot: { newRoot: '$album' } },
+
+                { $sort: { createdAt: -1, _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+            ])
+            .toArray() as WithId<Album>[]
+    }
+
+    async getManyAudio(filter: Filter<ArtistAlbumAudioUpdate>, skip: number, limit: number): Promise<WithId<Audio>[]> {
+        return await ArtistAlbumAudioRepository.collection!
+            .aggregate([
+                { $match: filter },
+                { $group: { _id: { $toObjectId: '$audioId' } } },
+                {
+                    $lookup: {
+                        from: audioCollection,
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'audio'
+                    }
+                },
+                { $unwind: '$audio' },
+                { $replaceRoot: { newRoot: '$audio' } },
+
+                { $sort: { createdAt: -1, _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+            ])
+            .toArray() as WithId<Audio>[]
+    }
+
     async getManyAlbumByArtistId(artistId: string, skip: number, limit: number): Promise<WithId<Album>[]> {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([

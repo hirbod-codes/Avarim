@@ -104,8 +104,18 @@ class MusicSearchApi {
 
   /// Ids of every audio of the album [albumId], in order. Null when a request failed
   /// (its error was already shown).
-  Future<List<String>?> fetchAllAudioIdsOfAlbum(String albumId) {
-    return _fetchAllAudioIdsFromPagedEndpoint('/api/relationship/album/audio', {'albumId': albumId});
+  Future<List<String>?> fetchAllAudioIdsOfAlbum(String albumId, {String? artistId}) {
+    return _fetchAllAudioIdsFromPagedEndpoint('/api/relationship/audio', {
+      'albumId': albumId,
+      ...(artistId != null ? {'artistId': artistId} : {}),
+    });
+  }
+  
+  Future<List<Audio>?> fetchAllAudiosOfAlbum(String albumId, {String? artistId}) {
+    return _fetchAllAudiosFromPagedEndpoint('/api/relationship/audio', {
+      'albumId': albumId,
+      ...(artistId != null ? {'artistId': artistId} : {}),
+    });
   }
 
   /// Ids of every audio of a playlist, in playlist order. Null when a request failed
@@ -134,6 +144,27 @@ class MusicSearchApi {
       final isLastPage = audioIdsOfPage.length < kQueueAudioIdsFetchPageSize;
       final serverIgnoredPageParameter = uniqueAudioIds.length == countBeforeAddingPage;
       if (isLastPage || serverIgnoredPageParameter) return uniqueAudioIds.toList();
+    }
+  }
+
+  Future<List<Audio>?> _fetchAllAudiosFromPagedEndpoint(String endpointPath, Map<String, dynamic> extraQueryParameters) async {
+    final List<Audio> uniqueAudios = []; // a set: keeps the order, drops duplicates
+
+    for (var pageNumber = kFirstPageNumber; ; pageNumber++) {
+      final pageResult = await apiCall<List<Audio>>(
+        () => _dio.get<dynamic>(endpointPath, queryParameters: {...extraQueryParameters, 'page': pageNumber, 'pageSize': kQueueAudioIdsFetchPageSize}),
+        fromJson: (data) => List.from(data).map((m) => Audio.fromJson(m)).toList(),
+      );
+      if (pageResult.isFailure) return null;
+
+      final audiosOfPage = pageResult.dataOrNull ?? const <Audio>[];
+      final countBeforeAddingPage = uniqueAudios.length;
+      uniqueAudios.addAll(audiosOfPage);
+
+      // A short page is the last one. No NEW ids means the server ignored `page`: stop instead of looping forever.
+      final isLastPage = audiosOfPage.length < kQueueAudioIdsFetchPageSize;
+      final serverIgnoredPageParameter = uniqueAudios.length == countBeforeAddingPage;
+      if (isLastPage || serverIgnoredPageParameter) return uniqueAudios.toList();
     }
   }
 

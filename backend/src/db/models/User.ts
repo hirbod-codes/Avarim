@@ -12,9 +12,13 @@ export const timezoneSchema = string()
 
 export const getAvatarKey = (userId: string) => `${s3RootName}/user/avatar/${userId}`
 
+export const authMethodSchema = string().oneOf(['email', 'phone', 'emailWithoutVerificationCode'])
+
 const update = {
     schemaVersion: string().optional().min(6).max(20),
     role: string().optional(),
+
+    authMethod: authMethodSchema.optional(),
 
     username: string().optional(),
     phoneNumber: string().optional().matches(/^09[0-9]{9}$/),
@@ -39,7 +43,7 @@ export const userSchema = object().required().stripUnknown().strict(true).shape(
     _id: likeObjectId.optional(),
     role: string().required(),
 
-    authMethod: string().oneOf(['email', 'phone']).required(),
+    authMethod: authMethodSchema.required(),
     username: string().optional(),
     phoneNumber: string().optional().matches(/^09[0-9]{9}$/).when('authMethod', { is: 'phone', then: s => s.required() }),
     email: string().optional().email().when('authMethod', { is: 'email', then: s => s.required() }),

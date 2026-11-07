@@ -44,9 +44,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stackTrace) =>
               _RetryState(message: l10n.auth_page_checking_sign_in_methods_failed, onRetry: () => ref.invalidate(supportedAuthMethodsProvider)),
-          data: (rawMethods) {
-            final methods = kIsWeb ? rawMethods : rawMethods.where((m) => m == AuthMethod.phone).toList();
-
+          data: (methods) {
             if (methods.isEmpty) {
               return _RetryState(message: l10n.auth_page_sign_in_unavailable, onRetry: () => ref.invalidate(supportedAuthMethodsProvider));
             }
@@ -55,6 +53,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
               _method = methods.first;
             }
 
+            final isMethodEmail = _method == AuthMethod.email || _method == AuthMethod.emailWithoutVerificationCode;
+
             return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(
@@ -62,7 +62,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                 children: [
                   const SizedBox(height: 32),
                   Text(
-                    _method == AuthMethod.email ? (_mode == AuthMode.signUp ? l10n.createYourAccount : l10n.welcomeBack) : l10n.logInOrSignUp,
+                    isMethodEmail ? (_mode == AuthMode.signUp ? l10n.createYourAccount : l10n.welcomeBack) : l10n.logInOrSignUp,
                     style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
@@ -71,7 +71,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                     Center(
                       child: SegmentedButton<AuthMethod>(
                         segments: [
-                          if (methods.contains(AuthMethod.email))
+                          if (methods.contains(AuthMethod.email) || methods.contains(AuthMethod.emailWithoutVerificationCode))
                             ButtonSegment(value: AuthMethod.email, label: Text(l10n.email), icon: Icon(Icons.email_outlined)),
                           if (methods.contains(AuthMethod.phone))
                             ButtonSegment(value: AuthMethod.phone, label: Text(l10n.phone), icon: Icon(Icons.sms_outlined)),
@@ -84,13 +84,21 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                   ],
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
-                    child: _method == AuthMethod.email
-                        ? EmailPasswordForm(
-                            key: const ValueKey("email"),
-                            mode: _mode,
-                            onModeChanged: (mode) => setState(() => _mode = mode),
-                            onAuthenticated: widget.onAuthenticated,
-                          )
+                    child: isMethodEmail
+                        ? (_method == AuthMethod.email
+                              ? EmailPasswordForm(
+                                  key: const ValueKey("email"),
+                                  mode: _mode,
+                                  onModeChanged: (mode) => setState(() => _mode = mode),
+                                  onAuthenticated: widget.onAuthenticated,
+                                )
+                              : EmailPasswordForm(
+                                  key: const ValueKey("email"),
+                                  mode: _mode,
+                                  onModeChanged: (mode) => setState(() => _mode = mode),
+                                  onAuthenticated: widget.onAuthenticated,
+                                  noVerificationCode: true,
+                                ))
                         : PhoneOtpForm(key: const ValueKey("phone"), onAuthenticated: widget.onAuthenticated),
                   ),
                 ],

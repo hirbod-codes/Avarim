@@ -157,7 +157,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             // ------------------------------------------------------------------------- inserting audio
             log.info('inserting audio')
 
-            temporaryAudio = { title: `${randomUUID()}${AUDIO_TITLE_SEPARATOR}${title}`, temporary: true, isPrepared: false, tags: metadata.tags, technical: metadata.technical }
+            temporaryAudio = { title: `${randomUUID()}${AUDIO_TITLE_SEPARATOR}${title}`, totalFilesBytes: inputSize, temporary: true, isPrepared: false, tags: metadata.tags, technical: metadata.technical }
             const audioInsertResult = await runWithLogger(log, () => audioRepository.insert(temporaryAudio))
             log.debug({ audioInsertResult });
             if (!audioInsertResult.acknowledged || !audioInsertResult.insertedId) {
@@ -609,11 +609,11 @@ router.get('/no_artist', auth, async (req, res) => {
             const ids = hits.map(m => m._id)
 
             log.info('fetch from audioRepository')
-            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioWithNoArtist(ids, (page - 1) * pageSize, pageSize))
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudio({ audioId: { $in: ids }, artistId: null }, (page - 1) * pageSize, pageSize))
         } else {
             log.info('fetch from audioRepository')
 
-            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioWithNoArtist(undefined, (page - 1) * pageSize, pageSize))
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudio({ artistId: null }, (page - 1) * pageSize, pageSize))
         }
         log.debug({ count: audios.length });
 

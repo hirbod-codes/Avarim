@@ -1,5 +1,3 @@
-// read_only_details.dart
-//
 // Card listing every field of a backend document that isn't editable on the page
 // (ids, keys, dates, sizes, the "technical" block, ...). Shared by the edit pages.
 // Nested maps listed in `nestedSections` become collapsible sections instead of one long row.

@@ -46,7 +46,9 @@
 import 'dart:async';
 
 import 'package:avarim/api/api_call.dart';
+import 'package:avarim/api/controllers/relationship_controller.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
+import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
@@ -54,8 +56,14 @@ import 'package:avarim/auth/token_storage.dart';
 import 'package:avarim/components/contents/audio_row_actions.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
+import 'package:avarim/components/popup.dart';
 import 'package:avarim/lib/talker.dart';
+import 'package:avarim/pages/search/music_search/models/load_more_mode.dart';
+import 'package:avarim/pages/search/music_search/models/search_tab.dart';
+import 'package:avarim/pages/search/music_search/models/search_tab_results.dart';
 import 'package:avarim/pages/search/music_search/ui/authenticated_thumbnail.dart';
+import 'package:avarim/pages/search/music_search/ui/search_result_tile.dart';
+import 'package:avarim/pages/search/music_search/ui/search_results_list.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart' hide Thumb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -155,10 +163,10 @@ class ArtistPageApi {
   }
 
   /// null = the request failed.
-  Future<List<ArtistAlbum>?> albums(String artistId, int page) async {
-    final res = await apiCall<List<ArtistAlbum>>(
+  Future<List<Album>?> artistAlbums(String artistId, int page) async {
+    final res = await apiCall<List<Album>>(
       () => _dio.get<dynamic>('/api/relationship/artist/album', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAlbumsPageSize}),
-      fromJson: (data) => List.from(data).map(ArtistAlbum.tryParse).whereType<ArtistAlbum>().toList(),
+      fromJson: (data) => List.from(data).map((m) => Album.fromJson(m)).whereType<Album>().toList(),
     );
     return res.dataOrNull;
   }
@@ -175,7 +183,8 @@ class ArtistPageApi {
   /// The artist's audios that are in no album (GET /api/relationship/artist/audio/singles). null = the request failed.
   Future<List<Audio>?> singles(String artistId, int page) async {
     final res = await apiCall<List<Audio>>(
-      () => _dio.get<dynamic>('/api/relationship/artist/audio/singles', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
+      () =>
+          _dio.get<dynamic>('/api/relationship/artist/audio/singles', queryParameters: {'artistId': artistId, 'page': page, 'pageSize': kArtistAudiosPageSize}),
       fromJson: (data) => [for (final e in List.from(data)) Audio.fromJson(Map<String, dynamic>.from(e as Map))],
     );
     return res.dataOrNull;
@@ -205,7 +214,7 @@ class ArtistPage extends ConsumerStatefulWidget {
   final String? artistName;
 
   /// Called when an album card is pressed. Defaults to playing the album.
-  final void Function(ArtistAlbum album)? onAlbumTap;
+  final void Function(Album album)? onAlbumTap;
 
   @override
   ConsumerState<ArtistPage> createState() => _ArtistPageState();
@@ -220,7 +229,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
   bool _infoLoading = true;
   bool _infoFailed = false;
 
-  final List<ArtistAlbum> _albums = [];
+  final List<Album> _albums = [];
   int _nextPage = kArtistFirstPage;
   bool _hasMore = true;
   bool _loadingAlbums = false;
@@ -241,6 +250,9 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
   int _imageEpoch = 0; // bumped after editing so that the avatar / banner are fetched again
 
   ArtistPageApi get _api => ref.read(artistPageApiProvider);
+
+  Album? _viewingAlbum;
+  List<Audio>? _viewingAlbumAudios;
 
   @override
   void initState() {
@@ -310,7 +322,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       _albumsFailed = false;
     });
 
-    final batch = await _api.albums(artist.id, _nextPage);
+    final batch = await _api.artistAlbums(artist.id, _nextPage);
     if (!mounted) return;
 
     if (batch == null) {
@@ -322,8 +334,8 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
     }
 
     setState(() {
-      final known = _albums.map((a) => a.key).toSet();
-      final fresh = batch.where((a) => known.add(a.key)).toList();
+      final known = _albums.map((a) => a.id).toSet();
+      final fresh = batch.where((a) => known.add(a.id)).toList();
       _albums.addAll(fresh);
       _nextPage++;
       // Stop on a short page, or when the server keeps sending what we already have.
@@ -455,15 +467,14 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
   }
 
   /// An album's audios (GET /api/relationship/album/audio?albumId). Loaded once per album; a failure isn't cached.
-  Future<List<ArtistTrack>> _audiosOf(ArtistAlbum album) async {
+  Future<List<ArtistTrack>> _audiosOf(Album album) async {
     final albumId = album.id;
-    if (albumId == null) throw StateError('the album has no id');
 
-    final future = _albumTracks.putIfAbsent(album.key, () => _loadAllPages((page) => _api.albumAudios(albumId, page)));
+    final future = _albumTracks.putIfAbsent(album.id, () => _loadAllPages((page) => _api.albumAudios(albumId, page)));
     try {
       return await future;
     } catch (_) {
-      if (identical(_albumTracks[album.key], future)) _albumTracks.remove(album.key);
+      if (identical(_albumTracks[album.id], future)) _albumTracks.remove(album.id);
       rethrow;
     }
   }
@@ -480,9 +491,9 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
     return [for (final e in indexed) e.$2.id];
   }
 
-  Future<void> _playAlbum(ArtistAlbum album) async {
+  Future<void> _playAlbum(Album album) async {
     if (_busyAlbumKey != null) return;
-    setState(() => _busyAlbumKey = album.key);
+    setState(() => _busyAlbumKey = album.id);
 
     try {
       final ids = _inAlbumOrder(await _audiosOf(album));
@@ -502,9 +513,9 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
   }
 
   /// Appends the album's audios to the player queue; the current track keeps playing.
-  Future<void> _addAlbumToQueue(ArtistAlbum album) async {
+  Future<void> _addAlbumToQueue(Album album) async {
     if (_queueingAlbumKey != null) return;
-    setState(() => _queueingAlbumKey = album.key);
+    setState(() => _queueingAlbumKey = album.id);
 
     try {
       final ids = _inAlbumOrder(await _audiosOf(album));
@@ -590,93 +601,138 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
     return RefreshIndicator(
       edgeOffset: MediaQuery.paddingOf(context).top,
       onRefresh: _refresh,
-      child: CustomScrollView(
-        controller: _scroll,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: _ArtistHeader(
-              artistId: artist.id,
-              name: artist.name,
-              subtitle: albumsLabel,
-              headers: headers,
-              imageEpoch: _imageEpoch,
-              playing: _playingAll,
-              onPlay: _playAll,
-              onEdit: _edit,
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-              child: Text('Albums', style: theme.textTheme.titleLarge),
-            ),
-          ),
-          if (_albums.isEmpty && !_loadingAlbums && !_albumsFailed)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Center(
-                  child: Text('No albums', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+      child: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _ArtistHeader(
+                  artistId: artist.id,
+                  name: artist.name,
+                  subtitle: albumsLabel,
+                  headers: headers,
+                  imageEpoch: _imageEpoch,
+                  playing: _playingAll,
+                  onPlay: _playAll,
+                  onEdit: _edit,
                 ),
               ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              sliver: SliverGrid.builder(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 200,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.78,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                  child: Text('Albums', style: theme.textTheme.titleLarge),
                 ),
-                itemCount: _albums.length,
-                itemBuilder: (context, i) {
-                  final album = _albums[i];
-                  return _AlbumCard(
-                    album: album,
-                    headers: headers,
-                    busy: _busyAlbumKey == album.key,
-                    queueing: _queueingAlbumKey == album.key,
-                    onTap: () {
-                      final onAlbumTap = widget.onAlbumTap;
-                      if (onAlbumTap != null) {
-                        onAlbumTap(album);
-                      } else {
-                        _playAlbum(album);
-                      }
+              ),
+              if (_albums.isEmpty && !_loadingAlbums && !_albumsFailed)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(
+                      child: Text('No albums', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  sliver: SliverGrid.builder(
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 200,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: 0.78,
+                    ),
+                    itemCount: _albums.length,
+                    itemBuilder: (context, i) {
+                      final album = _albums[i];
+                      return AlbumCard(
+                        artistId: artist.id,
+                        album: album,
+                        headers: headers,
+                        busy: _busyAlbumKey == album.id,
+                        queueing: _queueingAlbumKey == album.id,
+                        onTap: () async {
+                          final onAlbumTap = widget.onAlbumTap;
+                          if (onAlbumTap != null) {
+                            onAlbumTap(album);
+                          }
+
+                          final audios = await ref.read(relationshipControllerProvider).audiosOfAlbum(album.id, artistId: widget.artistId);
+                          if (!mounted) return;
+
+                          setState(() {
+                            _viewingAlbum = album;
+                            _viewingAlbumAudios = audios;
+                          });
+                        },
+                        onPlay: () => _playAlbum(album),
+                        onAddToQueue: () => _addAlbumToQueue(album),
+                      );
                     },
-                    onPlay: () => _playAlbum(album),
-                    onAddToQueue: () => _addAlbumToQueue(album),
-                  );
-                },
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: _AlbumsFooter(loading: _loadingAlbums, failed: _albumsFailed, onRetry: _loadAlbums),
               ),
-            ),
-          SliverToBoxAdapter(
-            child: _AlbumsFooter(loading: _loadingAlbums, failed: _albumsFailed, onRetry: _loadAlbums),
+              // Audios with this artist but no album.
+              if (_singles.isNotEmpty || _loadingSingles || _singlesFailed) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Text('Singles', style: theme.textTheme.titleLarge),
+                  ),
+                ),
+                SliverList.builder(
+                  itemCount: _singles.length,
+                  itemBuilder: (context, i) {
+                    final audio = _singles[i];
+                    return _SingleTile(
+                      audio: audio,
+                      onPlay: () => AudioPlayerService.add(audioId: audio.id),
+                    );
+                  },
+                ),
+                SliverToBoxAdapter(
+                  child: _AlbumsFooter(loading: _loadingSingles, failed: _singlesFailed, onRetry: _loadSingles),
+                ),
+              ],
+              // Keeps the last row clear of the mini player.
+              const SliverToBoxAdapter(child: AudioDockSpacer()),
+            ],
           ),
-          // Audios with this artist but no album.
-          if (_singles.isNotEmpty || _loadingSingles || _singlesFailed) ...[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('Singles', style: theme.textTheme.titleLarge),
+
+          if (_viewingAlbum != null && _viewingAlbumAudios != null)
+            Positioned.fill(
+              child: Popup(
+                constraints: const BoxConstraints(maxWidth: 500),
+                leadings: [
+                  const Icon(Icons.album),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 250),
+                    child: Text(_viewingAlbum!.name, style: theme.textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+                onClose: () => setState(() {
+                  _viewingAlbum = null;
+                  _viewingAlbumAudios = null;
+                }),
+                child: Expanded(
+                  child: Scrollbar(
+                    controller: _scroll,
+                    child: SearchResultsList(
+                      loadMoreMode: LoadMoreMode.infiniteScroll,
+                      tab: SearchTab.audios,
+                      tabResults: SearchTabResults(
+                        hasMorePages: false,
+                        loadedItems: _viewingAlbumAudios!,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-            SliverList.builder(
-              itemCount: _singles.length,
-              itemBuilder: (context, i) {
-                final audio = _singles[i];
-                return _SingleTile(audio: audio, onPlay: () => AudioPlayerService.add(audioId: audio.id));
-              },
-            ),
-            SliverToBoxAdapter(
-              child: _AlbumsFooter(loading: _loadingSingles, failed: _singlesFailed, onRetry: _loadSingles),
-            ),
-          ],
-          // Keeps the last row clear of the mini player.
-          const SliverToBoxAdapter(child: AudioDockSpacer()),
         ],
       ),
     );
@@ -867,10 +923,21 @@ class _BackButtonOnBanner extends StatelessWidget {
 // Albums
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _AlbumCard extends StatelessWidget {
-  const _AlbumCard({required this.album, required this.headers, required this.busy, required this.queueing, required this.onTap, required this.onPlay, required this.onAddToQueue});
+class AlbumCard extends ConsumerStatefulWidget {
+  const AlbumCard({
+    super.key,
+    required this.artistId,
+    required this.album,
+    required this.headers,
+    required this.busy,
+    required this.queueing,
+    this.onTap,
+    required this.onPlay,
+    required this.onAddToQueue,
+  });
 
-  final ArtistAlbum album;
+  final String artistId;
+  final Album album;
   final Map<String, String>? headers;
 
   /// This album's audios are being loaded to play it.
@@ -878,10 +945,15 @@ class _AlbumCard extends StatelessWidget {
 
   /// This album's audios are being loaded to add them to the queue.
   final bool queueing;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final VoidCallback onPlay;
   final VoidCallback onAddToQueue;
 
+  @override
+  ConsumerState<AlbumCard> createState() => _AlbumCard();
+}
+
+class _AlbumCard extends ConsumerState<AlbumCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -892,7 +964,7 @@ class _AlbumCard extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -903,9 +975,7 @@ class _AlbumCard extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: album.id == null
-                      ? placeholder
-                      : _AuthImage(url: '${AppConfig.apiUrl}/api/album/avatar/${album.id}', headers: headers, fallback: placeholder),
+                  child: _AuthImage(url: '${AppConfig.apiUrl}/api/album/avatar/${widget.album.id}', headers: widget.headers, fallback: placeholder),
                 ),
                 Positioned(
                   left: 8,
@@ -918,11 +988,11 @@ class _AlbumCard extends StatelessWidget {
                       shape: const CircleBorder(),
                       clipBehavior: Clip.antiAlias,
                       child: InkWell(
-                        onTap: queueing ? null : onAddToQueue,
+                        onTap: widget.queueing ? null : widget.onAddToQueue,
                         child: SizedBox(
                           width: 40,
                           height: 40,
-                          child: queueing
+                          child: widget.queueing
                               ? Padding(
                                   padding: const EdgeInsets.all(10),
                                   child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
@@ -933,6 +1003,7 @@ class _AlbumCard extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 Positioned(
                   right: 8,
                   bottom: 8,
@@ -944,11 +1015,11 @@ class _AlbumCard extends StatelessWidget {
                       shape: const CircleBorder(),
                       clipBehavior: Clip.antiAlias,
                       child: InkWell(
-                        onTap: busy ? null : onPlay,
+                        onTap: widget.busy ? null : widget.onPlay,
                         child: SizedBox(
                           width: 40,
                           height: 40,
-                          child: busy
+                          child: widget.busy
                               ? Padding(
                                   padding: const EdgeInsets.all(10),
                                   child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onPrimary),
@@ -963,7 +1034,7 @@ class _AlbumCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(album.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+          Text(widget.album.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
         ],
       ),
     );

@@ -34,7 +34,7 @@ import PlaylistAudioRepository from './db/MongoDB/PlaylistAudioRepository';
 // import SubscriptionRepository from './DB/repositories/SubscriptionRepository';
 // import UsageRepository from './DB/repositories/UsageRepository';
 
-import { runCronjobs } from './cronjobs';
+import { cleanDbJob, runCronjobs } from './cronjobs';
 
 // Must be before route imports
 import { platform } from "os";
@@ -78,6 +78,13 @@ import { SmtpFactory } from './services/SMTP/SmtpFactory';
 
 export const s3 = new S3Client({
     region: 'us-east-1',
+    requestHandler: {
+        // The default is 50 sockets. Pass options (or an https.Agent) here to change it.
+        httpsAgent: { keepAlive: true, maxSockets: 200 },
+        connectionTimeout: 30_000,
+        // Safety net: a socket that has been silent this long is closed instead of being held forever.
+        socketTimeout: 100_000,
+    },
     followRegionRedirects: true,
     endpoint: s3Endpoint,
     credentials: {
@@ -192,6 +199,7 @@ export const payments = {
 
     if (!isProduction)
         app.post('/', async (req, res) => {
+            await cleanDbJob()
             res.send('test route' + (new Date()).toISOString());
         });
 

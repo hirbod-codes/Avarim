@@ -6,6 +6,11 @@ import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
+import 'package:avarim/components/popup.dart';
+import 'package:avarim/pages/edit_album/edit_album_page.dart';
+import 'package:avarim/pages/edit_artist/edit_artist_page.dart';
+import 'package:avarim/pages/edit_audio/edit_audio_page.dart';
+import 'package:avarim/pages/search/music_search/data/music_search_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,11 +27,12 @@ import 'search_result_tile.dart';
 
 /// The scrollable results of ONE tab (the page builds one per [SearchTab]).
 class SearchResultsList extends ConsumerStatefulWidget {
-  const SearchResultsList({super.key, required this.tab, required this.loadMoreMode, this.onResultTapped});
+  const SearchResultsList({super.key, required this.tab, required this.loadMoreMode, this.onResultTapped, this.tabResults});
 
   final SearchTab tab;
   final LoadMoreMode loadMoreMode;
   final ValueChanged<WithId>? onResultTapped;
+  final SearchTabResults? tabResults;
 
   @override
   ConsumerState<SearchResultsList> createState() => _SearchResultsListState();
@@ -43,6 +49,15 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
   bool get wantKeepAlive => true;
 
   bool get _loadsNextPageAutomatically => widget.loadMoreMode == LoadMoreMode.infiniteScroll;
+
+  Audio? _editingAudio;
+  Album? _editingAlbum;
+  Artist? _editingArtist;
+
+  final _scroll = ScrollController();
+
+  List<Audio> _albumViewAudios = [];
+  Album? _openedAlbum;
 
   @override
   void initState() {
@@ -80,7 +95,7 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
   VoidCallback? _tapCallbackFor(WithId item) {
     if (item is Artist) return () => _openArtistDetails(item);
 
-    final isTappable = item is Audio || item is Playlist || widget.onResultTapped != null;
+    final isTappable = item is Audio || item is Album || item is Playlist || widget.onResultTapped != null;
     return isTappable ? () => _onResultTapped(item) : null;
   }
 
@@ -88,7 +103,7 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
     context.push(Uri(path: kArtistDetailsRoutePath, queryParameters: {'artistId': artist.id}).toString());
   }
 
-  void _onResultTapped(WithId item) {
+  void _onResultTapped(WithId item) async {
     widget.onResultTapped?.call(item);
 
     if (item is Audio) {
@@ -96,6 +111,16 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
     } else if (item is Playlist) {
       // All of the playlist's audios go into the queue and the first of them starts playing.
       unawaited(ref.read(musicSearchControllerProvider.notifier).addAlbumOrPlaylistToQueue(item, playImmediately: true));
+    } else if (item is Album) {
+      final List<Audio>? audios = await ref.read(musicSearchApiProvider).fetchAllAudiosOfAlbum(item.id);
+      if (!mounted) return;
+
+      if (audios == null) return;
+
+      setState(() {
+        _albumViewAudios = audios;
+        _openedAlbum = item;
+      });
     }
   }
 
@@ -113,32 +138,33 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
   }
 
   Future<void> _openEditPageOfAudio(Audio audio) async {
-    final editPageLocation = Uri(path: kEditAudioRoutePath, queryParameters: {'audioId': audio.id}).toString();
-    await context.push(editPageLocation);
-
-    if (!mounted) return;
-    final searchController = ref.read(musicSearchControllerProvider.notifier);
-    unawaited(searchController.reloadFirstPage(SearchTab.audios));
-
-    // the audio may have got an artist: it leaves the "No artist" tab (only worth a request when that tab was opened)
-    final wasNoArtistTabOpened = ref.read(musicSearchControllerProvider).resultsOf(SearchTab.audiosWithoutArtist).loadedForQuery != null;
-    if (wasNoArtistTabOpened) unawaited(searchController.reloadFirstPage(SearchTab.audiosWithoutArtist));
+    setState(() {
+      _editingAudio = audio;
+    });
   }
 
   Future<void> _openEditPageOfArtist(Artist artist) async {
-    final editPageLocation = Uri(path: kEditArtistRoutePath, queryParameters: {'artistId': artist.id}).toString();
-    await context.push(editPageLocation);
+    setState(() {
+      _editingArtist = artist;
+    });
 
-    if (!mounted) return;
-    unawaited(ref.read(musicSearchControllerProvider.notifier).reloadFirstPage(SearchTab.artists));
+    // final editPageLocation = Uri(path: kEditArtistRoutePath, queryParameters: {'artistId': artist.id}).toString();
+    // await context.push(editPageLocation);
+
+    // if (!mounted) return;
+    // unawaited(ref.read(musicSearchControllerProvider.notifier).reloadFirstPage(SearchTab.artists));
   }
 
   Future<void> _openEditPageOfAlbum(Album album) async {
-    final editPageLocation = Uri(path: kEditAlbumRoutePath, queryParameters: {'albumId': album.id}).toString();
-    await context.push(editPageLocation);
+    setState(() {
+      _editingAlbum = album;
+    });
 
-    if (!mounted) return;
-    unawaited(ref.read(musicSearchControllerProvider.notifier).reloadFirstPage(SearchTab.albums));
+    // final editPageLocation = Uri(path: kEditAlbumRoutePath, queryParameters: {'albumId': album.id}).toString();
+    // await context.push(editPageLocation);
+
+    // if (!mounted) return;
+    // unawaited(ref.read(musicSearchControllerProvider.notifier).reloadFirstPage(SearchTab.albums));
   }
 
   // ── Deleting ───────────────────────────────────────────────────────────────
@@ -186,7 +212,7 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
   Widget build(BuildContext context) {
     super.build(context); // required by AutomaticKeepAliveClientMixin
 
-    final tabResults = ref.watch(musicSearchControllerProvider.select((state) => state.resultsOf(widget.tab)));
+    final SearchTabResults tabResults = widget.tabResults ?? ref.watch(musicSearchControllerProvider.select((state) => state.resultsOf(widget.tab)));
     final searchController = ref.read(musicSearchControllerProvider.notifier);
     final isEditModeEnabled = ref.watch(musicSearchControllerProvider.select((state) => state.isEditModeEnabled));
     final idsBeingDeleted = ref.watch(musicSearchControllerProvider.select((state) => state.idsBeingDeleted));
@@ -198,53 +224,118 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadNextPageIfViewportIsNotFilled());
 
-    final shouldShowFooter =
-        tabResults.isLoadingNextPage || tabResults.lastError != null || (tabResults.hasMorePages && !_loadsNextPageAutomatically);
+    final shouldShowFooter = tabResults.isLoadingNextPage || tabResults.lastError != null || (tabResults.hasMorePages && !_loadsNextPageAutomatically);
 
     return ValueListenableBuilder<AudioQueueState>(
       valueListenable: AudioPlayerService.queue,
       builder: (context, queue, _) {
+        final theme = Theme.of(context);
+
         final currentlyPlayingAudioId = queue.currentId;
         // Keep the last item reachable above the player dock.
         final bottomPaddingAbovePlayerDock = queue.isEmpty ? 0.0 : kDockCollapsedExtent + MediaQuery.paddingOf(context).bottom;
 
+        SearchResultTile getTile(WithId item) => SearchResultTile(
+          item: item,
+          isPlaying: item is Audio && item.id == currentlyPlayingAudioId,
+          isEditModeEnabled: isEditModeEnabled,
+          isBeingDeleted: idsBeingDeleted.contains(item.id),
+          isBeingAddedToQueue: idsBeingAddedToQueue.contains(item.id),
+          onTap: _tapCallbackFor(item),
+          onAddToQueue: item is Album || item is Playlist ? () => searchController.addAlbumOrPlaylistToQueue(item, playImmediately: false) : null,
+          onAvatarPlay: item is Album || item is Playlist
+              ? () {
+                  unawaited(ref.read(musicSearchControllerProvider.notifier).replaceAlbumOrPlaylistToQueue(item, playImmediately: true));
+                }
+              : null,
+          onEdit: () => _openEditPageFor(item),
+          onDelete: item is Audio || item is Artist || item is Album ? () => _confirmAndDelete(item) : null,
+        );
+
         return RefreshIndicator(
           onRefresh: () => searchController.reloadFirstPage(widget.tab),
-          child: ListView.separated(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.only(bottom: bottomPaddingAbovePlayerDock),
-            itemCount: tabResults.loadedItems.length + (shouldShowFooter ? 1 : 0),
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final isFooter = index >= tabResults.loadedItems.length;
-              if (isFooter) {
-                return ResultsListFooter(
-                  isLoadingNextPage: tabResults.isLoadingNextPage,
-                  hasLoadingError: tabResults.lastError != null,
-                  onLoadMorePressed: _loadNextPage,
-                  onRetryPressed: () => _loadNextPage(retryAfterError: true),
-                );
-              }
+          child: Stack(
+            children: [
+              ListView.separated(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(bottom: bottomPaddingAbovePlayerDock),
+                itemCount: tabResults.loadedItems.length + (shouldShowFooter ? 1 : 0),
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final isFooter = index >= tabResults.loadedItems.length;
+                  if (isFooter) {
+                    return ResultsListFooter(
+                      isLoadingNextPage: tabResults.isLoadingNextPage,
+                      hasLoadingError: tabResults.lastError != null,
+                      onLoadMorePressed: _loadNextPage,
+                      onRetryPressed: () => _loadNextPage(retryAfterError: true),
+                    );
+                  }
 
-              final item = tabResults.loadedItems[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: SearchResultTile(
-                  item: item,
-                  isPlaying: item is Audio && item.id == currentlyPlayingAudioId,
-                  isEditModeEnabled: isEditModeEnabled,
-                  isBeingDeleted: idsBeingDeleted.contains(item.id),
-                  isBeingAddedToQueue: idsBeingAddedToQueue.contains(item.id),
-                  onTap: _tapCallbackFor(item),
-                  onAddToQueue: item is Album || item is Playlist
-                      ? () => searchController.addAlbumOrPlaylistToQueue(item, playImmediately: false)
-                      : null,
-                  onEdit: () => _openEditPageFor(item),
-                  onDelete: item is Audio || item is Artist || item is Album ? () => _confirmAndDelete(item) : null,
+                  final item = tabResults.loadedItems[index];
+                  return Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: getTile(item));
+                },
+              ),
+
+              if (_editingAudio != null)
+                Positioned.fill(
+                  child: Popup(
+                    constraints: const BoxConstraints(maxWidth: 1000),
+                    leadings: [Text(_editingAudio!.title)],
+                    onClose: () => setState(() {
+                      _editingAudio = null;
+                    }),
+                    child: EditAudioPage(audioId: _editingAudio!.id),
+                  ),
                 ),
-              );
-            },
+
+              if (_editingAlbum != null)
+                Positioned.fill(
+                  child: Popup(
+                    leadings: [Text(_editingAlbum!.name)],
+                    onClose: () => setState(() {
+                      _editingAlbum = null;
+                    }),
+                    child: EditAlbumPage(albumId: _editingAlbum!.id),
+                  ),
+                ),
+
+              if (_editingArtist != null)
+                Positioned.fill(
+                  child: Popup(
+                    leadings: [Text(_editingArtist!.name)],
+                    onClose: () => setState(() {
+                      _editingArtist = null;
+                    }),
+                    child: EditArtistPage(artistId: _editingArtist!.id),
+                  ),
+                ),
+
+              if (_openedAlbum != null)
+                Positioned.fill(
+                  child: Popup(
+                    leadings: [
+                      const Icon(Icons.album),
+                      Text(_openedAlbum!.name, style: theme.textTheme.titleMedium),
+                    ],
+                    onClose: () => setState(() {
+                      _openedAlbum = null;
+                      _albumViewAudios = [];
+                    }),
+                    child: Expanded(
+                      child: Scrollbar(
+                        controller: _scroll,
+                        child: SearchResultsList(
+                          loadMoreMode: LoadMoreMode.infiniteScroll,
+                          tab: SearchTab.audios,
+                          tabResults: SearchTabResults(hasMorePages: false, loadedItems: _albumViewAudios),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         );
       },

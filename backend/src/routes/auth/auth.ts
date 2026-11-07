@@ -32,6 +32,9 @@ router.get('/supported_auth_methods', async (req: Request, res: Response) => {
         if (settings.allowEmailRegistration === true)
             authMethods.push('email')
 
+        if (settings.allowEmailWithoutVerificationCodeRegistration === true)
+            authMethods.push('emailWithoutVerificationCode')
+
         if (settings.allowOtp === true)
             authMethods.push('phone')
 
@@ -252,10 +255,10 @@ router.post('/email/verify', unAuth, async (req: Request, res: Response) => {
             authMethod: 'email',
             role: 'user',
             email,
-            temporaryAvatar: true,
+            temporaryAvatar: false,
             password: redisPassword,
-            language: 'fa',
-            calendar: 'persian',
+            language: 'en',
+            calendar: 'gregorian',
             timezone: 'utc',
         }))
         log.debug({ created })
@@ -359,6 +362,70 @@ router.post('/email/password-reset/verify', unAuth, async (req: Request, res: Re
 
         log.info('issuing auth tokens');
         const { accessToken, refreshToken } = await runWithLogger(log, () => issueTokens(res, user._id.toString(), client, req.headers['user-agent']))
+
+        if (client === 'web')
+            return res.json({ status: 'success', data: { user, accessToken } });
+
+        return res.json({ status: 'success', data: { user, accessToken, refreshToken } });
+    } catch (err: any) {
+        runWithLogger(log, () => handleError(res, err))
+    }
+});
+
+router.post('/email_Without_verification_code/register', unAuth, async (req: Request, res: Response) => {
+    const log = getLogger().child({ module: 'auth', route: 'POST /api/auth/email/register' });
+
+    try {
+        const { client, email, password, locale } = await runWithLogger(log, () => validate(emailRegisterSchema, req.body))
+        log.debug({ client, email, password, locale }, 'Register request received');
+
+        const settings = await runWithLogger(log, () => getAuthSettings())
+        const ur = new UserRepository();
+
+        log.info('checking app settings');
+        if (!settings.allowEmailWithoutVerificationCodeRegistration) {
+            log.info('Rejected registration: email registration disabled');
+            return res.status(403).json({ status: 'error', error_code: 'EMAIL_REGISTRATION_DISABLED' });
+        }
+
+        log.info('fetching user data');
+        if (await runWithLogger(log, () => ur.getByEmail(email!))) {
+            log.info({ email }, 'Rejected registration: email already taken');
+            // successful response is sent, to improve users privacy
+            return res.status(204).json({ status: 'success' });
+        }
+
+        const passwordHash = await bcrypt.hash(password!, 12);
+        log.debug({ passwordHash })
+        log.info('hashed user\'s password')
+
+        log.info('creating user data in db');
+        const created = await runWithLogger(log, () => ur.create({
+            authMethod: 'emailWithoutVerificationCode',
+            role: 'user',
+            email,
+            temporaryAvatar: false,
+            password: passwordHash,
+            language: 'en',
+            calendar: 'gregorian',
+            timezone: 'utc',
+        }))
+        log.debug({ created })
+        if (!created || !created.acknowledged) {
+            log.error({ email }, 'User creation failed');
+            return res.status(500).json({ status: 'error', error_code: 'CREATE_FAILED' });
+        }
+        const userId = created.insertedId.toString()
+        log.info({ userId }, 'Registered new user');
+
+        log.info('fetching user data');
+        const user = await runWithLogger(log, () => ur.get(userId))
+        if (!user) {
+            log.error({ userId }, 'User fetch failed');
+            return res.status(500).json({ status: 'error', error_code: 'FETCH_FAILED' });
+        }
+
+        const { accessToken, refreshToken } = await runWithLogger(log, () => issueTokens(res, userId, client, req.headers['user-agent']))
 
         if (client === 'web')
             return res.json({ status: 'success', data: { user, accessToken } });

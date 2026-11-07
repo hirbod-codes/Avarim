@@ -2,7 +2,7 @@ import express from 'express';
 import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
-import { albumIdArtistNameSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
+import { albumIdArtistNameSchema, albumUpdateInputSchema, avatarParamsSchema, deleteParamsSchema, infoQuerySchema, listQuerySchema, postSchema } from './schemas';
 import AlbumRepository from '../../db/MongoDB/AlbumRepository';
 import { meiliAlbum } from '../../db/meilisearch';
 import { Album, getAvatarKey } from '../../db/models/Album';
@@ -132,7 +132,7 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
 
     let db: MongoDB | undefined = undefined
     try {
-        log.info('audio approve request received');
+        log.info('album update name request received');
 
         log.debug({ body: req.body });
         const { albumId, albumName } = await runWithLogger(log, () => validate(albumIdArtistNameSchema, req.body))
@@ -191,11 +191,47 @@ router.patch('/name', auth, isAdminIfAuthenticated, async (req, res) => {
     }
 })
 
+router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'album', route: 'PATCH /api/album' });
+
+    try {
+        log.info('album update request received');
+
+        log.debug({ body: req.body });
+        const { albumId, ...update } = await runWithLogger(log, () => validate(albumUpdateInputSchema, req.body))
+        log.debug({ albumId, update });
+        log.info('input validated');
+
+        const userId = req.user!.userId
+        log.debug({ userId });
+
+        const albumRepository = new AlbumRepository()
+
+        const album = await runWithLogger(log, () => albumRepository.get(albumId));
+        log.debug({ album });
+        if (!album) {
+            log.info('album not found');
+            return res.status(404).json({ status: 'error', error_code: 'ALBUM_NOT_FOUND' });
+        }
+
+        const updateAlbumResult = await runWithLogger(log, () => albumRepository.unsafeUpdate(album._id.toString(), update));
+        log.debug({ updateAlbumResult });
+        if (!updateAlbumResult.acknowledged) {
+            log.info('failed to update album');
+            return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+        }
+
+        return res.status(200).json({ status: 'success' })
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err))
+    }
+})
+
 router.get('/avatar/:albumId', auth, async (req, res) => {
     let log = getLogger().child({ module: 'album', route: 'GET /api/album/avatar/:albumId' });
 
     try {
-        log.info('avatar request received');
+        log.info('album avatar request received');
 
         log.debug({ params: req.params, query: req.query });
         const { albumId } = await runWithLogger(log, () => validate(avatarParamsSchema, { ...req.params, ...req.query }));
@@ -260,7 +296,7 @@ router.put('/avatar/:albumId', auth, isAdminIfAuthenticated, async (req, res) =>
     let log = getLogger().child({ module: 'album', route: 'GET /api/album/avatar/:albumId' });
 
     try {
-        log.info('avatar request received');
+        log.info('album avatar update request received');
 
         log.debug({ params: req.params });
         const { albumId } = await runWithLogger(log, () => validate(avatarParamsSchema, { ...req.params }));
@@ -343,7 +379,7 @@ router.delete('/:albumId', auth, isAdminIfAuthenticated, async (req, res) => {
 
     let db: MongoDB | undefined = undefined
     try {
-        log.info('Album delete request received');
+        log.info('album delete request received');
 
         log.debug({ params: req.params });
         const { albumId, shouldDeleteAudios } = await runWithLogger(log, () => validate(deleteParamsSchema, req.params));

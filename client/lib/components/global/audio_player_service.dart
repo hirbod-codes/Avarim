@@ -251,6 +251,20 @@ class AudioPlayerService {
     );
   }
 
+  static void replace({String? audioId, List<String>? audioIds, bool play = true, bool expand = false}) {
+    final incoming = _normalize(audioId, audioIds);
+    if (incoming.isEmpty) return;
+
+    if (play) {
+      AudioPlayerService.play(audioIds: incoming, expand: expand);
+    } else {
+      // Nothing to keep playing: queue it, but don't start it.
+      _state.value = AudioQueueState(ids: incoming, minimized: true, autoPlay: false);
+      _ensureDock();
+    }
+    return;
+  }
+
   /// Inserts [audioId] / [audioIds] right after the current track, in the given order.
   /// Ids that were already queued are moved there. Starts playing if nothing is queued yet.
   static void playNext({String? audioId, List<String>? audioIds}) {
@@ -829,7 +843,13 @@ class _MiniBar extends ConsumerWidget {
                   ],
                 ),
                 // Tap or drag along the top edge of the bar to seek.
-                Positioned(left: 0, right: 0, top: 0, height: kDockSeekHeight, child: _DockSeekBar(player: player)),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: kDockSeekHeight,
+                  child: _DockSeekBar(player: player),
+                ),
               ],
             );
           },
@@ -969,5 +989,10 @@ class _DockSeekPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DockSeekPainter old) =>
-      old.progress != progress || old.buffered != buffered || old.active != active || old.playedColor != playedColor || old.bufferedColor != bufferedColor || old.trackColor != trackColor;
+      old.progress != progress ||
+      old.buffered != buffered ||
+      old.active != active ||
+      old.playedColor != playedColor ||
+      old.bufferedColor != bufferedColor ||
+      old.trackColor != trackColor;
 }

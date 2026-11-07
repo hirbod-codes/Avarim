@@ -54,9 +54,23 @@ class AlbumApi {
   }
 
   /// PATCH /api/album/name  { albumId, albumName }
-  Future<ApiCallResult<dynamic>> update({required String albumId, String? name}) {
-    if (name == null) return Future.value(const ApiCallSuccess<dynamic>(null)); // nothing to change
+  Future<ApiCallResult<dynamic>> updateName({required String albumId, required String name}) {
     return apiCall<dynamic>(() => _dio.patch<dynamic>('/api/album/name', data: {'albumId': albumId, 'albumName': name}));
+  }
+
+  /// PATCH /api/album/  { albumId, {
+  ///     publishYear?: string | undefined;
+  ///     publishMonth?: string | undefined;
+  ///     doNotUseFirstAudioCoverArt?: boolean | undefined;
+  ///   }
+  /// }
+  Future<ApiCallResult<dynamic>> update({required String albumId, String? publishedYear, String? publishedMonth, bool doNotUseFirstAudioCoverArt = true}) {
+    return apiCall<dynamic>(
+      () => _dio.patch<dynamic>(
+        '/api/album',
+        data: {'albumId': albumId, 'publishedYear': publishedYear, 'publishedMonth': publishedMonth, 'doNotUseFirstAudioCoverArt': doNotUseFirstAudioCoverArt},
+      ),
+    );
   }
 }
 

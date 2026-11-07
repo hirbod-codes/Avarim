@@ -3,7 +3,8 @@ import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
-import { albumNamePagePageSizeSchema, artistIdPagePageSizeSchema, audioAlbumArtistSchema, audioAlbumSchema, audioArtistAlbumSchema, audioArtistSchema, createSchema, fetchSchema, filterSchema, updateSchema } from './schemas';
+import { albumAudio, albumIdPagePageSizeSchema, artistIdPagePageSizeSchema, audioAlbumArtistSchema, audioAlbumSchema, audioArtistAlbumSchema, audioArtistSchema, createSchema, fetchSchema, filterSchema, updateSchema } from './schemas';
+import { meiliArtist } from '../../db/meilisearch';
 
 const router = express.Router();
 
@@ -17,6 +18,9 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
         const create = await runWithLogger(log, () => validate(createSchema, req.body))
         log.debug({ create });
         log.info('input validated');
+
+        if (create.artistId === undefined) create.artistId = null
+        if (create.albumId === undefined) create.albumId = null
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
@@ -40,10 +44,19 @@ router.get('/', auth, async (req, res) => {
         log.debug({ page, pageSize, filter });
         log.info('input validated');
 
-        if (filter.artistId === null) delete filter.artistId
-        if (filter.albumId === null) delete filter.albumId
-        if (filter.audioId === null) delete filter.audioId
-        log.debug({ filter })
+        // for get requests, query parameters can't be null (they will be empty string if set to null by client), so set them to null unless omitted bt the client
+        if (!filter.artistId && filter.artistId !== undefined) filter.artistId = null
+        if (!filter.albumId && filter.albumId !== undefined) filter.albumId = null
+
+        // since Mongodb treats undefined as null, we need to explicitly not pass it
+        if (filter.artistId === undefined) delete filter.artistId
+        if (filter.albumId === undefined) delete filter.albumId
+        if (!filter.audioId) delete filter.audioId
+
+        if (Object.keys(filter).length < 1) {
+            log.info('there is no filter');
+            return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
+        }
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
@@ -57,6 +70,55 @@ router.get('/', auth, async (req, res) => {
 });
 
 // --------------------------------------------------------------- Artist
+
+/** search parameter is for searching artist names */
+router.get('/artist', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/artist' });
+
+    try {
+        log.info('relationship artist request received');
+
+        log.debug({ query: req.query });
+        const { page, pageSize, search, ...filter } = await runWithLogger(log, () => validate(fetchSchema, req.query));
+        log.debug({ page, pageSize, filter, search });
+        log.info('Input validated');
+
+        // for get requests, query parameters can't be null (they will be empty string if set to null by client), so set them to null unless omitted bt the client
+        if (!filter.artistId && filter.artistId !== undefined) filter.artistId = null
+        if (!filter.albumId && filter.albumId !== undefined) filter.albumId = null
+
+        // since Mongodb treats undefined as null, we need to explicitly not pass it
+        if (filter.artistId === undefined) delete filter.artistId
+        if (filter.albumId === undefined) delete filter.albumId
+        if (!filter.audioId) delete filter.audioId
+
+        if (Object.keys(filter).length < 1) {
+            log.info('there is no filter');
+            return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
+        }
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        let ids: string[] | undefined = undefined
+        if (search) {
+            log.info('search in meilisearch')
+
+            const searchResult = await meiliArtist.search(search, { page, hitsPerPage: pageSize })
+            const { totalHits, totalPages, hits } = searchResult
+            log.debug({ totalHits, totalPages, hits })
+
+            ids = hits.map(m => m._id.toString())
+        }
+
+        const artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtist({ ...filter, ...(ids !== undefined && ids.length > 0 ? { artistId: { $in: ids } } : {}) }, (page - 1) * pageSize, pageSize))
+        log.debug({ artists })
+
+        log.info('artists successfully fetched');
+        res.status(200).json({ status: 'success', data: artists });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
 
 router.get('/artist/album', auth, async (req, res) => {
     let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/artist/album' });
@@ -132,6 +194,43 @@ router.get('/artist/audio/singles', auth, async (req, res) => {
 
 // --------------------------------------------------------------- Album
 
+router.get('/album', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/album' });
+
+    try {
+        log.info('relationship album request received');
+
+        log.debug({ query: req.query });
+        const { page, pageSize, ...filter } = await runWithLogger(log, () => validate(fetchSchema, req.query));
+        log.debug({ page, pageSize, filter });
+        log.info('Input validated');
+
+        // for get requests, query parameters can't be null (they will be empty string if set to null by client), so set them to null unless omitted bt the client
+        if (!filter.artistId && filter.artistId !== undefined) filter.artistId = null
+        if (!filter.albumId && filter.albumId !== undefined) filter.albumId = null
+
+        // since Mongodb treats undefined as null, we need to explicitly not pass it
+        if (filter.artistId === undefined) delete filter.artistId
+        if (filter.albumId === undefined) delete filter.albumId
+        if (!filter.audioId) delete filter.audioId
+
+        if (Object.keys(filter).length < 1) {
+            log.info('there is no filter');
+            return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
+        }
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const albums = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbum(filter, (page - 1) * pageSize, pageSize))
+        log.debug({ albums })
+
+        log.info('albums successfully fetched');
+        res.status(200).json({ status: 'success', data: albums });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
 router.get('/album/artist', auth, async (req, res) => {
     let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/album/artist' });
 
@@ -139,13 +238,13 @@ router.get('/album/artist', auth, async (req, res) => {
         log.info('relationship album artist request received');
 
         log.debug({ query: req.query });
-        const { albumId, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
+        const { albumId, page, pageSize } = await runWithLogger(log, () => validate(albumIdPagePageSizeSchema, req.query));
         log.debug({ albumId, page, pageSize });
         log.info('Input validated');
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAlbumId(albumId, (page - 1) * pageSize, pageSize))
+        let artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtist({ albumId }, (page - 1) * pageSize, pageSize))
         log.debug({ artists });
 
         res.status(200).json({ status: 'success', data: artists });
@@ -161,16 +260,21 @@ router.get('/album/audio', auth, async (req, res) => {
         log.info('relationship album audio request received');
 
         log.debug({ query: req.query });
-        const { albumId, page, pageSize } = await runWithLogger(log, () => validate(albumNamePagePageSizeSchema, req.query));
+        const { albumId, artistId, page, pageSize } = await runWithLogger(log, () => validate(albumAudio, req.query));
         log.info('Input validated');
-        log.debug({ albumId, page, pageSize });
+        log.debug({ albumId, artistId, page, pageSize });
 
         const userId = req.user!.userId;
         log = log.child({ userId });
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        let audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudioByAlbumId(albumId, (page - 1) * pageSize, pageSize))
+        let audios
+        if (artistId !== undefined)
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudio({ albumId, artistId }, (page - 1) * pageSize, pageSize))
+        else
+            audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudio({ albumId }, (page - 1) * pageSize, pageSize))
+
         log.debug({ audios });
 
         res.status(200).json({ status: 'success', data: audios });
@@ -180,6 +284,43 @@ router.get('/album/audio', auth, async (req, res) => {
 });
 
 // --------------------------------------------------------------- Audio
+
+router.get('/audio', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/audio' });
+
+    try {
+        log.info('relationship audio request received');
+
+        log.debug({ query: req.query });
+        const { page, pageSize, ...filter } = await runWithLogger(log, () => validate(fetchSchema, req.query));
+        log.debug({ page, pageSize, filter });
+        log.info('Input validated');
+
+        // for get requests, query parameters can't be null (they will be empty string if set to null by client), so set them to null unless omitted bt the client
+        if (!filter.artistId && filter.artistId !== undefined) filter.artistId = null
+        if (!filter.albumId && filter.albumId !== undefined) filter.albumId = null
+
+        // since Mongodb treats undefined as null, we need to explicitly not pass it
+        if (filter.artistId === undefined) delete filter.artistId
+        if (filter.albumId === undefined) delete filter.albumId
+        if (!filter.audioId) delete filter.audioId
+
+        if (Object.keys(filter).length < 1) {
+            log.info('there is no filter');
+            return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
+        }
+
+        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
+
+        const audios = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAudio(filter, (page - 1) * pageSize, pageSize))
+        log.debug({ audios })
+
+        log.info('audios successfully fetched');
+        res.status(200).json({ status: 'success', data: audios });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
 
 /**
  * to fetch a list of albums that the audio and the artist belongs to.
@@ -224,7 +365,7 @@ router.get('/audio/album', auth, async (req, res) => {
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        const albums = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbumByAudioId(audioId, (page - 1) * pageSize, pageSize))
+        const albums = await runWithLogger(log, () => artistAlbumAudioRepository.getManyAlbum({ audioId }, (page - 1) * pageSize, pageSize))
         log.debug({ albums })
 
         log.info('albums successfully fetched');
@@ -235,34 +376,7 @@ router.get('/audio/album', auth, async (req, res) => {
 })
 
 /**
- * to fetch a list of artists that the audio and the album belongs to.
- * the album can be undefined, some audios don't have an album
- */
-router.get('/audio/artist/album', auth, async (req, res) => {
-    let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/audio/artist/album' });
-
-    try {
-        log.info('relationship audio artist album request received');
-
-        log.debug({ query: req.query });
-        const { audioId, albumId, page, pageSize } = await runWithLogger(log, () => validate(audioArtistAlbumSchema, req.query));
-        log.debug({ audioId, albumId, page, pageSize });
-        log.info('Input validated');
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        const artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAudioIdByAlbumId(audioId, albumId, (page - 1) * pageSize, pageSize))
-        log.debug({ artists })
-
-        log.info('artists successfully fetched');
-        res.status(200).json({ status: 'success', data: artists });
-    } catch (err) {
-        runWithLogger(log, () => handleError(res, err));
-    }
-})
-
-/**
- * to fetch a list of albums that the audio belongs to. 
+ * to fetch a list of artists that the audio belongs to. 
  */
 router.get('/audio/artist', auth, async (req, res) => {
     let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/audio/artist' });
@@ -271,14 +385,19 @@ router.get('/audio/artist', auth, async (req, res) => {
         log.info('relationship audio artist request received');
 
         log.debug({ query: req.query });
-        const { audioId, page, pageSize } = await runWithLogger(log, () => validate(audioArtistSchema, req.query));
-        log.debug({ audioId, page, pageSize });
+        const { audioId, albumId, page, pageSize } = await runWithLogger(log, () => validate(audioArtistSchema, req.query));
+        log.debug({ audioId, albumId, page, pageSize });
         log.info('Input validated');
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
 
-        const artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtistByAudioId(audioId, (page - 1) * pageSize, pageSize))
-        log.debug({ artists })
+        let artists
+        if (albumId !== undefined)
+            artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtist({ audioId, albumId }, (page - 1) * pageSize, pageSize))
+        else
+            artists = await runWithLogger(log, () => artistAlbumAudioRepository.getManyArtist({ audioId }, (page - 1) * pageSize, pageSize))
+
+        log.debug({ artists });
 
         log.info('artists successfully fetched');
         res.status(200).json({ status: 'success', data: artists });
@@ -289,6 +408,9 @@ router.get('/audio/artist', auth, async (req, res) => {
 
 /**
  * a cronjob will remove any ArtistAlbumAudio record with an id field that doesn't exist, so we don't need to check document existence here.
+ * 
+ * in filter, undefined (missing in request body) means any
+ * in update, undefined (missing in request body) means no update
  */
 router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'relationship', route: 'PATCH /api/relationship' });
@@ -303,25 +425,35 @@ router.patch('/', auth, isAdminIfAuthenticated, async (req, res) => {
         log.debug({ update });
         log.info('input validated');
 
-        if (filter.artistId === undefined) filter.artistId = undefined
-        if (filter.albumId === undefined) filter.albumId = undefined
-        if (filter.audioId === undefined) filter.audioId = undefined
-        if (filter.artistId === null) delete filter.artistId
-        if (filter.albumId === null) delete filter.albumId
-        if (filter.audioId === null) delete filter.audioId
-        log.debug({ filter })
+        // for get requests, query parameters can't be null (they will be empty string if set to null by client), so set them to null unless omitted bt the client
+        if (!filter.artistId && filter.artistId !== undefined) filter.artistId = null
+        if (!filter.albumId && filter.albumId !== undefined) filter.albumId = null
 
-        if (!filter.audioId && !filter.artistId && !filter.albumId) {
+        // since Mongodb treats undefined as null, we need to explicitly not pass it
+        if (filter.artistId === undefined) delete filter.artistId
+        if (filter.albumId === undefined) delete filter.albumId
+        if (!filter.audioId) delete filter.audioId
+
+        if (Object.keys(filter).length < 1) {
             log.info('there is no filter');
             return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
         }
 
-        if (update.artistId === undefined) update.artistId = undefined
-        if (update.albumId === undefined) update.albumId = undefined
-        if (update.artistId === null) delete update.artistId
-        if (update.albumId === null) delete update.albumId
+        // for get requests, query parameters can't be null (they will be empty string if set to null by client), so set them to null unless omitted bt the client
+        if (!update.artistId && update.artistId !== undefined) update.artistId = null
+        if (!update.albumId && update.albumId !== undefined) update.albumId = null
+
+        // since Mongodb treats undefined as null, we need to explicitly not pass it
+        if (update.artistId === undefined) delete update.artistId
+        if (update.albumId === undefined) delete update.albumId
         if (!update.audioId) delete update.audioId
+
         log.debug({ update })
+
+        if (Object.keys(update).length < 1) {
+            log.info('there is no filter');
+            return res.status(400).json({ status: 'error', error_code: 'NO_FILTER_PROVIDED' });
+        }
 
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
 

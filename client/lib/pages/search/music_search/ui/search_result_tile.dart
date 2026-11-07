@@ -23,6 +23,7 @@ class SearchResultTile extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onAddToQueue,
+    this.onAvatarPlay,
   });
 
   /// Narrower screens only have room for the audio's buttons, not for its duration.
@@ -48,22 +49,30 @@ class SearchResultTile extends StatelessWidget {
   /// Albums and playlists: appends all their audios to the player queue.
   final VoidCallback? onAddToQueue;
 
+  /// Albums and playlists: replaces all of the player queue with their audios.
+  final VoidCallback? onAvatarPlay;
+
   @override
   Widget build(BuildContext context) {
     return switch (item) {
       Artist artist => ListTile(
         onTap: onTap,
-        leading: AuthenticatedThumbnail(
-          imageUrl: '${AppConfig.apiUrl}/api/artist/avatar/${artist.id}',
-          placeholderIcon: Icons.person,
-          isCircular: true,
-        ),
+        leading: AuthenticatedThumbnail(imageUrl: '${AppConfig.apiUrl}/api/artist/avatar/${artist.id}', placeholderIcon: Icons.person, isCircular: true),
         title: _buildSingleLineText(artist.name),
         trailing: isEditModeEnabled ? _buildEditModeActions(context) : null,
       ),
       Album album => ListTile(
         onTap: onTap,
-        leading: AuthenticatedThumbnail(imageUrl: '${AppConfig.apiUrl}/api/album/avatar/${album.id}', placeholderIcon: Icons.album),
+        leading: FittedBox(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            spacing: 5,
+            children: [
+              if (onAvatarPlay != null) IconButton(tooltip: 'Play', icon: const Icon(Icons.play_arrow), onPressed: onAvatarPlay),
+              AuthenticatedThumbnail(imageUrl: '${AppConfig.apiUrl}/api/album/avatar/${album.id}', placeholderIcon: Icons.album),
+            ],
+          ),
+        ),
         title: _buildSingleLineText(album.name),
         subtitle: AlbumArtistsSubtitle(albumId: album.id),
         trailing: isEditModeEnabled ? _buildEditModeActions(context) : _buildAddToQueueButton(),
@@ -80,9 +89,13 @@ class SearchResultTile extends StatelessWidget {
       Playlist playlist => ListTile(
         // Tapping plays it: all its audios are added to the queue and the first one starts.
         onTap: isBeingAddedToQueue ? null : onTap,
-        leading: AuthenticatedThumbnail(
-          imageUrl: '${AppConfig.apiUrl}/api/playlist/avatar/${playlist.id}',
-          placeholderIcon: Icons.queue_music,
+        leading: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          spacing: 5,
+          children: [
+            if (onAvatarPlay != null) IconButton(tooltip: 'Play', icon: const Icon(Icons.play_arrow), onPressed: onAvatarPlay),
+            AuthenticatedThumbnail(imageUrl: '${AppConfig.apiUrl}/api/playlist/avatar/${playlist.id}', placeholderIcon: Icons.queue_music),
+          ],
         ),
         title: _buildSingleLineText(playlist.name),
         trailing: _buildAddToQueueButton(),
@@ -98,13 +111,13 @@ class SearchResultTile extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined), onPressed: isBeingDeleted ? null : onEdit),
+        if (onEdit != null) IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined), onPressed: isBeingDeleted ? null : onEdit),
         if (isBeingDeleted)
           const Padding(
             padding: EdgeInsets.all(12),
             child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
           )
-        else
+        else if (onDelete != null)
           IconButton(
             tooltip: 'Delete',
             icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
@@ -123,6 +136,7 @@ class SearchResultTile extends StatelessWidget {
         child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
+
     return IconButton(tooltip: 'Add to queue', icon: const Icon(Icons.playlist_add), onPressed: onAddToQueue);
   }
 

@@ -5,6 +5,7 @@ import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/api/dio/global_error_interceptor.dart';
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
+import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/api/models/audio_link.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:dio/dio.dart';
@@ -30,22 +31,27 @@ class RelationshipController {
   // ---------------------------------------------------------------------------
 
   /// Artists linked with the audio (with or without an album).
-  Future<List<Artist>> artistsOfAudio(String audioId) => _all('/audio/artist', {'audioId': audioId}, Artist.fromJson);
-
-  /// Albums linked with the audio (with or without an artist).
-  Future<List<Album>> albumsOfAudio(String audioId) => _all('/audio/album', {'audioId': audioId}, Album.fromJson);
-
-  /// Artists linked with the audio AND the album.
-  Future<List<Artist>> artistsOfAudioAlbum(String audioId, String albumId) => _all('/audio/artist/album', {'audioId': audioId, 'albumId': albumId}, Artist.fromJson);
-
-  /// Artists linked with the audio but no album (the audio is one of their singles).
-  Future<List<Artist>> artistsOfAudioWithoutAlbum(String audioId) => _all('/audio/artist/album', {'audioId': audioId}, Artist.fromJson);
-
-  /// Albums linked with the audio but no artist.
-  Future<List<Album>> albumsOfAudioWithoutArtist(String audioId) => _all('/audio/album/artist', {'audioId': audioId}, Album.fromJson);
+  Future<List<Artist>> artistsOfAudio(String audioId) => _all('/artist', {'audioId': audioId}, Artist.fromJson);
 
   /// Artists linked with the album (an album can have many).
-  Future<List<Artist>> artistsOfAlbum(String albumId) => _all('/album/artist', {'albumId': albumId}, Artist.fromJson);
+  Future<List<Artist>> artistsOfAlbum(String albumId) => _all('/artist', {'albumId': albumId}, Artist.fromJson);
+
+  /// Artists linked with the audio AND the album.
+  Future<List<Artist>> artistsOfAudioAlbum(String audioId, String albumId) => _all('/artist', {'audioId': audioId, 'albumId': albumId}, Artist.fromJson);
+
+  /// Artists linked with the audio but no album (the audio is one of their singles).
+  Future<List<Artist>> artistsOfAudioWithoutAlbum(String audioId) => _all('/artist', {'audioId': audioId, 'albumId': null}, Artist.fromJson);
+
+  /// Albums linked with the audio (with or without an artist).
+  Future<List<Album>> albumsOfAudio(String audioId) => _all('/album', {'audioId': audioId}, Album.fromJson);
+
+  /// Albums linked with the audio but no artist.
+  Future<List<Album>> albumsOfAudioWithoutArtist(String audioId) => _all('/album', {'audioId': audioId, 'artistId': null}, Album.fromJson);
+
+  Future<List<Audio>> audiosOfAlbum(String albumId, {String? artistId}) => _all('/audio', {
+    'albumId': albumId,
+    ...(artistId != null ? {'artistId': artistId} : {}),
+  }, Audio.fromJson);
 
   /// Every pair of the audio: (artist, album), (artist, no album) and (no artist, album).
   Future<List<AudioLink>> linksOfAudio(String audioId) async {
@@ -95,7 +101,10 @@ class RelationshipController {
   /// POST /api/relationship { audioId, artistId?, albumId? }
   Future<bool> create({required String audioId, String? artistId, String? albumId}) async {
     final res = await apiCall<dynamic>(
-      () => _dio.post<dynamic>('/api/relationship', data: {'audioId': audioId, if (artistId != null) 'artistId': artistId, if (albumId != null) 'albumId': albumId}),
+      () => _dio.post<dynamic>(
+        '/api/relationship',
+        data: {'audioId': audioId, if (artistId != null) 'artistId': artistId, if (albumId != null) 'albumId': albumId},
+      ),
     );
     return res.isSuccess;
   }
@@ -106,7 +115,10 @@ class RelationshipController {
   /// as null would mean "any" (it is not filtered), so absent fields are left out of the body on purpose.
   Future<bool> remove({required String audioId, String? artistId, String? albumId}) async {
     final res = await apiCall<dynamic>(
-      () => _dio.delete<dynamic>('/api/relationship', data: {'audioId': audioId, if (artistId != null) 'artistId': artistId, if (albumId != null) 'albumId': albumId}),
+      () => _dio.delete<dynamic>(
+        '/api/relationship',
+        data: {'audioId': audioId, if (artistId != null) 'artistId': artistId, if (albumId != null) 'albumId': albumId},
+      ),
     );
     return res.isSuccess;
   }
