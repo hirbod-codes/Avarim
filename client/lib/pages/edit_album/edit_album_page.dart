@@ -18,8 +18,10 @@
 
 import 'dart:async';
 
+import 'package:avarim/api/models/album.dart';
 import 'package:avarim/pages/common/image_section.dart';
 import 'package:avarim/pages/edit_album/delete_album_audios_section.dart';
+import 'package:avarim/pages/edit_album/delete_album_section.dart';
 import 'package:avarim/pages/edit_album/edit_album_api.dart';
 import 'package:avarim/pages/edit_album/edit_album_form.dart';
 import 'package:avarim/pages/edit_album/edit_album_notifier.dart';
@@ -87,6 +89,8 @@ class _EditAlbumPageState extends ConsumerState<EditAlbumPage> {
             EditAlbumForm(key: ValueKey(s.revision), album: s.album!, isSaving: s.isSaving),
             const SizedBox(height: 32),
             DeleteAlbumAudiosSection(albumId: s.id!, albumName: '${s.album!['name'] ?? ''}'),
+            const SizedBox(height: 32),
+            DeleteAlbumSection(album: Album.fromJson(s.album!)),
           ],
         ),
       };
@@ -188,11 +192,7 @@ class _CreateStepState extends ConsumerState<_CreateStep> {
           const SizedBox(height: 16),
           Text('Create an album', style: theme.textTheme.titleLarge),
           const SizedBox(height: 8),
-          Text(
-            'Give the album a name. You can add images and edit the details right after.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
-          ),
+          Text('Give the album a name. You can add images and edit the details right after.', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 24),
           TextFormField(
             controller: _name,

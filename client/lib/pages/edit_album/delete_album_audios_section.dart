@@ -1,5 +1,3 @@
-// delete_album_audios_section.dart
-//
 // "Danger zone" of the edit album page: deletes EVERY audio of the album, one request at a time
 // (DELETE /api/audio/:audioId, admin only), after a confirmation dialog. The audios are removed everywhere (an
 // audio that is also in another album, an artist's singles or a playlist disappears from those too), not just
@@ -137,7 +135,10 @@ class _DeleteAlbumAudiosSectionState extends ConsumerState<DeleteAlbumAudiosSect
           ),
         ] else
           OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+              side: BorderSide(color: theme.colorScheme.error),
+            ),
             onPressed: busy ? null : _start,
             icon: _loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.delete_sweep_outlined),
             label: const Text('Delete all audios of this album'),

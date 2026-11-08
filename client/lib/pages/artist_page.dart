@@ -58,6 +58,7 @@ import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/components/popup.dart';
 import 'package:avarim/lib/talker.dart';
+import 'package:avarim/pages/edit_album/edit_album_page.dart';
 import 'package:avarim/pages/search/music_search/models/load_more_mode.dart';
 import 'package:avarim/pages/search/music_search/models/search_tab.dart';
 import 'package:avarim/pages/search/music_search/models/search_tab_results.dart';
@@ -253,6 +254,8 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
 
   Album? _viewingAlbum;
   List<Audio>? _viewingAlbumAudios;
+
+  Album? _editingAlbum;
 
   @override
   void initState() {
@@ -667,6 +670,11 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                             _viewingAlbumAudios = audios;
                           });
                         },
+                        onAlbumEdit: () {
+                          setState(() {
+                            _editingAlbum = album;
+                          });
+                        },
                         onPlay: () => _playAlbum(album),
                         onAddToQueue: () => _addAlbumToQueue(album),
                       );
@@ -706,7 +714,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
           if (_viewingAlbum != null && _viewingAlbumAudios != null)
             Positioned.fill(
               child: Popup(
-                constraints: const BoxConstraints(maxWidth: 500),
+                constraints: const BoxConstraints(maxWidth: 1000),
                 leadings: [
                   const Icon(Icons.album),
                   ConstrainedBox(
@@ -724,13 +732,22 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                     child: SearchResultsList(
                       loadMoreMode: LoadMoreMode.infiniteScroll,
                       tab: SearchTab.audios,
-                      tabResults: SearchTabResults(
-                        hasMorePages: false,
-                        loadedItems: _viewingAlbumAudios!,
-                      ),
+                      tabResults: SearchTabResults(hasMorePages: false, loadedItems: _viewingAlbumAudios!, loadedForQuery: 'already loaded'),
                     ),
                   ),
                 ),
+              ),
+            ),
+
+          if (_editingAlbum != null)
+            Positioned.fill(
+              child: Popup(
+                constraints: const BoxConstraints(maxWidth: 500),
+                leadings: [Text(_editingAlbum!.name)],
+                onClose: () => setState(() {
+                  _editingAlbum = null;
+                }),
+                child: EditAlbumPage(albumId: _editingAlbum!.id),
               ),
             ),
         ],
@@ -934,6 +951,7 @@ class AlbumCard extends ConsumerStatefulWidget {
     this.onTap,
     required this.onPlay,
     required this.onAddToQueue,
+    this.onAlbumEdit,
   });
 
   final String artistId;
@@ -945,6 +963,7 @@ class AlbumCard extends ConsumerStatefulWidget {
 
   /// This album's audios are being loaded to add them to the queue.
   final bool queueing;
+  final VoidCallback? onAlbumEdit;
   final VoidCallback? onTap;
   final VoidCallback onPlay;
   final VoidCallback onAddToQueue;
@@ -977,6 +996,34 @@ class _AlbumCard extends ConsumerState<AlbumCard> {
                   borderRadius: BorderRadius.circular(12),
                   child: _AuthImage(url: '${AppConfig.apiUrl}/api/album/avatar/${widget.album.id}', headers: widget.headers, fallback: placeholder),
                 ),
+
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Tooltip(
+                    message: 'Edit',
+                    child: Material(
+                      color: theme.colorScheme.secondaryContainer,
+                      elevation: 3,
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: widget.onAlbumEdit,
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: widget.queueing
+                              ? Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
+                                )
+                              : Icon(Icons.edit, color: theme.colorScheme.onSecondaryContainer),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
                 Positioned(
                   left: 8,
                   bottom: 8,

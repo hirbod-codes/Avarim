@@ -184,6 +184,23 @@ class MusicSearchController extends Notifier<MusicSearchState> {
     AudioPlayerService.remove(audioId);
   }
 
+  Future<void> deleteAllAudiosOfAlbum(Album album) async {
+    final itemId = album.id;
+    if (state.idsBeingDeleted.contains(itemId)) return;
+    state = state.copyWith(idsBeingDeleted: {...state.idsBeingDeleted, itemId});
+
+    final ids = await ref.read(musicSearchApiProvider).fetchAllAudioIdsOfAlbum(album.id);
+    if (ids == null) return;
+
+    for (String id in ids) {
+      await deleteAudio(id);
+    }
+
+    final remainingIdsBeingDeleted = {...state.idsBeingDeleted}..remove(itemId);
+
+    state = state.copyWith(idsBeingDeleted: remainingIdsBeingDeleted);
+  }
+
   /// Deletes an artist or an album. While the request runs its id is in [MusicSearchState.idsBeingDeleted]; on success
   /// it disappears from every tab. A failure says why (an artist that still has albums or audios can't go).
   Future<void> deleteArtistOrAlbum(WithId item) async {

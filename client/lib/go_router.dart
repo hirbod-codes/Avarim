@@ -25,7 +25,7 @@ import 'package:go_router/go_router.dart';
 /// Routes that don't require authentication. Differs by platform:
 /// web has a public landing page at '/'; non-web has an onboarding
 /// step instead, and no '/' route at all.
-final Set<String> _publicPaths = {'/login', '/pricing', '/about', '/contact', if (kIsWeb) '/', if (!kIsWeb) '/onboarding'};
+final Set<String> _publicPaths = {'/login', '/pricing', '/about', '/contact', '/onboarding'};
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -65,7 +65,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           return (from != null && from.isNotEmpty) ? from : '/app';
         }
 
-        // Temporarily, there is no landing page 
+        // Temporarily, there is no landing page
         // return null;
       }
 

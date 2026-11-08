@@ -4,7 +4,7 @@ import { accessTokenSecret, isProduction } from '../../configs';
 import { Redis } from '../../db/redis';
 import { getLogger } from '../../observability/requestLoggerContext';
 
-const ACCESS_TOKEN_TTL_SECONDS = isProduction ? 15 * 60 : 60 * 60;
+const ACCESS_TOKEN_TTL_SECONDS = isProduction ? 15 * 60 : 1 * 60;
 
 export interface AccessTokenPayload extends jwt.JwtPayload {
     userId: string;

@@ -21,6 +21,7 @@ import { meiliAudio, meiliPlaylistAudio } from '../../db/meilisearch';
 import { Audio } from '../../db/models/Audio';
 import { Readable } from 'stream';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
+import { AudioController } from '../../controllers/AudioController';
 
 const router = express.Router();
 
@@ -894,102 +895,10 @@ router.delete('/:audioId', auth, isAdminIfAuthenticated, async (req, res) => {
         log.info('Input validated');
         log.debug({ audioId });
 
-        const audioRepository = new AudioRepository();
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository();
-
-        const audio = await runWithLogger(log, () => audioRepository.get(audioId));
-        log.debug({ audio });
-        log.info('Checked audio ownership');
-        if (!audio) {
-            log.info('Rejected audio delete request: audio not found');
-            res.status(404).json({ status: 'error', message: 'Audio not found' });
-            return
-        }
-
-        const r = await runWithLogger(log, () => audioRepository.unsafeUpdate(audioId, { title: `deletionQueued${AUDIO_TITLE_SEPARATOR}${audio.title}`, deletionQueued: true }));
-        log.debug({ updateResult: r });
-        if (!r.acknowledged || r.matchedCount) {
-            log.error({ updateResult: r }, 'Failed to mark audio temporary before delete');
-            res.status(500).json({ status: 'error', message: 'Error deleting audio' });
-            return
-        }
-        log.info('Marked audio before delete');
-
-        const meiliAudioDeleteResult = await runWithLogger(log, () => meiliAudio.delete(audioId));
-        log.debug({ meiliAudioDeleteResult });
-        if (meiliAudioDeleteResult.status !== 'succeeded') {
-            log.error({ meiliAudioDeleteResult }, 'Failed to delete audio record from Meilisearch audio collection');
-            res.status(500).json({ status: 'error', message: 'Error deleting audio' });
-            return
-        }
-        log.info('Deleted audio record in Meilisearch audio collection')
-
-        const meiliPlaylistAudioDeleteResult = await runWithLogger(log, () => meiliPlaylistAudio.deleteBy({ audioId }));
-        log.debug({ meiliPlaylistAudioDeleteResult });
-        if (meiliPlaylistAudioDeleteResult.status !== 'succeeded') {
-            log.error({ meiliPlaylistAudioDeleteResult }, 'Failed to delete audio record from Meilisearch playlist audio collection');
-            res.status(500).json({ status: 'error', message: 'Error deleting audio' });
-            return
-        }
-        log.info('Deleted audio record in Meilisearch playlist audio collection')
-
-        const promises = []
-        if (audio?.bucketKey) {
-            log.info('Deleting audio file from storage');
-            promises.push(runWithLogger(log, () => deleteFromS3(audio.bucketKey!)))
-            log.debug({ key: audio.bucketKey });
-        }
-
-        if (audio?.webBucketKey) {
-            log.info('Deleting web audio file from storage');
-            promises.push(runWithLogger(log, () => deleteFromS3(audio.webBucketKey!)))
-            log.debug({ key: audio.webBucketKey });
-        }
-
-        if (audio?.coverArtKey) {
-            log.info('Deleting cover art from storage');
-            promises.push(runWithLogger(log, () => deleteFromS3(audio.coverArtKey!)))
-            log.debug({ key: audio.coverArtKey });
-        }
-
-        const results = await Promise.allSettled(promises)
-        log.debug({ results })
-        const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-        log.info(
-            {
-                fulfilledCount: results.length - rejected.length,
-                rejectedCount: rejected.length,
-                ...(rejected.length > 0 && { errors: rejected.map(r => r.reason instanceof Error ? r.reason.message : r.reason) }),
-            },
-            'handled all the object deletions from s3 storage'
-        );
-
-        if (rejected.length > 0) {
-            log.info({ rejectedLength: rejected.length }, `failed to delete objects in s3 storage`)
-            res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' })
-            return
-        }
-
-        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ audioId }));
-        log.debug({ artistAlbumAudioDeleteResult });
-        if (!artistAlbumAudioDeleteResult?.acknowledged) {
-            log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio record from DB');
-            res.status(500).json({ status: 'error', message: 'Error deleting artistAlbumAudio' });
-            return
-        }
-        log.info('Deleted artistAlbumAudio record in DB')
-
-        const audioDeleteResult = await runWithLogger(log, () => audioRepository.delete(audioId));
-        log.debug({ audioDeleteResult });
-        if (!audioDeleteResult.acknowledged) {
-            log.error({ audioDeleteResult }, 'Failed to delete audio record from DB');
-            res.status(500).json({ status: 'error', message: 'Error deleting audio' });
-            return
-        }
-        log.info('Deleted audio record in DB')
+        await runWithLogger(log, () => new AudioController().delete(audioId));
 
         log.info('audio deleted successfully');
-        res.status(204).json({ status: 'success' });
+        res.status(200).json({ status: 'success' });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err));
     }

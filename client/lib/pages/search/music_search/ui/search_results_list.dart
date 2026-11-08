@@ -178,6 +178,34 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
     final searchController = ref.read(musicSearchControllerProvider.notifier);
     if (item is Audio) {
       await searchController.deleteAudio(item.id);
+    } else if (item is Album) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          final theme = Theme.of(ctx);
+
+          return AlertDialog(
+            title: const Text('Delete all audios?'),
+            content: Text(
+              'Every audio of "${item.name}" will be deleted, one by one. '
+              'They disappear from every album, artist and playlist they are in. This cannot be undone.',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error, foregroundColor: theme.colorScheme.onError),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete all'),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true || !mounted) return;
+
+      await searchController.deleteAllAudiosOfAlbum(item);
+
+      await searchController.deleteArtistOrAlbum(item);
     } else {
       await searchController.deleteArtistOrAlbum(item);
     }
@@ -329,7 +357,7 @@ class _SearchResultsListState extends ConsumerState<SearchResultsList> with Auto
                         child: SearchResultsList(
                           loadMoreMode: LoadMoreMode.infiniteScroll,
                           tab: SearchTab.audios,
-                          tabResults: SearchTabResults(hasMorePages: false, loadedItems: _albumViewAudios),
+                          tabResults: SearchTabResults(hasMorePages: false, loadedItems: _albumViewAudios, loadedForQuery: 'already loaded'),
                         ),
                       ),
                     ),
