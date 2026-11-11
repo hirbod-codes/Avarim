@@ -37,7 +37,7 @@ router.get('/', auth, async (req, res) => {
     let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/' });
 
     try {
-        log.info('relationship request received');
+        log.info('top tracks request received');
 
         log.debug({ query: req.query });
         const { page, pageSize, ...filter } = await runWithLogger(log, () => validate(fetchSchema, req.query))

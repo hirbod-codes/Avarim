@@ -52,9 +52,9 @@ class _SearchPageState extends ConsumerState<SearchPage> with SingleTickerProvid
     super.dispose();
   }
 
-  Widget _buildSearchTextField(SearchTab selectedTab, MusicSearchController searchController) {
+  static Widget buildSearchTextField(SearchTab selectedTab, MusicSearchController searchController, TextEditingController textFieldController) {
     return TextField(
-      controller: _searchTextController,
+      controller: textFieldController,
       textInputAction: TextInputAction.search,
       onChanged: searchController.onSearchTextChanged,
       onSubmitted: searchController.submitSearchText,
@@ -64,13 +64,13 @@ class _SearchPageState extends ConsumerState<SearchPage> with SingleTickerProvid
         filled: true,
         prefixIcon: const Icon(Icons.search),
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
-          valueListenable: _searchTextController,
+          valueListenable: textFieldController,
           builder: (context, textValue, child) => textValue.text.isEmpty
               ? const SizedBox.shrink()
               : IconButton(
                   icon: const Icon(Icons.clear),
                   onPressed: () {
-                    _searchTextController.clear();
+                    textFieldController.clear();
                     searchController.submitSearchText('');
                   },
                 ),
@@ -84,12 +84,11 @@ class _SearchPageState extends ConsumerState<SearchPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     final userInfo = ref.watch(userInfoProvider).info;
     final selectedTab = ref.watch(musicSearchControllerProvider.select((state) => state.selectedTab));
-    final isEditModeEnabled = ref.watch(musicSearchControllerProvider.select((state) => state.isEditModeEnabled));
     final searchController = ref.read(musicSearchControllerProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
-        title: _buildSearchTextField(selectedTab, searchController),
+        title: buildSearchTextField(selectedTab, searchController, _searchTextController),
         actions: userInfo?.role != 'admin'
             ? null
             : [
@@ -115,13 +114,6 @@ class _SearchPageState extends ConsumerState<SearchPage> with SingleTickerProvid
                           });
                         },
                       ),
-                IconButton(
-                  tooltip: isEditModeEnabled ? 'Done' : 'Edit mode',
-                  isSelected: isEditModeEnabled,
-                  icon: const Icon(Icons.edit_outlined),
-                  selectedIcon: const Icon(Icons.check),
-                  onPressed: searchController.toggleEditMode,
-                ),
               ],
         bottom: TabBar(
           controller: _tabController,

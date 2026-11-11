@@ -5,7 +5,7 @@ import 'package:avarim/auth/auth_state.dart';
 import 'package:avarim/go_router_refresh_notifier.dart';
 import 'package:avarim/localization/on_boarding_status.dart';
 import 'package:avarim/pages/about_page.dart';
-import 'package:avarim/pages/artist_page.dart';
+import 'package:avarim/pages/artist_page/artist_page.dart';
 import 'package:avarim/pages/edit_album/edit_album_page.dart';
 import 'package:avarim/pages/edit_artist/edit_artist_page.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_page.dart';
@@ -173,7 +173,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/artist',
-        builder: (context, state) => ArtistPage(artistId: state.uri.queryParameters['artistId'], artistName: state.uri.queryParameters['name']),
+        builder: (context, state) => AppShell(
+          child: ArtistPage(artistId: state.uri.queryParameters['artistId'], artistName: state.uri.queryParameters['name']),
+        ),
       ),
     ],
   );

@@ -154,7 +154,7 @@ class PlaybackController {
     final wasEnded = _lastStatus == AudioPlayerStatus.ended;
     _lastStatus = s.status;
 
-    if (ended && !wasEnded) AudioPlayerService.next();
+    if (ended && !wasEnded) AudioPlayerService.trackEnded();
   }
 
   // ---- the OS media controls ----------------------------------------------

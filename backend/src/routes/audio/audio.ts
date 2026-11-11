@@ -119,7 +119,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             log.info('extract metadata from received file')
 
             const metadata = await runWithLogger(log, () => extractMetadata(inputPath, basename(inputPath)))
-            log.debug({ metadata: { ...metadata, covers: metadata.covers.map(m => ({ ...m, data: [] })) } }) // removing cover arts bytes from logs
+            log.debug({ metadata: { ...metadata, technical: { ...metadata.technical, waveform: 'hidden' }, covers: metadata.covers.map(m => ({ ...m, data: [] })) } }) // removing cover arts bytes from logs
             const audioStream = metadata.probe.streams.find((s) => s.codec_type === 'audio');
             log.debug({ audioStream })
             log.info('extracted metadata from uploaded file')

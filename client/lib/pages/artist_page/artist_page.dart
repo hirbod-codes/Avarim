@@ -58,13 +58,13 @@ import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/components/popup.dart';
 import 'package:avarim/lib/talker.dart';
+import 'package:avarim/pages/artist_page/artist_top_tracks.dart';
 import 'package:avarim/pages/edit_album/edit_album_page.dart';
+import 'package:avarim/pages/search/music_search/controller/music_search_controller.dart';
 import 'package:avarim/pages/search/music_search/models/load_more_mode.dart';
-import 'package:avarim/pages/search/music_search/models/search_tab.dart';
-import 'package:avarim/pages/search/music_search/models/search_tab_results.dart';
 import 'package:avarim/pages/search/music_search/ui/authenticated_thumbnail.dart';
+import 'package:avarim/pages/search/music_search/ui/scrollable_list.dart';
 import 'package:avarim/pages/search/music_search/ui/search_result_tile.dart';
-import 'package:avarim/pages/search/music_search/ui/search_results_list.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart' hide Thumb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -572,7 +572,6 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
-        leading: context.canPop() ? const _BackButtonOnBanner() : null,
       ),
       body: _body(context),
     );
@@ -622,6 +621,13 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                   onEdit: _edit,
                 ),
               ),
+              if (_artist != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                    child: ArtistTopTracks(artistId: _artist!.id),
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -727,13 +733,22 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                   _viewingAlbumAudios = null;
                 }),
                 child: Expanded(
-                  child: Scrollbar(
-                    controller: _scroll,
-                    child: SearchResultsList(
-                      loadMoreMode: LoadMoreMode.infiniteScroll,
-                      tab: SearchTab.audios,
-                      tabResults: SearchTabResults(hasMorePages: false, loadedItems: _viewingAlbumAudios!, loadedForQuery: 'already loaded'),
-                    ),
+                  child: ScrollableList(
+                    loadNextPage: ({retryAfterError = false}) {},
+                    onRefresh: () async {},
+                    itemCount: _viewingAlbumAudios!.length,
+                    loadMoreMode: LoadMoreMode.infiniteScroll,
+                    itemBuilder: (context, index) {
+                      final musicSearchState = ref.watch(musicSearchControllerProvider);
+
+                      return SearchResultTile(
+                        item: _viewingAlbumAudios![index],
+                        isEditModeEnabled: musicSearchState.isEditModeEnabled,
+                        isBeingDeleted: musicSearchState.idsBeingDeleted.contains(_viewingAlbumAudios![index].id),
+                        isBeingAddedToQueue: musicSearchState.idsBeingAddedToQueue.contains(_viewingAlbumAudios![index].id),
+                      );
+                    },
+                    //getTile(_viewingAlbumAudios![index]),
                   ),
                 ),
               ),
@@ -916,26 +931,6 @@ class _ArtistHeader extends StatelessWidget {
   }
 }
 
-/// Back button with a dark circle behind it, readable over any banner.
-class _BackButtonOnBanner extends StatelessWidget {
-  const _BackButtonOnBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(4),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black45),
-        child: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.pop(),
-        ),
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Albums
 // ─────────────────────────────────────────────────────────────────────────────
@@ -987,101 +982,113 @@ class _AlbumCard extends ConsumerState<AlbumCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: _AuthImage(url: '${AppConfig.apiUrl}/api/album/avatar/${widget.album.id}', headers: widget.headers, fallback: placeholder),
-                ),
+          Container(
+            margin: EdgeInsets.symmetric(horizontal: 8.0),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _AuthImage(url: '${AppConfig.apiUrl}/api/album/avatar/${widget.album.id}', headers: widget.headers, fallback: placeholder),
+                  ),
 
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Tooltip(
-                    message: 'Edit',
-                    child: Material(
-                      color: theme.colorScheme.secondaryContainer,
-                      elevation: 3,
-                      shape: const CircleBorder(),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: widget.onAlbumEdit,
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: widget.queueing
-                              ? Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
-                                )
-                              : Icon(Icons.edit, color: theme.colorScheme.onSecondaryContainer),
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Tooltip(
+                      message: 'Edit',
+                      child: Material(
+                        color: theme.colorScheme.secondaryContainer,
+                        elevation: 3,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: widget.onAlbumEdit,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: widget.queueing
+                                ? Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
+                                  )
+                                : Icon(Icons.edit, color: theme.colorScheme.onSecondaryContainer),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
 
-                Positioned(
-                  left: 8,
-                  bottom: 8,
-                  child: Tooltip(
-                    message: 'Add to queue',
-                    child: Material(
-                      color: theme.colorScheme.secondaryContainer,
-                      elevation: 3,
-                      shape: const CircleBorder(),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: widget.queueing ? null : widget.onAddToQueue,
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: widget.queueing
-                              ? Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
-                                )
-                              : Icon(Icons.playlist_add, color: theme.colorScheme.onSecondaryContainer),
+                  Positioned(
+                    left: 8,
+                    bottom: 8,
+                    child: Tooltip(
+                      message: 'Add to queue',
+                      child: Material(
+                        color: theme.colorScheme.secondaryContainer,
+                        elevation: 3,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: widget.queueing ? null : widget.onAddToQueue,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: widget.queueing
+                                ? Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
+                                  )
+                                : Icon(Icons.playlist_add, color: theme.colorScheme.onSecondaryContainer),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
 
-                Positioned(
-                  right: 8,
-                  bottom: 8,
-                  child: Tooltip(
-                    message: 'Play album',
-                    child: Material(
-                      color: theme.colorScheme.primary,
-                      elevation: 3,
-                      shape: const CircleBorder(),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: widget.busy ? null : widget.onPlay,
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: widget.busy
-                              ? Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onPrimary),
-                                )
-                              : Icon(Icons.play_arrow_rounded, color: theme.colorScheme.onPrimary),
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: Tooltip(
+                      message: 'Play album',
+                      child: Material(
+                        color: theme.colorScheme.primary,
+                        elevation: 3,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: widget.busy ? null : widget.onPlay,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: widget.busy
+                                ? Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onPrimary),
+                                  )
+                                : Icon(Icons.play_arrow_rounded, color: theme.colorScheme.onPrimary),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(widget.album.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+          ListTile(
+            title: Text(widget.album.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+            subtitle: widget.album.publishedYear == null
+                ? null
+                : Text(
+                    widget.album.publishedYear!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.merge(TextStyle(color: theme.disabledColor)),
+                  ),
+          ),
         ],
       ),
     );

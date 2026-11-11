@@ -21,6 +21,7 @@ import { Album } from "../../db/models/Album";
 import { WithId } from "../../db/common_schemas";
 import { parseByteRangeHeader } from "../schemas";
 import { pipeline } from "node:stream/promises";
+import TopTracksRepository from "../../db/MongoDB/TopTracksRepository";
 
 /**
  * if album provided
@@ -48,6 +49,9 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
         artistAlbumAudioRepository.setTransactionSession(session)
 
+        const topTracksRepository = new TopTracksRepository()
+        topTracksRepository.setTransactionSession(session)
+
         const tags = metadata.tags
         if (!tags) return
 
@@ -65,7 +69,13 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
             const promises = []
             for (const name of artistNames) {
                 promises.push((async () => {
-                    const artistId = await runWithLogger(log, () => new ArtistController().create(name));
+                    const artistId = await runWithLogger(log, () => new ArtistController().create(name, artistRepository));
+
+                    const topTracksInsertResult = await runWithLogger(log, topTracksRepository.insert({ artistId, audioId, sortId: 1000 }));
+                    log.debug({ topTracksInsertResult })
+                    if (!topTracksInsertResult.acknowledged) {
+                        log.warn(`failed to create a topTracks record for audioId: ${audioId}, artistId: ${artistId}`)
+                    }
 
                     let albums: WithId<Album>[] = !tags.album ? [] : await runWithLogger(log, albumRepository.getByName(tags.album))
                     log.debug({ albumsLength: albums.length })
@@ -95,7 +105,7 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
         } else {
             let albumId: string | undefined = undefined
             if (tags && tags.album) {
-                albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!))
+                albumId = await runWithLogger(log, () => new AlbumController().create(tags.album!, undefined, albumRepository))
             }
 
             const createResult = await runWithLogger(log, () => artistAlbumAudioRepository.insert({ artistId: null, albumId: albumId ?? null, audioId }));

@@ -14,6 +14,7 @@
 //   AudioPlayerService.remove(id);
 //   AudioPlayerService.move(oldIndex, newIndex);
 //   AudioPlayerService.next() / previous() / skipTo(i)
+//   final sub = AudioPlayerService.onQueueEnd((state) { ... });   // the last track ended; load more here
 //
 //   AudioPlayerService.setMinimized(bool) / toggleMinimized()
 //   AudioPlayerService.setQueueVisible(bool) / toggleQueueVisible()   // queue panel inside the full-screen player
@@ -161,6 +162,8 @@ class AudioPlayerService {
   /// Whether the queue panel is open inside the full-screen player.
   static ValueListenable<bool> get queueVisible => _queueVisible;
 
+  static final StreamController<AudioQueueState> _queueEnd = StreamController<AudioQueueState>.broadcast();
+
   // ── Playing ────────────────────────────────────────────────────────────────
 
   /// Replaces the queue with [audioId] or [audioIds] and starts playing
@@ -201,6 +204,28 @@ class AudioPlayerService {
   static void previous() {
     final s = _state.value;
     if (s.hasPrevious) _state.value = s.copyWith(index: s.index - 1, autoPlay: true);
+  }
+
+  // ── Queue end ──────────────────────────────────────────────────────────────
+
+  /// Calls [listener] each time the last track of the queue has finished playing by itself, so there is
+  /// nothing left to play. [state] is the queue as it was then (the last track is `state.currentId`).
+  ///
+  /// Use it to load more: `AudioPlayerService.add(audioIds: more)` appends them and starts the first one.
+  /// Not called when the user skips or closes the queue. Called again if that last track is replayed and
+  /// ends again. Returns the subscription; cancel it when you no longer need it.
+  static StreamSubscription<AudioQueueState> onQueueEnd(void Function(AudioQueueState state) listener) => _queueEnd.stream.listen(listener);
+
+  /// For PlaybackController: the current track ended on its own. Moves on to the next one, or, on the
+  /// last one, notifies the [onQueueEnd] listeners.
+  static void trackEnded() {
+    final s = _state.value;
+    if (s.isEmpty) return;
+    if (s.hasNext) {
+      next();
+    } else {
+      _queueEnd.add(s);
+    }
   }
 
   // ── Editing the queue ──────────────────────────────────────────────────────
@@ -583,12 +608,16 @@ class _DockBody extends StatelessWidget {
                           right: 4,
                           child: Material(
                             type: MaterialType.transparency,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(tooltip: 'Minimize', icon: const Icon(Icons.expand_more), onPressed: AudioPlayerService.toggleMinimized),
-                                IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: AudioPlayerService.close),
-                              ],
+                            child: Expanded(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                // mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(tooltip: 'Minimize', icon: const Icon(Icons.expand_more), onPressed: AudioPlayerService.toggleMinimized),
+                                  IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: AudioPlayerService.close),
+                                ],
+                              ),
                             ),
                           ),
                         ),
