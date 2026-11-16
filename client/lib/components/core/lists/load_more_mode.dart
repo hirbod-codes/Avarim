@@ -1,4 +1,4 @@
-/// How the next page of results is requested.
+/// How the next page of a list is requested.
 enum LoadMoreMode {
   /// Automatically loads the next page when the list is scrolled near the end.
   infiniteScroll,

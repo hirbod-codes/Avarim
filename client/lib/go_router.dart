@@ -14,7 +14,7 @@ import 'package:avarim/pages/contact_page.dart';
 import 'package:avarim/pages/on_boarding_page.dart';
 import 'package:avarim/pages/payment_result_page.dart';
 import 'package:avarim/pages/plan/pricing_page.dart';
-import 'package:avarim/pages/search/music_search/ui/search_page.dart';
+import 'package:avarim/pages/search/ui/search_page.dart';
 import 'package:avarim/pages/settings/settings_page.dart';
 import 'package:avarim/pages/test/test_page.dart';
 import 'package:avarim/private_gate.dart';

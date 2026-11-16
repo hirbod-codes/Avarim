@@ -12,7 +12,7 @@ import 'dart:async';
 
 import 'package:avarim/api/controllers/audio_controller.dart';
 import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/pages/search/music_search/data/music_search_api.dart';
+import 'package:avarim/pages/search/data/music_search_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -62,14 +62,14 @@ class _DeleteAlbumAudiosSectionState extends ConsumerState<DeleteAlbumAudiosSect
       _total = 0;
     });
 
-    final ids = await ref.read(musicSearchApiProvider).fetchAllAudioIdsOfAlbum(widget.albumId);
+    final audios = await ref.read(musicSearchApiProvider).fetchAllAudiosOfAlbum(widget.albumId);
     if (!mounted) return;
 
-    if (ids == null) {
+    if (audios == null) {
       setState(() => _loading = false); // the error was already shown
       return;
     }
-    if (ids.isEmpty) {
+    if (audios.isEmpty) {
       setState(() => _loading = false);
       NotificationService.showError(message: 'This album has no audios');
       return;
@@ -78,15 +78,15 @@ class _DeleteAlbumAudiosSectionState extends ConsumerState<DeleteAlbumAudiosSect
     setState(() {
       _loading = false;
       _running = true;
-      _total = ids.length;
+      _total = audios.length;
     });
 
     final controller = ref.read(audioControllerProvider);
     var failed = false;
-    for (final id in ids) {
+    for (final audio in audios) {
       if (_cancelled || !mounted) break;
 
-      final deleted = await controller.delete(audioId: id);
+      final deleted = await controller.delete(audioId: audio.id);
       if (!mounted) return;
 
       if (!deleted) {
@@ -103,9 +103,9 @@ class _DeleteAlbumAudiosSectionState extends ConsumerState<DeleteAlbumAudiosSect
 
     final what = done == 1 ? '1 audio' : '$done audios';
     if (failed) {
-      NotificationService.showError(message: 'Stopped: deleted $what of ${ids.length}');
+      NotificationService.showError(message: 'Stopped: deleted $what of ${audios.length}');
     } else if (cancelled) {
-      NotificationService.showSuccess(message: 'Cancelled: deleted $what of ${ids.length}');
+      NotificationService.showSuccess(message: 'Cancelled: deleted $what of ${audios.length}');
     } else {
       NotificationService.showSuccess(message: 'Deleted $what');
     }

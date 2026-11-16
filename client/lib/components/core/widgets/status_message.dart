@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// A centered icon with a message (and optionally an action button) shown instead of an empty list.
-class ResultsListMessage extends StatelessWidget {
-  const ResultsListMessage({super.key, required this.icon, required this.message, this.actionLabel, this.onActionPressed});
+/// A centered icon + message (and optionally an action button), shown instead of an empty list / on errors.
+class StatusMessage extends StatelessWidget {
+  const StatusMessage({super.key, required this.icon, required this.message, this.actionLabel, this.onActionPressed});
 
   final IconData icon;
   final String message;

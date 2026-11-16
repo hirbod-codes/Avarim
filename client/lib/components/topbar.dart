@@ -3,13 +3,13 @@ import 'package:avarim/auth/auth_controller.dart';
 import 'package:avarim/auth/auth_state.dart';
 import 'package:avarim/components/button.dart';
 import 'package:avarim/l10n/app_localizations.dart';
+import 'package:avarim/pages/search/edit_mode.dart';
 import 'package:avarim/theme/app_colors.dart';
 import 'package:avarim/theme/app_theme.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:avarim/pages/search/music_search/controller/music_search_controller.dart';
 
 class TopBar extends ConsumerWidget implements PreferredSizeWidget {
   final Widget? title;
@@ -23,8 +23,8 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
     final isAuthenticated = ref.watch(authControllerProvider).status == AuthStatus.authenticated;
     final avatarBytes = ref.watch(avatarBytesProvider);
 
-    final searchController = ref.read(musicSearchControllerProvider.notifier);
-    final isEditModeEnabled = ref.watch(musicSearchControllerProvider.select((state) => state.isEditModeEnabled));
+    final isEditModeEnabled = ref.read(editModeProvider);
+    final editModeToggle = ref.read(editModeProvider.notifier).toggle;
 
     AppLocalizations l10n = AppLocalizations.of(context)!;
 
@@ -38,13 +38,13 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
       title: title ?? _buildDefaultTitle(context, l10n),
       centerTitle: false,
       actions: [
-                IconButton(
-                  tooltip: isEditModeEnabled ? 'Done' : 'Edit mode',
-                  isSelected: isEditModeEnabled,
-                  icon: const Icon(Icons.edit_outlined),
-                  selectedIcon: const Icon(Icons.check),
-                  onPressed: searchController.toggleEditMode,
-                ),
+        IconButton(
+          tooltip: isEditModeEnabled ? 'Done' : 'Edit mode',
+          isSelected: isEditModeEnabled,
+          icon: const Icon(Icons.edit_outlined),
+          selectedIcon: const Icon(Icons.check),
+          onPressed: editModeToggle,
+        ),
         Button(
           icon: themeModeNotifier.value == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode,
           color: theme.colorScheme.primary,

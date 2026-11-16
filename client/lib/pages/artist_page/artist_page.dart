@@ -54,17 +54,17 @@ import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/auth/token_storage.dart';
 import 'package:avarim/components/contents/audio_row_actions.dart';
+import 'package:avarim/components/core/lists/scrollable_list.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
 import 'package:avarim/components/popup.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:avarim/pages/artist_page/artist_top_tracks.dart';
 import 'package:avarim/pages/edit_album/edit_album_page.dart';
-import 'package:avarim/pages/search/music_search/controller/music_search_controller.dart';
-import 'package:avarim/pages/search/music_search/models/load_more_mode.dart';
-import 'package:avarim/pages/search/music_search/ui/authenticated_thumbnail.dart';
-import 'package:avarim/pages/search/music_search/ui/scrollable_list.dart';
-import 'package:avarim/pages/search/music_search/ui/search_result_tile.dart';
+import 'package:avarim/pages/search/edit_mode.dart';
+import 'package:avarim/pages/search/models/load_more_mode.dart';
+import 'package:avarim/pages/search/ui/authenticated_thumbnail.dart';
+import 'package:avarim/pages/search/ui/popups/entity_popups.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart' hide Thumb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -251,11 +251,6 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
   int _imageEpoch = 0; // bumped after editing so that the avatar / banner are fetched again
 
   ArtistPageApi get _api => ref.read(artistPageApiProvider);
-
-  Album? _viewingAlbum;
-  List<Audio>? _viewingAlbumAudios;
-
-  Album? _editingAlbum;
 
   @override
   void initState() {
@@ -662,25 +657,14 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                         headers: headers,
                         busy: _busyAlbumKey == album.id,
                         queueing: _queueingAlbumKey == album.id,
-                        onTap: () async {
-                          final onAlbumTap = widget.onAlbumTap;
-                          if (onAlbumTap != null) {
-                            onAlbumTap(album);
-                          }
+                        onTap: () {
+                          widget.onAlbumTap?.call(album);
 
-                          final audios = await ref.read(relationshipControllerProvider).audiosOfAlbum(album.id, artistId: widget.artistId);
-                          if (!mounted) return;
+                          final isEditMode = ref.read(editModeProvider);
 
-                          setState(() {
-                            _viewingAlbum = album;
-                            _viewingAlbumAudios = audios;
-                          });
+                          showAlbumAudiosPopup(context, ref, album, isEditMode);
                         },
-                        onAlbumEdit: () {
-                          setState(() {
-                            _editingAlbum = album;
-                          });
-                        },
+                        onAlbumEdit: () => showEditPopup(album),
                         onPlay: () => _playAlbum(album),
                         onAddToQueue: () => _addAlbumToQueue(album),
                       );
@@ -716,55 +700,6 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
               const SliverToBoxAdapter(child: AudioDockSpacer()),
             ],
           ),
-
-          if (_viewingAlbum != null && _viewingAlbumAudios != null)
-            Positioned.fill(
-              child: Popup(
-                constraints: const BoxConstraints(maxWidth: 1000),
-                leadings: [
-                  const Icon(Icons.album),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 250),
-                    child: Text(_viewingAlbum!.name, style: theme.textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-                onClose: () => setState(() {
-                  _viewingAlbum = null;
-                  _viewingAlbumAudios = null;
-                }),
-                child: Expanded(
-                  child: ScrollableList(
-                    loadNextPage: ({retryAfterError = false}) {},
-                    onRefresh: () async {},
-                    itemCount: _viewingAlbumAudios!.length,
-                    loadMoreMode: LoadMoreMode.infiniteScroll,
-                    itemBuilder: (context, index) {
-                      final musicSearchState = ref.watch(musicSearchControllerProvider);
-
-                      return SearchResultTile(
-                        item: _viewingAlbumAudios![index],
-                        isEditModeEnabled: musicSearchState.isEditModeEnabled,
-                        isBeingDeleted: musicSearchState.idsBeingDeleted.contains(_viewingAlbumAudios![index].id),
-                        isBeingAddedToQueue: musicSearchState.idsBeingAddedToQueue.contains(_viewingAlbumAudios![index].id),
-                      );
-                    },
-                    //getTile(_viewingAlbumAudios![index]),
-                  ),
-                ),
-              ),
-            ),
-
-          if (_editingAlbum != null)
-            Positioned.fill(
-              child: Popup(
-                constraints: const BoxConstraints(maxWidth: 500),
-                leadings: [Text(_editingAlbum!.name)],
-                onClose: () => setState(() {
-                  _editingAlbum = null;
-                }),
-                child: EditAlbumPage(albumId: _editingAlbum!.id),
-              ),
-            ),
         ],
       ),
     );

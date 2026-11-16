@@ -98,19 +98,28 @@ class MusicSearchApi {
   }
 
   /// DELETE /api/album/:albumId (admin). Only the album goes: its audios stay. The caller words the failure.
-  Future<ApiCallResult<dynamic>> deleteAlbumById(String albumId) {
-    return apiCall<dynamic>(() => _dio.delete<dynamic>('/api/album/$albumId', options: _requestOptionsWithoutErrorToast));
+  Future<ApiCallResult<dynamic>> deleteAlbumById(String albumId, {bool deleteAllAudio = false}) {
+    return apiCall<dynamic>(
+      () => _dio.delete<dynamic>('/api/album/$albumId', queryParameters: {'shouldDeleteAudios': deleteAllAudio}, options: _requestOptionsWithoutErrorToast),
+    );
   }
 
   /// Ids of every audio of the album [albumId], in order. Null when a request failed
   /// (its error was already shown).
-  Future<List<String>?> fetchAllAudioIdsOfAlbum(String albumId, {String? artistId}) {
-    return _fetchAllAudioIdsFromPagedEndpoint('/api/relationship/audio', {
-      'albumId': albumId,
-      ...(artistId != null ? {'artistId': artistId} : {}),
-    });
+  Future<List<Audio>?> fetchAudiosOfAlbum(String albumId, int page, {String? artistId, int? pageLimit}) {
+    return _fetchAudiosFromPagedEndpoint(
+      '/api/relationship/audio',
+      {
+        'albumId': albumId,
+        ...(artistId != null ? {'artistId': artistId} : {}),
+      },
+      page,
+      pageLimit: pageLimit,
+    );
   }
-  
+
+  /// Ids of every audio of the album [albumId], in order. Null when a request failed
+  /// (its error was already shown).
   Future<List<Audio>?> fetchAllAudiosOfAlbum(String albumId, {String? artistId}) {
     return _fetchAllAudiosFromPagedEndpoint('/api/relationship/audio', {
       'albumId': albumId,
@@ -120,31 +129,29 @@ class MusicSearchApi {
 
   /// Ids of every audio of a playlist, in playlist order. Null when a request failed
   /// (its error was already shown).
-  Future<List<String>?> fetchAllAudioIdsOfPlaylist(String playlistId) {
-    return _fetchAllAudioIdsFromPagedEndpoint('/api/playlist/audio', {'playlistId': playlistId});
+  Future<List<Audio>?> fetchAudiosOfPlaylist(String playlistId, int page, {int? pageLimit}) {
+    return _fetchAudiosFromPagedEndpoint('/api/playlist/audio', {'playlistId': playlistId}, page, pageLimit: pageLimit);
   }
 
-  /// Pages through [endpointPath] until the last page. Both endpoints answer `{ status, data: [audio, ...] }`
-  /// (page is 1-based, like the lists above).
-  Future<List<String>?> _fetchAllAudioIdsFromPagedEndpoint(String endpointPath, Map<String, dynamic> extraQueryParameters) async {
-    final uniqueAudioIds = <String>{}; // a set: keeps the order, drops duplicates
+  Future<List<Audio>?> fetchAllAudiosOfPlaylist(String playlistId) {
+    return _fetchAllAudiosFromPagedEndpoint('/api/playlist/audio', {'playlistId': playlistId});
+  }
 
-    for (var pageNumber = kFirstPageNumber; ; pageNumber++) {
-      final pageResult = await apiCall<List<String>>(
-        () => _dio.get<dynamic>(endpointPath, queryParameters: {...extraQueryParameters, 'page': pageNumber, 'pageSize': kQueueAudioIdsFetchPageSize}),
-        fromJson: (data) => List.from(data).map(_extractAudioId).whereType<String>().toList(),
-      );
-      if (pageResult.isFailure) return null;
+  Future<List<Audio>?> _fetchAudiosFromPagedEndpoint(String endpointPath, Map<String, dynamic> extraQueryParameters, int page, {int? pageLimit}) async {
+    final pageResult = await apiCall<List<Audio>>(
+      () => _dio.get<dynamic>(endpointPath, queryParameters: {...extraQueryParameters, 'page': page, 'pageSize': pageLimit ?? kQueuePageSize}),
+      fromJson: (data) => List.from(data).map((m) => Audio.fromJson(m)).toList(),
+    );
+    if (pageResult.isFailure) return null;
 
-      final audioIdsOfPage = pageResult.dataOrNull ?? const <String>[];
-      final countBeforeAddingPage = uniqueAudioIds.length;
-      uniqueAudioIds.addAll(audioIdsOfPage);
+    return pageResult.dataOrNull ?? const <Audio>[];
+  }
 
-      // A short page is the last one. No NEW ids means the server ignored `page`: stop instead of looping forever.
-      final isLastPage = audioIdsOfPage.length < kQueueAudioIdsFetchPageSize;
-      final serverIgnoredPageParameter = uniqueAudioIds.length == countBeforeAddingPage;
-      if (isLastPage || serverIgnoredPageParameter) return uniqueAudioIds.toList();
-    }
+  /// An audio's id: `_id` (audio documents) or `audioId` (playlist / album link records).
+  static String? extractAudioIdFromItem(dynamic json) {
+    if (json is! Map) return null;
+    final audioId = json['_id'] ?? json['audioId'];
+    return audioId?.toString();
   }
 
   Future<List<Audio>?> _fetchAllAudiosFromPagedEndpoint(String endpointPath, Map<String, dynamic> extraQueryParameters) async {
@@ -152,7 +159,7 @@ class MusicSearchApi {
 
     for (var pageNumber = kFirstPageNumber; ; pageNumber++) {
       final pageResult = await apiCall<List<Audio>>(
-        () => _dio.get<dynamic>(endpointPath, queryParameters: {...extraQueryParameters, 'page': pageNumber, 'pageSize': kQueueAudioIdsFetchPageSize}),
+        () => _dio.get<dynamic>(endpointPath, queryParameters: {...extraQueryParameters, 'page': pageNumber, 'pageSize': kQueuePageSize}),
         fromJson: (data) => List.from(data).map((m) => Audio.fromJson(m)).toList(),
       );
       if (pageResult.isFailure) return null;
@@ -162,17 +169,10 @@ class MusicSearchApi {
       uniqueAudios.addAll(audiosOfPage);
 
       // A short page is the last one. No NEW ids means the server ignored `page`: stop instead of looping forever.
-      final isLastPage = audiosOfPage.length < kQueueAudioIdsFetchPageSize;
+      final isLastPage = audiosOfPage.length < kQueuePageSize;
       final serverIgnoredPageParameter = uniqueAudios.length == countBeforeAddingPage;
       if (isLastPage || serverIgnoredPageParameter) return uniqueAudios.toList();
     }
-  }
-
-  /// An audio's id: `_id` (audio documents) or `audioId` (playlist / album link records).
-  static String? _extractAudioId(dynamic json) {
-    if (json is! Map) return null;
-    final audioId = json['_id'] ?? json['audioId'];
-    return audioId?.toString();
   }
 }
 

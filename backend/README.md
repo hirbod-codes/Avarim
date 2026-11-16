@@ -109,3 +109,5 @@ Ctrl + C DOES NOT work to terminate the app, run `taskkill /IM node.exe /F` on w
 4. fix error messages
 5. fix localization
 6. fix delete buttons
+7. test playlists
+8. refactor search page to be able to build top tracks components

@@ -30,3 +30,31 @@ Future<bool> showDeleteConfirmationDialog(BuildContext context, {required WithId
 
   return wasConfirmed == true;
 }
+
+/// Second confirmation when deleting an album: all of its audios are deleted too. Completes with true only when confirmed.
+Future<bool> showDeleteAllAudiosOfAlbumDialog(BuildContext context, {required Album album}) async {
+  final wasConfirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      final theme = Theme.of(dialogContext);
+
+      return AlertDialog(
+        title: const Text('Delete all audios?'),
+        content: Text(
+          'Every audio of "${album.name}" will be deleted, one by one. '
+          'They disappear from every album, artist and playlist they are in. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error, foregroundColor: theme.colorScheme.onError),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete all'),
+          ),
+        ],
+      );
+    },
+  );
+
+  return wasConfirmed == true;
+}

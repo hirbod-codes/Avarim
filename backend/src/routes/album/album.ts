@@ -381,8 +381,8 @@ router.delete('/:albumId', auth, isAdminIfAuthenticated, async (req, res) => {
     try {
         log.info('album delete request received');
 
-        log.debug({ params: req.params });
-        const { albumId, shouldDeleteAudios } = await runWithLogger(log, () => validate(deleteParamsSchema, req.params));
+        log.debug({ params: req.params, query: req.query });
+        const { albumId, shouldDeleteAudios } = await runWithLogger(log, () => validate(deleteParamsSchema, { ...req.params, ...req.query }));
         log.info('Input validated');
         log.debug({ albumId, shouldDeleteAudios });
 

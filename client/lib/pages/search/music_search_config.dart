@@ -10,7 +10,7 @@ const kSearchResultsPageSize = 20;
 const kFirstPageNumber = 1;
 
 /// Page size used when fetching ALL the audios of an album / playlist to put them in the player queue.
-const kQueueAudioIdsFetchPageSize = 50;
+const kQueuePageSize = 50;
 
 /// Ask "Delete this audio?" before actually deleting. Set to false to delete on the first press.
 const kShouldConfirmBeforeDelete = true;
