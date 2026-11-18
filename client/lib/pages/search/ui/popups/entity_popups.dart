@@ -1,6 +1,7 @@
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
+import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:avarim/api/root_navigator_key.dart';
 import 'package:avarim/components/core/paged/self_managed_paged_list_view.dart';
@@ -22,6 +23,21 @@ Future<void> showAlbumAudiosPopup(BuildContext context, WidgetRef ref, Album alb
     child: SelfManagedPagedListView<Audio>(
       loadPage: (int page) {
         return ref.read(musicSearchApiProvider).fetchAudiosOfAlbum(album.id, page);
+      },
+      itemBuilder: (context, item, _) => AudioListItem(key: ValueKey(item.id), audio: item, isEditMode: isEditMode, onDeleted: onDeleted),
+    ),
+  );
+}
+
+Future<void> showPlaylistAudiosPopup(BuildContext context, WidgetRef ref, Playlist playlist, bool isEditMode, {ValueChanged<String>? onDeleted}) async {
+  showEntityPopup(
+    leadings: [
+      const Icon(Icons.playlist_play),
+      Builder(builder: (context) => Text(playlist.name, style: Theme.of(context).textTheme.titleMedium)),
+    ],
+    child: SelfManagedPagedListView<Audio>(
+      loadPage: (int page) {
+        return ref.read(musicSearchApiProvider).fetchAudiosOfPlaylist(playlist.id, page);
       },
       itemBuilder: (context, item, _) => AudioListItem(key: ValueKey(item.id), audio: item, isEditMode: isEditMode, onDeleted: onDeleted),
     ),

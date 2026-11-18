@@ -86,6 +86,8 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: filter },
                 { $group: { _id: { $toObjectId: '$artistId' } } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: artistCollection,
@@ -98,8 +100,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $replaceRoot: { newRoot: '$artist' } },
 
                 { $sort: { createdAt: -1, _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Artist>[]
     }
@@ -109,6 +109,8 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: filter },
                 { $group: { _id: { $toObjectId: '$albumId' } } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: albumCollection,
@@ -121,8 +123,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $replaceRoot: { newRoot: '$album' } },
 
                 { $sort: { createdAt: -1, _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Album>[]
     }
@@ -169,6 +169,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: filter },
                 { $group: { _id: { $toObjectId: '$audioId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -179,9 +182,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Audio>[]
     }
@@ -191,6 +191,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { artistId } },
                 { $group: { _id: { $toObjectId: '$albumId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: albumCollection,
@@ -201,10 +204,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$album' },
                 { $replaceRoot: { newRoot: '$album' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Album>[]
     }
@@ -214,6 +213,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { artistId } },
                 { $group: { _id: { $toObjectId: '$audioId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -224,10 +226,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Audio>[]
     }
@@ -237,6 +235,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { artistId, albumId } },
                 { $group: { _id: { $toObjectId: '$audioId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -247,10 +248,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Audio>[]
     }
@@ -260,6 +257,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { albumId } },
                 { $group: { _id: { $toObjectId: '$artistId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: artistCollection,
@@ -270,10 +270,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$artist' },
                 { $replaceRoot: { newRoot: '$artist' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Artist>[]
     }
@@ -283,6 +279,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { albumId } },
                 { $group: { _id: { $toObjectId: '$audioId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -293,10 +292,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Audio>[]
     }
@@ -306,6 +301,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { audioId } },
                 { $group: { _id: { $toObjectId: '$albumId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: albumCollection,
@@ -316,10 +314,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$album' },
                 { $replaceRoot: { newRoot: '$album' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Album>[]
     }
@@ -329,6 +323,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { audioId, artistId } },
                 { $group: { _id: { $toObjectId: '$albumId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: albumCollection,
@@ -339,10 +336,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$album' },
                 { $replaceRoot: { newRoot: '$album' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Album>[]
     }
@@ -352,6 +345,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { audioId, albumId } },
                 { $group: { _id: { $toObjectId: '$artistId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: artistCollection,
@@ -362,10 +358,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$artist' },
                 { $replaceRoot: { newRoot: '$artist' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Artist>[]
 
@@ -376,6 +368,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { audioId } },
                 { $group: { _id: { $toObjectId: '$artistId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: artistCollection,
@@ -386,10 +381,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$artist' },
                 { $replaceRoot: { newRoot: '$artist' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Artist>[]
     }
@@ -399,6 +390,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { artistId: null, ...(audioIds === undefined ? {} : { audioId: { $in: audioIds } }) } },
                 { $group: { _id: { $toObjectId: '$audioId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -409,10 +403,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Audio>[]
     }
@@ -422,6 +412,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .aggregate([
                 { $match: { albumId: null, ...(audioIds === undefined ? {} : { audioId: { $in: audioIds } }) } },
                 { $group: { _id: { $toObjectId: '$audioId' } } },
+                { $sort: { _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
                 {
                     $lookup: {
                         from: audioCollection,
@@ -432,10 +425,6 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
-
-                { $sort: { _id: 1 } },
-                { $skip: skip },
-                { $limit: limit },
             ])
             .toArray() as WithId<Audio>[]
     }

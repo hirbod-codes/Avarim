@@ -97,11 +97,16 @@ class MusicSearchApi {
     return apiCall<dynamic>(() => _dio.delete<dynamic>('/api/artist/$artistId', options: _requestOptionsWithoutErrorToast));
   }
 
-  /// DELETE /api/album/:albumId (admin). Only the album goes: its audios stay. The caller words the failure.
+  /// DELETE /api/album/:albumId (admin).
   Future<ApiCallResult<dynamic>> deleteAlbumById(String albumId, {bool deleteAllAudio = false}) {
     return apiCall<dynamic>(
       () => _dio.delete<dynamic>('/api/album/$albumId', queryParameters: {'shouldDeleteAudios': deleteAllAudio}, options: _requestOptionsWithoutErrorToast),
     );
+  }
+
+  /// DELETE /api/playlist/:playlistId (admin).
+  Future<ApiCallResult<dynamic>> deletePlaylistById(String playlistId) {
+    return apiCall<dynamic>(() => _dio.delete<dynamic>('/api/playlist/$playlistId', options: _requestOptionsWithoutErrorToast));
   }
 
   /// Ids of every audio of the album [albumId], in order. Null when a request failed

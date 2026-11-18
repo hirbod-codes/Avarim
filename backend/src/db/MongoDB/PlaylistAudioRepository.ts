@@ -1,4 +1,4 @@
-import { AnyBulkWriteOperation, BulkWriteResult, ClientSession, Collection, Db, DeleteResult, InsertManyResult, InsertOneResult, ObjectId, WithId } from 'mongodb';
+import { AnyBulkWriteOperation, BulkWriteResult, ClientSession, Collection, Db, DeleteResult, Filter, InsertManyResult, InsertOneResult, ObjectId, WithId } from 'mongodb';
 import { IDropable } from '../IDropable';
 import { IRepository } from '../IRepository';
 import { ISeedable } from '../ISeedable';
@@ -69,18 +69,31 @@ class PlaylistAudioRepository implements IRepository, ISeedable, IDropable {
     }
 
     async getAudiosByPlaylistId(playlistId: string, skip: number, limit: number, audioIds: string[] | undefined): Promise<WithId<Audio>[]> {
-        const agg = PlaylistAudioRepository.collection!.aggregate<WithId<Audio>>()
+        const agg = PlaylistAudioRepository.collection!.aggregate([
+            { $match: { playlistId, ...((audioIds && audioIds.length > 0) ? { audioId: { $in: audioIds } } : {}) } },
+            { $group: { _id: { $toObjectId: '$audioId' } } },
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+            {
+                $lookup: {
+                    from: audioCollectionName,
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'audio'
+                }
+            },
+            { $unwind: '$audio' },
+            { $replaceRoot: { newRoot: '$audio' } },
+        ])
 
-        agg.match({ playlistId, audioId: { $in: audioIds } })
+        return await agg.toArray() as WithId<Audio>[]
+    }
 
-        agg.lookup({
-            from: audioCollectionName,
-            localField: 'audioId',
-            foreignField: '_id',
-            as: 'audios'
-        })
+    async deleteManyBy(filter: Filter<PlaylistAudio>): Promise<DeleteResult> {
+        if (Object.keys(filter).length < 1) throw new Error('Invalid filter provided')
 
-        return agg.skip(skip).limit(limit).toArray()
+        return await PlaylistAudioRepository.collection!.deleteMany(filter, { session: this.session })
     }
 
     async delete(id: string): Promise<DeleteResult> {

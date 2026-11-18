@@ -2,6 +2,7 @@ import 'package:avarim/api/api_call.dart';
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
+import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
@@ -34,6 +35,15 @@ Future<void> onDeleteAlbum(BuildContext context, WidgetRef ref, Album album, {bo
   final api = ref.read(musicSearchApiProvider);
 
   if (await deleteAlbum(api, album.id, deleteAllAudio: deleteAllAudio)) onDeleted?.call(album.id);
+}
+
+Future<void> onDeletePlaylist(BuildContext context, WidgetRef ref, Playlist playlist, {Function(String id)? onDeleted}) async {
+  if (!await confirmDelete(context, playlist)) return;
+  if (!context.mounted) return;
+
+  final api = ref.read(musicSearchApiProvider);
+
+  if (await deletePlaylist(api, playlist.id)) onDeleted?.call(playlist.id);
 }
 
 // What the rows do besides showing themselves. Plain functions: no state, so any row can use them.
@@ -122,6 +132,20 @@ Future<bool> deleteAlbum(MusicSearchApi api, String albumId, {bool deleteAllAudi
   ApiCallResult<dynamic>? result;
   try {
     result = await api.deleteAlbumById(albumId, deleteAllAudio: deleteAllAudio);
+  } catch (error, stackTrace) {
+    talker.error('deleting album failed', error, stackTrace);
+  }
+  if (result != null && result.isSuccess) return true;
+
+  NotificationService.showError(message: 'Could not delete the album');
+  return false;
+}
+
+/// Deletes an album (not its audios).
+Future<bool> deletePlaylist(MusicSearchApi api, String albumId) async {
+  ApiCallResult<dynamic>? result;
+  try {
+    result = await api.deletePlaylistById(albumId);
   } catch (error, stackTrace) {
     talker.error('deleting album failed', error, stackTrace);
   }

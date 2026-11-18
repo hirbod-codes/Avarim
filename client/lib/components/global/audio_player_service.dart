@@ -677,7 +677,10 @@ class _QueuePanel extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(child: Text('Queue · ${ids.length}', style: theme.textTheme.titleMedium)),
-                SaveAudiosAsNewPlaylistButton(tooltip: 'Save the queue as a playlist', readAudioIds: () => List<String>.of(AudioPlayerService.queue.value.ids)),
+                SaveAudiosAsNewPlaylistButton(
+                  tooltip: 'Save the queue as a playlist',
+                  readAudioIds: () async => List<String>.of(AudioPlayerService.queue.value.ids),
+                ),
                 IconButton(tooltip: 'Close queue', icon: const Icon(Icons.keyboard_arrow_down), onPressed: () => AudioPlayerService.setQueueVisible(false)),
               ],
             ),

@@ -46,7 +46,6 @@
 import 'dart:async';
 
 import 'package:avarim/api/api_call.dart';
-import 'package:avarim/api/controllers/relationship_controller.dart';
 import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
@@ -54,15 +53,13 @@ import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/auth/token_storage.dart';
 import 'package:avarim/components/contents/audio_row_actions.dart';
-import 'package:avarim/components/core/lists/scrollable_list.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/components/global/notification_service.dart';
-import 'package:avarim/components/popup.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:avarim/pages/artist_page/artist_top_tracks.dart';
-import 'package:avarim/pages/edit_album/edit_album_page.dart';
+import 'package:avarim/pages/search/data/music_search_api.dart';
 import 'package:avarim/pages/search/edit_mode.dart';
-import 'package:avarim/pages/search/models/load_more_mode.dart';
+import 'package:avarim/pages/search/save_to_playlist/ui/save_audios_as_new_playlist_button.dart';
 import 'package:avarim/pages/search/ui/authenticated_thumbnail.dart';
 import 'package:avarim/pages/search/ui/popups/entity_popups.dart';
 import 'package:dio/dio.dart';
@@ -937,60 +934,51 @@ class _AlbumCard extends ConsumerState<AlbumCard> {
 
                   Positioned(
                     right: 8,
-                    top: 8,
-                    child: Tooltip(
-                      message: 'Edit',
-                      child: Material(
-                        color: theme.colorScheme.secondaryContainer,
-                        elevation: 3,
-                        shape: const CircleBorder(),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: widget.onAlbumEdit,
-                          child: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: widget.queueing
-                                ? Padding(
-                                    padding: const EdgeInsets.all(10),
-                                    child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
-                                  )
-                                : Icon(Icons.edit, color: theme.colorScheme.onSecondaryContainer),
-                          ),
+                    bottom: 8,
+                    child: PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'edit':
+                            widget.onAlbumEdit?.call();
+                            break;
+                          case 'save as a playlist':
+                            try {
+                              onSaveAudiosAsNewPlaylist(
+                                context: context,
+                                ref: ref,
+                                readAudioIds: () async {
+                                  final audios = await ref.read(musicSearchApiProvider).fetchAllAudiosOfAlbum(widget.album.id);
+
+                                  return audios?.map((m) => m.id).toList();
+                                },
+                              ).catchError((_) {});
+                            } catch (_) {}
+                            break;
+                          case 'add to queue':
+                            if (!widget.queueing) widget.onAddToQueue();
+                            break;
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: ListTile(leading: Icon(Icons.edit), title: Text('Edit')),
                         ),
-                      ),
+                        PopupMenuItem(
+                          value: 'save as a playlist',
+                          child: ListTile(leading: Icon(Icons.playlist_add), title: Text('Save as a playlist')),
+                        ),
+                        const PopupMenuItem(
+                          value: 'add to queue',
+                          child: ListTile(leading: Icon(Icons.playlist_play), title: Text('Add to queue')),
+                        ),
+                      ],
                     ),
                   ),
 
                   Positioned(
                     left: 8,
-                    bottom: 8,
-                    child: Tooltip(
-                      message: 'Add to queue',
-                      child: Material(
-                        color: theme.colorScheme.secondaryContainer,
-                        elevation: 3,
-                        shape: const CircleBorder(),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: widget.queueing ? null : widget.onAddToQueue,
-                          child: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: widget.queueing
-                                ? Padding(
-                                    padding: const EdgeInsets.all(10),
-                                    child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.onSecondaryContainer),
-                                  )
-                                : Icon(Icons.playlist_add, color: theme.colorScheme.onSecondaryContainer),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  Positioned(
-                    right: 8,
                     bottom: 8,
                     child: Tooltip(
                       message: 'Play album',

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:avarim/api/api_error_resolver.dart';
 import 'package:avarim/api/api_response.dart';
@@ -95,7 +96,16 @@ Future<ApiCallResult<T>> apiCall<T>(Future<Response> Function() request, {T Func
   try {
     final response = await (defaultMessage == null ? request() : runZoned(request, zoneValues: {ApiErrorResolver.zoneKey: defaultMessage}));
 
-    talker.debug('api call data: ', response.data);
+    talker.debug(
+      'api call, '
+      'method: ${response.requestOptions.method}, '
+      'path: ${response.requestOptions.path}, '
+      'base url: ${response.requestOptions.baseUrl} '
+      'query parameters: ${response.requestOptions.queryParameters} '
+      'data json: ${jsonEncode(response.requestOptions.data)} '
+      'data: ',
+    );
+    talker.debug(response.data);
 
     final status = response.statusCode;
     final isSuccessStatus = status != null && status >= 200 && status < 300;

@@ -64,7 +64,7 @@ class PlaylistRepository implements IRepository, ISeedable, IDropable {
     }
 
     async getForUser(userId: string, playlistId: string): Promise<WithId<Playlist>> {
-        return (await PlaylistRepository.collection!.find({ playlistId, userId }, { session: this.session }).toArray())[0]
+        return (await PlaylistRepository.collection!.find({ _id: ObjectId.createFromHexString(playlistId), userId }, { session: this.session }).toArray())[0]
     }
 
     async getMany(playlistIds: string[]): Promise<WithId<Playlist>[]> {

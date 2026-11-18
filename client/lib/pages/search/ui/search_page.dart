@@ -191,9 +191,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   List<Widget> _buildAdminActions() {
-    return [
-      AsyncIconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: () => _reload(_selectedTab)),
-    ];
+    return [AsyncIconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: () => _reload(_selectedTab))];
   }
 
   Widget _buildResultsList(SearchTab tab) {
@@ -226,10 +224,22 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     // The key makes a row's own state (spinners) follow its item when the list changes.
     return switch (item) {
-      Artist artist => ArtistListItem(key: ValueKey(item.id), artist: artist, isEditMode: isEditModeEnabled, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
+      Artist artist => ArtistListItem(
+        key: ValueKey(item.id),
+        artist: artist,
+        isEditMode: isEditModeEnabled,
+        onTap: notifyTapped,
+        onDeleted: _removeFromAllTabs,
+      ),
       Album album => AlbumListItem(key: ValueKey(item.id), album: album, isEditMode: isEditModeEnabled, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
       Audio audio => AudioListItem(key: ValueKey(item.id), audio: audio, isEditMode: isEditModeEnabled, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
-      Playlist playlist => PlaylistListItem(key: ValueKey(item.id), playlist: playlist, onTap: notifyTapped),
+      Playlist playlist => PlaylistListItem(
+        key: ValueKey(item.id),
+        playlist: playlist,
+        isEditMode: isEditModeEnabled,
+        onTap: notifyTapped,
+        onDeleted: _removeFromAllTabs,
+      ),
       WithId() => throw UnimplementedError('No list item for ${item.runtimeType}'),
     };
   }

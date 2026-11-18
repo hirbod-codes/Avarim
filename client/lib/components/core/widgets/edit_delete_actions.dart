@@ -34,7 +34,7 @@ class EditDeleteActions extends StatelessWidget {
       spacing: 3,
       children: [
         ...(leadings ?? []),
-        IconButton(tooltip: editTooltip, icon: const Icon(Icons.edit_outlined), onPressed: isBusy ? null : onEdit),
+        if (onEdit != null) IconButton(tooltip: editTooltip, icon: const Icon(Icons.edit_outlined), onPressed: isBusy ? null : onEdit),
         BusyIconButton(
           isBusy: isBusy,
           tooltip: deleteTooltip,

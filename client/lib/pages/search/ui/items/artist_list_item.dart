@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/music_search_api.dart';
 import '../../music_search_config.dart';
 import '../authenticated_thumbnail.dart';
 import '../popups/entity_popups.dart';

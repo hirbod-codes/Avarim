@@ -1,6 +1,7 @@
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/api/models/artist.dart';
 import 'package:avarim/api/models/audio.dart';
+import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:flutter/material.dart';
 
@@ -13,6 +14,7 @@ Future<bool> showDeleteConfirmationDialog(BuildContext context, {required WithId
     ),
     Album album => ('Delete album?', '"${album.name}" will be permanently deleted. Its audios are kept.'),
     Audio audio => ('Delete audio?', '"${audio.title}" will be permanently deleted.'),
+    Playlist playlist => ('Delete audio?', '"${playlist.name}" will be permanently deleted.'),
     _ => ('Delete?', 'It will be permanently deleted.'),
   };
 

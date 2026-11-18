@@ -18,7 +18,7 @@ class SaveAudiosAsNewPlaylistButton extends ConsumerWidget {
   });
 
   /// Returns the audios to save. A function so that a changing list (the queue) is read when the button is pressed.
-  final List<String> Function() readAudioIds;
+  final Future<List<String>?> Function() readAudioIds;
   final String tooltip;
 
   /// Suggested name of the playlist.
@@ -32,24 +32,38 @@ class SaveAudiosAsNewPlaylistButton extends ConsumerWidget {
     return IconButton(
       tooltip: tooltip,
       icon: const Icon(Icons.library_add_outlined),
-      onPressed: () async {
-        final audioIds = readAudioIds();
-        if (audioIds.isEmpty) {
-          NotificationService.showError(message: 'There are no audios to save');
-          return;
-        }
-
-        final saveToPlaylistActions = ref.read(saveToPlaylistActionsProvider);
-        final wasPlaylistCreated = await showDialog<bool>(
-          context: context,
-          barrierDismissible: false, // the request may be running
-          builder: (_) => CreatePlaylistDialog(
-            suggestedPlaylistName: suggestedPlaylistName,
-            onSubmitPlaylistName: (playlistName) => saveToPlaylistActions.saveAudiosAsNewPlaylist(audioIds, playlistName),
-          ),
-        );
-        if (wasPlaylistCreated == true) onPlaylistCreated?.call();
-      },
+      onPressed: () => onSaveAudiosAsNewPlaylist(
+        context: context,
+        ref: ref,
+        readAudioIds: readAudioIds,
+        suggestedPlaylistName: suggestedPlaylistName,
+        onPlaylistCreated: onPlaylistCreated,
+      ),
     );
   }
+}
+
+Future<void> onSaveAudiosAsNewPlaylist({
+  required BuildContext context,
+  required WidgetRef ref,
+  required Future<List<String>?> Function() readAudioIds,
+  String? suggestedPlaylistName,
+  VoidCallback? onPlaylistCreated,
+}) async {
+  final audioIds = await readAudioIds();
+  if (audioIds == null || audioIds.isEmpty) {
+    NotificationService.showError(message: 'There are no audios to save');
+    return;
+  }
+
+  final saveToPlaylistActions = ref.read(saveToPlaylistActionsProvider);
+  final wasPlaylistCreated = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false, // the request may be running
+    builder: (_) => CreatePlaylistDialog(
+      suggestedPlaylistName: suggestedPlaylistName ?? '',
+      onSubmitPlaylistName: (playlistName) => saveToPlaylistActions.saveAudiosAsNewPlaylist(audioIds, playlistName),
+    ),
+  );
+  if (wasPlaylistCreated == true) onPlaylistCreated?.call();
 }

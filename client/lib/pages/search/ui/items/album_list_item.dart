@@ -1,8 +1,7 @@
 import 'package:avarim/api/models/album.dart';
-import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/app_config.dart';
 import 'package:avarim/components/core/core.dart';
-import 'package:avarim/components/core/paged/self_managed_paged_list_view.dart';
+import 'package:avarim/pages/search/save_to_playlist/ui/save_audios_as_new_playlist_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,7 +10,6 @@ import '../artists_subtitles.dart';
 import '../authenticated_thumbnail.dart';
 import '../popups/entity_popups.dart';
 import 'add_to_queue_button.dart';
-import 'audio_list_item.dart';
 import 'item_actions.dart';
 
 /// A list row for an [Album]: tap lists its audios in a popup, the play button replaces the player queue with them,
@@ -79,7 +77,21 @@ class _AlbumListItemState extends ConsumerState<AlbumListItem> {
       subtitle: AlbumArtistsSubtitle(albumId: album.id),
       trailing: widget.isEditMode
           ? EditDeleteActions(isBusy: _isDeleting, onEdit: () => showEditPopup(album), onDelete: _delete)
-          : AddToQueueButton(isBusy: _isAddingToQueue, onPressed: () => _queueAudios(replaceQueue: false, playImmediately: false)),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SaveAudiosAsNewPlaylistButton(
+                  readAudioIds: () async {
+                    final api = ref.read(musicSearchApiProvider);
+                    final audios = await api.fetchAllAudiosOfAlbum(widget.album.id);
+                    if (audios == null) return null;
+
+                    return audios.map((m) => m.id).toList();
+                  },
+                ),
+                AddToQueueButton(isBusy: _isAddingToQueue, onPressed: () => _queueAudios(replaceQueue: false, playImmediately: false)),
+              ],
+            ),
     );
   }
 }

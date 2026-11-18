@@ -509,6 +509,9 @@ router.delete('/:playlistId', auth, async (req, res) => {
         const playlistRepository = new PlaylistRepository();
         playlistRepository.setTransactionSession(session)
 
+        const playlistAudioRepository = new PlaylistAudioRepository();
+        playlistAudioRepository.setTransactionSession(session)
+
         const playlist = await runWithLogger(log, () => playlistRepository.getForUser(userId, playlistId));
         log.debug({ playlist });
         if (!playlist) {
@@ -520,7 +523,7 @@ router.delete('/:playlistId', auth, async (req, res) => {
 
         const r = await runWithLogger(log, () => playlistRepository.unsafeUpdate(playlistId, { name: `deletionQueued${PLAYLIST_NAME_SEPARATOR}${playlist.name}`, deletionQueued: true }));
         log.debug({ updateResult: r });
-        if (!r.acknowledged || r.matchedCount) {
+        if (!r.acknowledged || r.matchedCount < 1) {
             log.error({ updateResult: r }, 'Failed to mark playlist temporary before delete');
             res.status(500).json({ status: 'error', message: 'Error deleting playlist' });
             await db.abortTransaction()
@@ -554,10 +557,19 @@ router.delete('/:playlistId', auth, async (req, res) => {
             return
         }
 
-        const rr = await runWithLogger(log, () => playlistRepository.delete(playlistId));
-        log.debug({ deleteResult: rr });
-        if (!rr.acknowledged) {
-            log.error({ deleteResult: rr }, 'Failed to delete playlist record from DB');
+        const playlistAudioDeleteResult = await runWithLogger(log, playlistAudioRepository.deleteManyBy({ playlistId }))
+        log.debug({ playlistAudioDeleteResult })
+        if (!playlistAudioDeleteResult.acknowledged) {
+            log.error({ playlistAudioDeleteResult }, 'Failed to delete playlists audio records from DB');
+            await db.abortTransaction()
+            res.status(500).json({ status: 'error', message: 'Error deleting playlist' });
+            return
+        }
+
+        const playlistDeleteResult = await runWithLogger(log, () => playlistRepository.delete(playlistId));
+        log.debug({ playlistDeleteResult });
+        if (!playlistDeleteResult.acknowledged) {
+            log.error({ playlistDeleteResult }, 'Failed to delete playlist record from DB');
             await db.abortTransaction()
             res.status(500).json({ status: 'error', message: 'Error deleting playlist' });
             return
