@@ -6,7 +6,6 @@ import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/music_search_api.dart';
 import '../artists_subtitles.dart';
 import '../authenticated_thumbnail.dart';
 import '../popups/entity_popups.dart';
@@ -15,7 +14,15 @@ import 'item_actions.dart';
 /// A list row for an [Audio]: tap plays it; in edit mode it has edit / delete buttons instead of the
 /// duration and the queue / playlist buttons. Highlighted while it is the current track.
 class AudioListItem extends ConsumerStatefulWidget {
-  const AudioListItem({super.key, required this.audio, this.onTap, this.isEditMode = false, this.onDeleted});
+  const AudioListItem({
+    super.key,
+    required this.audio,
+    this.onTap,
+    this.isEditMode = false,
+    this.onDeleted,
+    this.editActionsLeadings,
+    this.editActionsTrailing,
+  });
 
   /// Narrower screens only have room for the audio's buttons, not for its duration.
   static const _minimumScreenWidthToShowDuration = 480;
@@ -30,6 +37,9 @@ class AudioListItem extends ConsumerStatefulWidget {
 
   /// Called with the audio's id once it was deleted (so the list can drop it).
   final ValueChanged<String>? onDeleted;
+
+  final List<Widget>? editActionsLeadings;
+  final List<Widget>? editActionsTrailing;
 
   @override
   ConsumerState<AudioListItem> createState() => _AudioListItemState();
@@ -65,7 +75,13 @@ class _AudioListItemState extends ConsumerState<AudioListItem> {
         // an audio's artists are resolved from its links (they aren't part of the audio document)
         subtitle: AudioArtistsSubtitle(audioId: audio.id),
         trailing: widget.isEditMode
-            ? EditDeleteActions(isBusy: _isDeleting, onEdit: () => showEditPopup(audio), onDelete: _delete)
+            ? EditDeleteActions(
+                isBusy: _isDeleting,
+                onEdit: () => showEditPopup(audio),
+                onDelete: _delete,
+                leadings: widget.editActionsLeadings,
+                trailing: widget.editActionsTrailing,
+              )
             : _buildDurationAndActions(context),
       ),
     );

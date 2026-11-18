@@ -23,7 +23,7 @@ Future<void> showAlbumAudiosPopup(BuildContext context, WidgetRef ref, Album alb
       loadPage: (int page) {
         return ref.read(musicSearchApiProvider).fetchAudiosOfAlbum(album.id, page);
       },
-      itemBuilder: (context, item) => AudioListItem(key: ValueKey(item.id), audio: item, isEditMode: isEditMode, onDeleted: onDeleted),
+      itemBuilder: (context, item, _) => AudioListItem(key: ValueKey(item.id), audio: item, isEditMode: isEditMode, onDeleted: onDeleted),
     ),
   );
 }

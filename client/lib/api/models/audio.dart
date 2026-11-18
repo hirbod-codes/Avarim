@@ -22,9 +22,12 @@ class Audio extends WithId {
     this.updatedAt,
     this.tags,
     this.technical,
+    this.topTrackWeight,
   });
 
   final String title;
+  final double? topTrackWeight;
+
   final String? schemaVersion;
   final int? totalFilesBytes;
 
@@ -49,6 +52,7 @@ class Audio extends WithId {
     return Audio(
       id: json['_id'].toString(),
       title: json['title'] as String,
+      topTrackWeight: json['topTrackWeight'] as double?,
       schemaVersion: json['schemaVersion'] as String?,
       totalFilesBytes: asInt(json['totalFilesBytes']),
       bucketKey: json['bucketKey'] as String?,

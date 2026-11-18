@@ -38,6 +38,9 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
         if (indexes.find(i => i.name === 'uniqueIds') === undefined)
             await db.createIndex(artistAlbumAudioCollection, { artistId: 1, albumId: 1, audioId: 1 }, { unique: true, name: 'uniqueIds' })
 
+        if (indexes.find(i => i.name === 'topTrackWeight') === undefined)
+            await db.createIndex(artistAlbumAudioCollection, { topTrackWeight: 1 }, { name: 'topTrackWeight' })
+
         if (indexes.find(i => i.name === 'createdAt') === undefined)
             await db.createIndex(artistAlbumAudioCollection, { createdAt: -1 }, { name: 'createdAt' })
 
@@ -124,6 +127,43 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .toArray() as WithId<Album>[]
     }
 
+    async getTopTracks(artistId: string, skip: number, limit: number): Promise<WithId<Audio>[]> {
+        return await ArtistAlbumAudioRepository.collection!
+            .aggregate([
+                { $match: { artistId } },
+                { $sort: { topTrackWeight: -1, createdAt: -1 } },
+                {
+                    $group: {
+                        _id: { $toObjectId: '$audioId' },
+                        // $first picks the value from the best-sorted doc per audio
+                        topTrackWeight: { $first: '$topTrackWeight' },
+                        createdAt: { $first: '$createdAt' },
+                    },
+                },
+                // $group doesn't preserve order, so sort again before paginating
+                { $sort: { topTrackWeight: -1, createdAt: -1, _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $lookup: {
+                        from: audioCollection,
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'audio'
+                    }
+                },
+                { $unwind: '$audio' },
+                {
+                    $replaceRoot: {
+                        newRoot: {
+                            $mergeObjects: ['$audio', { topTrackWeight: '$topTrackWeight' }],
+                        },
+                    },
+                },
+            ])
+            .toArray() as WithId<Audio>[]
+    }
+
     async getManyAudio(filter: Filter<ArtistAlbumAudioUpdate>, skip: number, limit: number): Promise<WithId<Audio>[]> {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
@@ -139,8 +179,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 },
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
-
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -163,7 +202,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$album' },
                 { $replaceRoot: { newRoot: '$album' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -186,7 +225,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -209,7 +248,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -232,7 +271,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$artist' },
                 { $replaceRoot: { newRoot: '$artist' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -255,7 +294,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -278,7 +317,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$album' },
                 { $replaceRoot: { newRoot: '$album' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -301,7 +340,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$album' },
                 { $replaceRoot: { newRoot: '$album' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -324,7 +363,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$artist' },
                 { $replaceRoot: { newRoot: '$artist' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -348,7 +387,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$artist' },
                 { $replaceRoot: { newRoot: '$artist' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -371,7 +410,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])
@@ -394,7 +433,7 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
                 { $unwind: '$audio' },
                 { $replaceRoot: { newRoot: '$audio' } },
 
-                { $sort: { createdAt: -1, _id: 1 } },
+                { $sort: { _id: 1 } },
                 { $skip: skip },
                 { $limit: limit },
             ])

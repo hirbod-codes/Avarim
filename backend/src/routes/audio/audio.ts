@@ -305,9 +305,8 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
 router.patch('/tag', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'audio', route: 'PATCH /api/audio/tag' });
 
-    let db
     try {
-        log.info('audio approve request received');
+        log.info('audio tag update request received');
 
         log.debug({ body: req.body });
         const updates = await runWithLogger(log, () => validate(tagUpdateSchema, req.body))
@@ -323,14 +322,7 @@ router.patch('/tag', auth, isAdminIfAuthenticated, async (req, res) => {
         const userId = req.user!.userId
         log.debug({ userId });
 
-        db = MongoDB.getDbInstance()
-        const session = await db.startTransaction()
-
         const audioRepository = new AudioRepository()
-        audioRepository.setTransactionSession(session)
-
-        const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
-        artistAlbumAudioRepository.setTransactionSession(session)
 
         // ------------------------------------------------------------------------- fetch the requested audio
         log.info('fetch the requested audio')
@@ -339,7 +331,6 @@ router.patch('/tag', auth, isAdminIfAuthenticated, async (req, res) => {
         log.debug({ audio });
         if (!audio) {
             log.info('audio not found');
-            await db.abortTransaction()
             return res.status(400).json({ status: 'error', error_code: 'AUDIO_NOT_FOUND' });
         }
 
@@ -350,16 +341,11 @@ router.patch('/tag', auth, isAdminIfAuthenticated, async (req, res) => {
         log.debug({ updateResult })
         if (!updateResult.acknowledged) {
             log.warn('failed to update audio record in db');
-            await db.abortTransaction()
             return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
         }
 
-        await db.commitTransaction()
-
         res.status(204).send();
     } catch (err) {
-        try { await db?.abortTransaction() } catch (_) { }
-
         runWithLogger(log, () => handleError(res, err))
     }
 })

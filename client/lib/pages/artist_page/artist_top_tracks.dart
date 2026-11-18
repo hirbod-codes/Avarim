@@ -5,8 +5,11 @@ import 'package:avarim/api/dio/dio_providers.dart';
 import 'package:avarim/api/dio/global_error_interceptor.dart';
 import 'package:avarim/api/models/audio.dart';
 import 'package:avarim/components/core/core.dart';
+import 'package:avarim/components/core/input/fields/debounced_number_field.dart';
+import 'package:avarim/components/core/paged/self_managed_paged_list_view.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
 import 'package:avarim/lib/talker.dart';
+import 'package:avarim/pages/search/edit_mode.dart';
 import 'package:avarim/pages/search/music_search_config.dart';
 import 'package:avarim/pages/search/ui/items/audio_list_item.dart';
 import 'package:avarim/pages/search/ui/popups/entity_popups.dart';
@@ -26,11 +29,9 @@ class ArtistTopTracks extends ConsumerStatefulWidget {
 class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
   StreamSubscription<AudioQueueState>? sub;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadNextPage();
-  }
+  PagedState<Audio> _state = PagedState<Audio>(hasMore: true, isLoadingFirstPage: false, isLoadingNextPage: false);
+
+  PagedState<Audio>? _topTracksPlayState;
 
   @override
   void dispose() {
@@ -43,7 +44,7 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
       () => ref
           .read(authDioProvider)
           .get(
-            '/api/top_tracks/',
+            '/api/relationship/artist/top_tracks',
             queryParameters: Map.from({'artistId': widget.artistId, 'page': page, 'pageSize': kQueuePageSize}),
             options: Options(extra: {GlobalErrorInterceptor.silentErrorsKey: true}),
           ),
@@ -54,42 +55,6 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
     }
     return res.dataOrNull;
   }
-
-  PagedState<Audio> _state = PagedState<Audio>(hasMore: true, isLoadingFirstPage: true, isLoadingNextPage: false, items: []);
-
-  void _resetPageState() {
-    setState(() {
-      _state = PagedState<Audio>(isLoadingFirstPage: false, isLoadingNextPage: false, hasMore: true);
-    });
-  }
-
-  Future<void> _loadNextPage() async {
-    if (!_state.hasMore) return;
-
-    setState(() {
-      _state = _state.copyWith(isLoadingNextPage: true);
-    });
-
-    try {
-      final List<Audio>? newAudios = await _loadPage((_state.lastLoadedPage ?? kFirstPageNumber) + 1);
-      if (mounted) return;
-
-      setState(() {
-        _state = PagedState<Audio>(
-          isLoadingFirstPage: false,
-          isLoadingNextPage: false,
-          error: newAudios != null ? null : Error(),
-          lastLoadedPage: (_state.lastLoadedPage ?? kFirstPageNumber) + 1,
-          items: [..._state.items, ...(newAudios ?? [])],
-          hasMore: newAudios == null ? true : !(newAudios.isEmpty || newAudios.length < kQueuePageSize),
-        );
-      });
-    } catch (err) {
-      talker.error('_loadNextPage threw error', err);
-    }
-  }
-
-  PagedState<Audio>? _topTracksPlayState;
 
   void _play({bool addAudiosToPlayerQueue = false}) {
     if (_state.items.isEmpty) return;
@@ -136,30 +101,55 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
         const Icon(Icons.toc_sharp),
         Text('Top Tracks', style: Theme.of(context).textTheme.titleMedium),
       ],
-      child: PagedListView(
-        state: _state,
-        onLoadNext: _loadNextPage,
-        onRetryNext: () {
-          _loadNextPage();
-        },
-        onReload: () async {
-          _resetPageState();
+      child: SelfManagedPagedListView<Audio>(
+        loadPage: _loadPage,
+        itemBuilder: (context, item, ref) {
+          final isEditModeEnabled = ref.watch(editModeProvider);
 
-          _loadNextPage();
+          return AudioListItem(
+            audio: item,
+            isEditMode: isEditModeEnabled,
+            onDeleted: (String itemId) {
+              if (!mounted) return;
+              setState(() {
+                _state = _state.copyWith(items: _state.items.where((item) => item.id != itemId).toList());
+              });
+            },
+            editActionsLeadings: [_buildTopTrackWeightField(item)],
+          );
         },
-        itemBuilder: (context, item) => AudioListItem(
-          audio: item,
-          isEditMode: true,
-          onDeleted: (String itemId) {
-            if (!mounted) return;
-            setState(() {
-              _state = _state.copyWith(items: _state.items.where((item) => item.id != itemId).toList());
-            });
-          },
-        ),
       ),
     );
   }
+
+  Widget _buildTopTrackWeightField(Audio audio) => RelativeBox(
+    width: 80,
+    child: DebouncedNumberField(
+      hintText: 'Weight',
+      initialValue: audio.topTrackWeight,
+      disableWhileSaving: true,
+      onValueChanged: (value) async {
+        final res = await apiCall<List<Audio>>(
+          () => ref
+              .read(authDioProvider)
+              .patch(
+                '/api/relationship',
+                data: {
+                  'filter': {'artistId': widget.artistId, 'audioId': audio.id},
+                  'update': {'topTrackWeight': value},
+                },
+                options: Options(extra: {GlobalErrorInterceptor.silentErrorsKey: true}),
+              ),
+        );
+        if (!res.isSuccess) {
+          throw Error();
+        }
+
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('updated')));
+      },
+      onError: (error, stackTrace, attemptedValue) => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not save'))),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -167,19 +157,34 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
 
     final double h = 300;
 
+    // true means this artist doesn't own any audio
+    if (_state.items.isEmpty &&
+        !_state.isWaitingForFirstPage &&
+        !_state.hasError &&
+        !_state.hasMore &&
+        !_state.isLoadingFirstPage &&
+        !_state.isLoadingNextPage) {
+      return SizedBox.shrink();
+    }
+
+    final isEditModeEnabled = ref.watch(editModeProvider);
+
     return SizedBox(
-      height: _state.items.isEmpty ? 51 : h,
+      height: h,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.start,
+        spacing: 5,
         children: [
           SizedBox(
             height: 50,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               spacing: 10,
               children: [
                 Row(
+                  spacing: 5,
                   children: [
                     Text('Top Tracks', style: theme.textTheme.titleLarge),
                     TextButton(
@@ -200,21 +205,31 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
               ],
             ),
           ),
-          const Divider(height: 1),
-          PagedListView(
-            state: _state,
-            onLoadNext: _loadNextPage,
-            onRetryNext: _loadNextPage,
-            onReload: _loadNextPage,
-            itemBuilder: (context, item) => AudioListItem(
-              audio: item,
-              isEditMode: true,
-              onDeleted: (String itemId) {
-                if (!mounted) return;
-                setState(() {
-                  _state = _state.copyWith(items: _state.items.where((item) => item.id != itemId).toList());
-                });
+          const Divider(),
+          Expanded(
+            child: SelfManagedPagedListView<Audio>(
+              bottomPadding: 0,
+              itemPadding: EdgeInsets.all(0),
+              state: _state,
+              onPagedStateUpdate: (pagedState) {
+                if (mounted) {
+                  setState(() {
+                    _state = pagedState;
+                  });
+                }
               },
+              loadPage: _loadPage,
+              itemBuilder: (context, item, _) => AudioListItem(
+                audio: item,
+                isEditMode: isEditModeEnabled,
+                onDeleted: (String itemId) {
+                  if (!mounted) return;
+                  setState(() {
+                    _state = _state.copyWith(items: _state.items.where((item) => item.id != itemId).toList());
+                  });
+                },
+                editActionsLeadings: [_buildTopTrackWeightField(item)],
+              ),
             ),
           ),
         ],

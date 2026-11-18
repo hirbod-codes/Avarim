@@ -75,8 +75,6 @@ import { registerProcessErrorHandlers } from './middlewares/processErrorHandlers
 import { OtpFactory } from './services/OTP/OtpFactory';
 import { PaymentFactory } from './services/Payments/factory';
 import { SmtpFactory } from './services/SMTP/SmtpFactory';
-import { topTracksRoutes } from './routes/topTracks/topTracks';
-import TopTracksRepository from './db/MongoDB/TopTracksRepository';
 
 export const s3 = new S3Client({
     region: 'us-east-1',
@@ -139,7 +137,6 @@ export const payments = {
             db.addRepository(new ArtistAlbumAudioRepository())
             db.addRepository(new PlaylistRepository())
             db.addRepository(new PlaylistAudioRepository())
-            db.addRepository(new TopTracksRepository())
 
             // if (!isProduction)
             //     await MongoDB.getDbInstance().dropSeedableCollections()
@@ -213,7 +210,6 @@ export const payments = {
     app.use('/api/audio', audioRoutes);
     app.use('/api/playlist', playlistRoutes);
     app.use('/api/relationship', relationshipRoutes);
-    app.use('/api/topTracks', topTracksRoutes);
     // app.use('/api/subscription', subscriptionRoutes);
     // app.use('/api/plan', planRoutes);
 

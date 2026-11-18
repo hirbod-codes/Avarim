@@ -16,7 +16,7 @@ class Popup extends StatelessWidget {
     final container = Container(
       margin: EdgeInsetsGeometry.all(24.0),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 32),
         child: Material(
           elevation: 5,
           color: theme.colorScheme.surfaceContainer,

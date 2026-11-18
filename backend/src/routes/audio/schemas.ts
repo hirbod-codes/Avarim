@@ -1,7 +1,7 @@
 import { object, string } from "yup";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from '../schemas';
 import { number } from "yup";
-import { audioPatchSchema, audioTagsSchema, audioUpdateSchema } from "../../db/models/Audio";
+import { audioTagsSchema, audioUpdateSchema } from "../../db/models/Audio";
 import { array } from "yup";
 
 export const isUploadFinished = object().shape({

@@ -23,7 +23,7 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
     final isAuthenticated = ref.watch(authControllerProvider).status == AuthStatus.authenticated;
     final avatarBytes = ref.watch(avatarBytesProvider);
 
-    final isEditModeEnabled = ref.read(editModeProvider);
+    final isEditModeEnabled = ref.watch(editModeProvider);
     final editModeToggle = ref.read(editModeProvider.notifier).toggle;
 
     AppLocalizations l10n = AppLocalizations.of(context)!;

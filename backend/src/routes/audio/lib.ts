@@ -21,7 +21,6 @@ import { Album } from "../../db/models/Album";
 import { WithId } from "../../db/common_schemas";
 import { parseByteRangeHeader } from "../schemas";
 import { pipeline } from "node:stream/promises";
-import TopTracksRepository from "../../db/MongoDB/TopTracksRepository";
 
 /**
  * if album provided
@@ -49,9 +48,6 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
         const artistAlbumAudioRepository = new ArtistAlbumAudioRepository()
         artistAlbumAudioRepository.setTransactionSession(session)
 
-        const topTracksRepository = new TopTracksRepository()
-        topTracksRepository.setTransactionSession(session)
-
         const tags = metadata.tags
         if (!tags) return
 
@@ -70,12 +66,6 @@ export async function prepareAudioInDb(audioId: string, metadata: ExtractionResu
             for (const name of artistNames) {
                 promises.push((async () => {
                     const artistId = await runWithLogger(log, () => new ArtistController().create(name, artistRepository));
-
-                    const topTracksInsertResult = await runWithLogger(log, topTracksRepository.insert({ artistId, audioId, sortId: 1000 }));
-                    log.debug({ topTracksInsertResult })
-                    if (!topTracksInsertResult.acknowledged) {
-                        log.warn(`failed to create a topTracks record for audioId: ${audioId}, artistId: ${artistId}`)
-                    }
 
                     let albums: WithId<Album>[] = !tags.album ? [] : await runWithLogger(log, albumRepository.getByName(tags.album))
                     log.debug({ albumsLength: albums.length })

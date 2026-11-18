@@ -16,6 +16,8 @@ const shape = {
     albumId: string().nullable().optional(),
     audioId: string().required(),
 
+    topTrackWeight: number().positive().integer().nullable().optional(),
+
     createdAt: number().optional(),
     updatedAt: number().optional(),
 };

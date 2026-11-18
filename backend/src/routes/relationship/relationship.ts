@@ -145,6 +145,28 @@ router.get('/artist/album', auth, async (req, res) => {
     }
 });
 
+router.get('/artist/top_tracks', auth, async (req, res) => {
+    let log = getLogger().child({ module: 'relationship', route: 'GET /api/relationship/artist/top_tracks' });
+
+    try {
+        log.info('relationship artist topTracks request received');
+
+        log.debug({ query: req.query });
+        const { page, pageSize, artistId } = await runWithLogger(log, () => validate(artistIdPagePageSizeSchema, req.query))
+        log.debug({ page, pageSize, artistId });
+        log.info('input validated');
+
+        const audioRepository = new ArtistAlbumAudioRepository()
+
+        const audios = await runWithLogger(log, () => audioRepository.getTopTracks(artistId, (page - 1) * pageSize, pageSize))
+        log.debug({ audios });
+
+        res.status(200).json({ status: 'success', data: audios });
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+})
+
 /**
  * fetches all the audios of an artist, with no album filter
  */

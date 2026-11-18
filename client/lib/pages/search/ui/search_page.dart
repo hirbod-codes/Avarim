@@ -6,6 +6,7 @@ import 'package:avarim/api/models/playlist.dart';
 import 'package:avarim/api/models/with_id.dart';
 import 'package:avarim/components/core/core.dart';
 import 'package:avarim/components/global/audio_player_service.dart';
+import 'package:avarim/pages/search/edit_mode.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,7 +43,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   SearchTab _selectedTab = SearchTab.artists;
   String _query = '';
-  bool _isEditMode = false;
 
   /// The paging state of every tab. A tab holds results for the current query or nothing at all:
   /// a new query empties every tab, and the open one loads again.
@@ -192,11 +192,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   List<Widget> _buildAdminActions() {
     return [
-      IconButton(
-        tooltip: _isEditMode ? 'Done editing' : 'Edit',
-        icon: Icon(_isEditMode ? Icons.edit_off_outlined : Icons.edit_outlined),
-        onPressed: () => setState(() => _isEditMode = !_isEditMode),
-      ),
       AsyncIconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: () => _reload(_selectedTab)),
     ];
   }
@@ -227,12 +222,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Widget _buildRow(WithId item) {
     void notifyTapped() => widget.onResultTapped?.call(item);
+    final isEditModeEnabled = ref.watch(editModeProvider);
 
     // The key makes a row's own state (spinners) follow its item when the list changes.
     return switch (item) {
-      Artist artist => ArtistListItem(key: ValueKey(item.id), artist: artist, isEditMode: _isEditMode, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
-      Album album => AlbumListItem(key: ValueKey(item.id), album: album, isEditMode: _isEditMode, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
-      Audio audio => AudioListItem(key: ValueKey(item.id), audio: audio, isEditMode: _isEditMode, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
+      Artist artist => ArtistListItem(key: ValueKey(item.id), artist: artist, isEditMode: isEditModeEnabled, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
+      Album album => AlbumListItem(key: ValueKey(item.id), album: album, isEditMode: isEditModeEnabled, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
+      Audio audio => AudioListItem(key: ValueKey(item.id), audio: audio, isEditMode: isEditModeEnabled, onTap: notifyTapped, onDeleted: _removeFromAllTabs),
       Playlist playlist => PlaylistListItem(key: ValueKey(item.id), playlist: playlist, onTap: notifyTapped),
       WithId() => throw UnimplementedError('No list item for ${item.runtimeType}'),
     };

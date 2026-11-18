@@ -626,7 +626,13 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                  child: Text('Albums', style: theme.textTheme.titleLarge),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Albums', style: theme.textTheme.titleLarge),
+                      const Divider(),
+                    ],
+                  ),
                 ),
               ),
               if (_albums.isEmpty && !_loadingAlbums && !_albumsFailed)
