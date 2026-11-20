@@ -29,8 +29,18 @@ Future<void> showAlbumAudiosPopup(BuildContext context, WidgetRef ref, Album alb
   );
 }
 
-Future<void> showPlaylistAudiosPopup(BuildContext context, WidgetRef ref, Playlist playlist, bool isEditMode, {ValueChanged<String>? onDeleted}) async {
+Future<void> showPlaylistAudiosPopup(
+  BuildContext context,
+  WidgetRef ref,
+  Playlist playlist,
+  bool isEditMode, {
+  Function? onClose,
+  ValueChanged<String>? onDeleted,
+  BoxConstraints? constraints,
+}) async {
   showEntityPopup(
+    constraints: constraints,
+    onClose: onClose,
     leadings: [
       const Icon(Icons.playlist_play),
       Builder(builder: (context) => Text(playlist.name, style: Theme.of(context).textTheme.titleMedium)),
@@ -45,14 +55,21 @@ Future<void> showPlaylistAudiosPopup(BuildContext context, WidgetRef ref, Playli
 }
 
 /// Shows [child] in a [Popup] on the root overlay (above the whole app). The popup removes itself when closed.
-void showEntityPopup({required List<Widget> leadings, required Widget child, BoxConstraints? constraints}) {
+void showEntityPopup({required List<Widget> leadings, required Widget child, BoxConstraints? constraints, Function? onClose}) {
   final overlay = rootNavigatorKey.currentState?.overlay;
   if (overlay == null) return;
 
   late final OverlayEntry entry;
   entry = OverlayEntry(
-    builder: (context) =>
-        Popup(constraints: constraints ?? const BoxConstraints(maxWidth: 1000), leadings: leadings, onClose: () => entry.remove(), child: child),
+    builder: (context) => Popup(
+      constraints: constraints ?? const BoxConstraints(maxWidth: 1000),
+      leadings: leadings,
+      onClose: () {
+        entry.remove();
+        onClose?.call();
+      },
+      child: child,
+    ),
   );
   overlay.insert(entry);
 }

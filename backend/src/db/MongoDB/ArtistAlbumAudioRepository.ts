@@ -127,10 +127,10 @@ class ArtistAlbumAudioRepository implements IRepository, ISeedable, IDropable {
             .toArray() as WithId<Album>[]
     }
 
-    async getTopTracks(artistId: string, skip: number, limit: number): Promise<WithId<Audio>[]> {
+    async getTopTracks(artistId: string, skip: number, limit: number, audioIds?: string[] | undefined): Promise<WithId<Audio>[]> {
         return await ArtistAlbumAudioRepository.collection!
             .aggregate([
-                { $match: { artistId } },
+                { $match: { artistId, ...((audioIds && audioIds.length > 0) ? { audioId: { $in: audioIds } } : {}) } },
                 { $sort: { topTrackWeight: -1, createdAt: -1 } },
                 {
                     $group: {

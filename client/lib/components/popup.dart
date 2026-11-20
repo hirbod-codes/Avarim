@@ -23,6 +23,7 @@ class Popup extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: Column(
+            spacing: 10,
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 4),

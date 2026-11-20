@@ -39,13 +39,18 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
     super.dispose();
   }
 
-  Future<List<Audio>?> _loadPage(int page) async {
+  Future<List<Audio>?> _loadPage(int page, {String? search}) async {
     final res = await apiCall<List<Audio>>(
       () => ref
           .read(authDioProvider)
           .get(
             '/api/relationship/artist/top_tracks',
-            queryParameters: Map.from({'artistId': widget.artistId, 'page': page, 'pageSize': kQueuePageSize}),
+            queryParameters: Map.from({
+              'artistId': widget.artistId,
+              'page': page,
+              'pageSize': kQueuePageSize,
+              ...(search != null && search.trim().isNotEmpty == true ? {'search': search} : {}),
+            }),
             options: Options(extra: {GlobalErrorInterceptor.silentErrorsKey: true}),
           ),
       fromJson: (data) => List.from(data).map((m) => Audio.fromJson(m)).toList(),
@@ -101,24 +106,7 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
         const Icon(Icons.toc_sharp),
         Text('Top Tracks', style: Theme.of(context).textTheme.titleMedium),
       ],
-      child: SelfManagedPagedListView<Audio>(
-        loadPage: _loadPage,
-        itemBuilder: (context, item, ref) {
-          final isEditModeEnabled = ref.watch(editModeProvider);
-
-          return AudioListItem(
-            audio: item,
-            isEditMode: isEditModeEnabled,
-            onDeleted: (String itemId) {
-              if (!mounted) return;
-              setState(() {
-                _state = _state.copyWith(items: _state.items.where((item) => item.id != itemId).toList());
-              });
-            },
-            editActionsLeadings: [_buildTopTrackWeightField(item)],
-          );
-        },
-      ),
+      child: _TopTracksPopup(loadPage: _loadPage, buildTopTrackWeightField: _buildTopTrackWeightField),
     );
   }
 
@@ -218,7 +206,7 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
                   });
                 }
               },
-              loadPage: _loadPage,
+              loadPage: (page) => _loadPage(page),
               itemBuilder: (context, item, _) => AudioListItem(
                 audio: item,
                 isEditMode: isEditModeEnabled,
@@ -234,6 +222,75 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TopTracksPopup extends ConsumerStatefulWidget {
+  final Future<List<Audio>?> Function(int page, {String? search}) loadPage;
+  final Widget Function(Audio item) buildTopTrackWeightField;
+
+  const _TopTracksPopup({required this.loadPage, required this.buildTopTrackWeightField});
+
+  @override
+  ConsumerState<_TopTracksPopup> createState() => _TopTracksPopupConsumerState();
+}
+
+class _TopTracksPopupConsumerState extends ConsumerState<_TopTracksPopup> {
+  PagedState<Audio> _popUpState = PagedState<Audio>(hasMore: true, isLoadingFirstPage: false, isLoadingNextPage: false);
+
+  final _searchFieldKey = GlobalKey<DebouncedSearchFieldState>();
+  CancelToken? _cancelToken;
+  String? _search = '';
+
+  void _onSearchChanged(String value) {
+    _cancelToken?.cancel();
+
+    setState(() {
+      _search = value;
+      _popUpState = PagedState<Audio>(hasMore: true, isLoadingFirstPage: false, isLoadingNextPage: false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      spacing: 10,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: DebouncedSearchField(key: _searchFieldKey, debounce: kSearchInputDebounceDuration, hintText: 'Search', onSearch: _onSearchChanged),
+        ),
+        Expanded(
+          child: SelfManagedPagedListView<Audio>(
+            key: Key(_search ?? ''),
+            state: _popUpState,
+            onPagedStateUpdate: (pagedState) {
+              if (mounted) {
+                setState(() {
+                  _popUpState = pagedState;
+                });
+              }
+            },
+            loadPage: (page) => widget.loadPage(page, search: _search),
+            itemBuilder: (context, item, ref) {
+              final isEditModeEnabled = ref.watch(editModeProvider);
+
+              return AudioListItem(
+                audio: item,
+                isEditMode: isEditModeEnabled,
+                onDeleted: (String itemId) {
+                  if (!mounted) return;
+                  setState(() {
+                    _popUpState = _popUpState.copyWith(items: _popUpState.items.where((item) => item.id != itemId).toList());
+                  });
+                },
+                editActionsLeadings: [widget.buildTopTrackWeightField(item)],
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

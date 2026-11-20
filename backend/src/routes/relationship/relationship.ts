@@ -3,8 +3,8 @@ import { auth, isAdminIfAuthenticated } from '../../middlewares/auth';
 import { getLogger, runWithLogger } from '../../observability/requestLoggerContext';
 import { handleError, validate } from '../../lib';
 import ArtistAlbumAudioRepository from '../../db/MongoDB/ArtistAlbumAudioRepository';
-import { albumAudio, albumIdPagePageSizeSchema, artistIdPagePageSizeSchema, audioAlbumArtistSchema, audioAlbumSchema, audioArtistAlbumSchema, audioArtistSchema, createSchema, fetchSchema, filterSchema, updateSchema } from './schemas';
-import { meiliArtist } from '../../db/meilisearch';
+import { albumAudio, albumIdPagePageSizeSchema, artistIdPagePageSizeSchema, artistIdPagePageSizeSearchSchema, audioAlbumArtistSchema, audioAlbumSchema, audioArtistAlbumSchema, audioArtistSchema, createSchema, fetchSchema, filterSchema, updateSchema } from './schemas';
+import { meiliArtist, meiliAudio } from '../../db/meilisearch';
 
 const router = express.Router();
 
@@ -152,13 +152,24 @@ router.get('/artist/top_tracks', auth, async (req, res) => {
         log.info('relationship artist topTracks request received');
 
         log.debug({ query: req.query });
-        const { page, pageSize, artistId } = await runWithLogger(log, () => validate(artistIdPagePageSizeSchema, req.query))
-        log.debug({ page, pageSize, artistId });
+        const { page, pageSize, artistId, search } = await runWithLogger(log, () => validate(artistIdPagePageSizeSearchSchema, req.query))
+        log.debug({ page, pageSize, artistId, search });
         log.info('input validated');
+
+        let audioIds: string[] | undefined = undefined
+        if (search) {
+            log.info('search in meilisearch')
+
+            const searchResult = await meiliAudio.search(search, { page, hitsPerPage: pageSize })
+            const { totalHits, totalPages, hits } = searchResult
+            log.debug({ totalHits, totalPages, hits })
+
+            audioIds = hits.map(m => m._id.toString())
+        }
 
         const audioRepository = new ArtistAlbumAudioRepository()
 
-        const audios = await runWithLogger(log, () => audioRepository.getTopTracks(artistId, (page - 1) * pageSize, pageSize))
+        const audios = await runWithLogger(log, () => audioRepository.getTopTracks(artistId, (page - 1) * pageSize, pageSize, audioIds))
         log.debug({ audios });
 
         res.status(200).json({ status: 'success', data: audios });

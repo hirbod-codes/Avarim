@@ -606,18 +606,17 @@ class _DockBody extends StatelessWidget {
                         Positioned(
                           top: insets.top,
                           right: 4,
+                          left: 4,
                           child: Material(
                             type: MaterialType.transparency,
-                            child: Expanded(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                // mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(tooltip: 'Minimize', icon: const Icon(Icons.expand_more), onPressed: AudioPlayerService.toggleMinimized),
-                                  IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: AudioPlayerService.close),
-                                ],
-                              ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              // mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(tooltip: 'Minimize', icon: const Icon(Icons.expand_more), onPressed: AudioPlayerService.toggleMinimized),
+                                IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: AudioPlayerService.close),
+                              ],
                             ),
                           ),
                         ),
