@@ -50,7 +50,7 @@ Future<void> onDeletePlaylist(BuildContext context, WidgetRef ref, Playlist play
 // Each tells the user why it failed, so callers only need the returned bool.
 
 /// True if the user may go on: no confirmation is configured ([kShouldConfirmBeforeDelete]) or they confirmed.
-Future<bool> confirmDelete(BuildContext context, WithId item) async {
+Future<bool> confirmDelete(BuildContext context, WithId? item) async {
   if (!kShouldConfirmBeforeDelete) return true;
   return showDeleteConfirmationDialog(context, item: item);
 }

@@ -92,6 +92,7 @@ class _AudioListItemState extends ConsumerState<AudioListItem> {
     final hasRoomForDuration = MediaQuery.sizeOf(context).width >= AudioListItem._minimumScreenWidthToShowDuration;
     return Row(
       mainAxisSize: MainAxisSize.min,
+      spacing: 2,
       children: [
         if (durationInSeconds != null && hasRoomForDuration) Text(_formatAsMinutesAndSeconds(durationInSeconds.round())),
         AudioRowActions(audioId: widget.audio.id, initialPlaylistName: widget.audio.title),

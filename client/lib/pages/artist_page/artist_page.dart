@@ -742,21 +742,6 @@ class _ArtistHeader extends StatelessWidget {
     final media = MediaQuery.of(context);
     const ring = 4.0; // surface-coloured ring around the avatar, like Instagram's
 
-    // What is shown until the banner has loaded, or when the artist has none.
-    final bannerFallback = SizedBox(
-      width: double.infinity,
-      height: kArtistBannerHeight + media.padding.top,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
-          ),
-        ),
-      ),
-    );
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -782,7 +767,7 @@ class _ArtistHeader extends StatelessWidget {
                             url: '${AppConfig.apiUrl}/api/artist/banner/$artistId',
                             headers: headers,
                             naturalHeight: true,
-                            fallback: bannerFallback,
+                            fallback: SizedBox(height: media.padding.top),
                           ),
                           // Dim fade into the page colour: transparent at the top, surface at 70% at the bottom.
                           Positioned.fill(
@@ -1074,7 +1059,15 @@ class _AlbumsFooter extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _AuthImage extends StatelessWidget {
-  const _AuthImage({super.key, required this.url, required this.headers, required this.fallback, this.naturalHeight = false});
+  const _AuthImage({
+    super.key,
+    required this.url,
+    required this.headers,
+    required this.fallback,
+    this.naturalHeight = false,
+    this.errorBuilder,
+    this.frameBuilder,
+  });
 
   final String url;
 
@@ -1086,6 +1079,10 @@ class _AuthImage extends StatelessWidget {
   /// true: full width, as tall as the image is at that width (aspect ratio kept).
   final bool naturalHeight;
 
+  final ImageErrorWidgetBuilder? errorBuilder;
+
+  final ImageFrameBuilder? frameBuilder;
+
   @override
   Widget build(BuildContext context) {
     if (headers == null) return fallback;
@@ -1096,9 +1093,9 @@ class _AuthImage extends StatelessWidget {
       fit: naturalHeight ? BoxFit.fitWidth : BoxFit.cover,
       width: double.infinity,
       height: naturalHeight ? null : double.infinity,
-      errorBuilder: (context, error, stack) => fallback,
+      errorBuilder: errorBuilder ?? (context, error, stack) => fallback,
       // Show the fallback (not an empty box) until the first frame arrives.
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) => frame == null ? fallback : child,
+      frameBuilder: frameBuilder ?? (context, child, frame, wasSynchronouslyLoaded) => frame == null ? fallback : child,
     );
   }
 }

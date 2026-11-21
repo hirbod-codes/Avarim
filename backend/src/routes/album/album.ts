@@ -374,6 +374,43 @@ router.put('/avatar/:albumId', auth, isAdminIfAuthenticated, async (req, res) =>
     }
 });
 
+router.delete('/avatar/:artistId', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'GET /api/album/avatar/:artistId' });
+
+    try {
+        log.info('avatar delete request received');
+
+        log.debug({ params: req.params });
+        const { albumId } = await runWithLogger(log, () => validate(avatarParamsSchema, { ...req.params }));
+        log.info('Input validated');
+        log.debug({ albumId });
+
+        const albumRepository = new AlbumRepository();
+
+        const album = await runWithLogger(log, () => albumRepository.get(albumId));
+        log.debug({ album });
+        if (!album) {
+            log.info('Rejected avatar delete request: album not found or has no avatar');
+            return res.status(404).json({ status: 'error', message: 'Album not found' });
+        }
+
+        if (album.avatarKey) {
+            await deleteFromS3(album.avatarKey)
+
+            const deleteAlbumBannerResult = await runWithLogger(log, albumRepository.unsafeUpdate(albumId, { avatarKey: undefined }))
+            log.debug({ deleteAlbumBannerResult })
+            if (!deleteAlbumBannerResult.acknowledged) {
+                log.warn('failed to unset avatar key field in album record');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
+        }
+
+        res.status(201).json({ status: 'success' })
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
 router.delete('/:albumId', auth, isAdminIfAuthenticated, async (req, res) => {
     let log = getLogger().child({ module: 'album', route: 'DELETE /api/album/:albumId' });
 

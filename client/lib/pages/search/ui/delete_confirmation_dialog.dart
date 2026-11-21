@@ -6,7 +6,7 @@ import 'package:avarim/api/models/with_id.dart';
 import 'package:flutter/material.dart';
 
 /// Asks "Delete this ...?" for [item]. Completes with true only when the user confirmed.
-Future<bool> showDeleteConfirmationDialog(BuildContext context, {required WithId item}) async {
+Future<bool> showDeleteConfirmationDialog(BuildContext context, {WithId? item}) async {
   final (dialogTitle, dialogBody) = switch (item) {
     Artist artist => (
       'Delete artist?',

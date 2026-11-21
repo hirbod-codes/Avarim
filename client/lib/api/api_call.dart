@@ -102,7 +102,7 @@ Future<ApiCallResult<T>> apiCall<T>(Future<Response> Function() request, {T Func
       'path: ${response.requestOptions.path}, '
       'base url: ${response.requestOptions.baseUrl} '
       'query parameters: ${response.requestOptions.queryParameters} '
-      'data json: ${jsonEncode(response.requestOptions.data)} '
+      'data json: ${_describeBody(response.requestOptions.data)} '
       'data: ',
     );
     talker.debug(response.data);
@@ -131,6 +131,25 @@ Future<ApiCallResult<T>> apiCall<T>(Future<Response> Function() request, {T Func
     final message = ApiErrorResolver.fromUnexpected(e);
     _showError(message);
     return ApiCallFailure<T>(message);
+  }
+}
+
+String _describeBody(Object? data) {
+  try {
+    return jsonEncode(
+      data,
+      toEncodable: (o) {
+        if (o is FormData) {
+          return {
+            'fields': {for (final f in o.fields) f.key: f.value},
+            'files': [for (final f in o.files) '${f.key}: ${f.value.filename} (${f.value.length} B)'],
+          };
+        }
+        return o.toString(); // anything else non-encodable is printed, not thrown
+      },
+    );
+  } catch (_) {
+    return '<unprintable ${data.runtimeType}>';
   }
 }
 

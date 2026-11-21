@@ -369,6 +369,43 @@ router.put('/avatar/:artistId', auth, isAdminIfAuthenticated, async (req, res) =
     }
 });
 
+router.delete('/avatar/:artistId', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/avatar/:artistId' });
+
+    try {
+        log.info('avatar delete request received');
+
+        log.debug({ params: req.params });
+        const { artistId } = await runWithLogger(log, () => validate(avatarParamsSchema, { ...req.params }));
+        log.info('Input validated');
+        log.debug({ artistId });
+
+        const artistRepository = new ArtistRepository();
+
+        const artist = await runWithLogger(log, () => artistRepository.get(artistId));
+        log.debug({ artist });
+        if (!artist) {
+            log.info('Rejected avatar delete request: artist not found or has no avatar');
+            return res.status(404).json({ status: 'error', message: 'Artist not found' });
+        }
+
+        if (artist.avatarKey) {
+            await deleteFromS3(artist.avatarKey)
+
+            const deleteArtistBannerResult = await runWithLogger(log, artistRepository.unsafeUpdate(artistId, { avatarKey: undefined }))
+            log.debug({ deleteArtistBannerResult })
+            if (!deleteArtistBannerResult.acknowledged) {
+                log.warn('failed to unset avatar key field in artist record');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
+        }
+
+        res.status(201).json({ status: 'success' })
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
 router.get('/banner/:artistId', auth, async (req, res) => {
     let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/banner/:artistId' });
 
@@ -495,6 +532,43 @@ router.put('/banner/:artistId', auth, isAdminIfAuthenticated, async (req, res) =
             log.error({ err }, 'caught an error while trying to upload files')
             cleanup()
             throw err
+        }
+
+        res.status(201).json({ status: 'success' })
+    } catch (err) {
+        runWithLogger(log, () => handleError(res, err));
+    }
+});
+
+router.delete('/banner/:artistId', auth, isAdminIfAuthenticated, async (req, res) => {
+    let log = getLogger().child({ module: 'artist', route: 'GET /api/artist/banner/:artistId' });
+
+    try {
+        log.info('banner delete request received');
+
+        log.debug({ params: req.params });
+        const { artistId } = await runWithLogger(log, () => validate(avatarParamsSchema, { ...req.params }));
+        log.info('Input validated');
+        log.debug({ artistId });
+
+        const artistRepository = new ArtistRepository();
+
+        const artist = await runWithLogger(log, () => artistRepository.get(artistId));
+        log.debug({ artist });
+        if (!artist) {
+            log.info('Rejected banner delete request: artist not found or has no banner');
+            return res.status(404).json({ status: 'error', message: 'Artist not found' });
+        }
+
+        if (artist.bannerKey) {
+            await deleteFromS3(artist.bannerKey)
+
+            const deleteArtistBannerResult = await runWithLogger(log, artistRepository.unsafeUpdate(artistId, { bannerKey: undefined }))
+            log.debug({ deleteArtistBannerResult })
+            if (!deleteArtistBannerResult.acknowledged) {
+                log.warn('failed to unset banner key field in artist record');
+                return res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
+            }
         }
 
         res.status(201).json({ status: 'success' })

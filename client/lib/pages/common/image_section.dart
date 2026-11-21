@@ -23,6 +23,7 @@ import 'package:avarim/api/dio/global_error_interceptor.dart';
 import 'package:avarim/components/dialogs/upload/image_upload_dialog.dart';
 import 'package:avarim/lib/talker.dart';
 import 'package:avarim/pages/common/edit_errors.dart';
+import 'package:avarim/pages/search/ui/items/item_actions.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -63,11 +64,21 @@ class ImageApi {
   /// Replaces the image. On failure the error was already shown (see the header).
   Future<ApiCallResult<dynamic>> put(String path, XFile image) {
     return apiCall<dynamic>(() async {
-      final part = MultipartFile.fromStream(() => image.openRead(), await image.length(), filename: image.name);
+      final part = MultipartFile.fromStream(() => image.openRead(), await image.length(), filename: image.name).clone();
 
       return _dio.put<dynamic>(
         path,
         data: FormData.fromMap({kImageFieldName: part}),
+        options: Options(sendTimeout: Duration.zero, receiveTimeout: const Duration(minutes: 2)),
+      );
+    });
+  }
+
+  /// Replaces the image. On failure the error was already shown (see the header).
+  Future<ApiCallResult<dynamic>> delete(String path) {
+    return apiCall<dynamic>(() async {
+      return _dio.delete<dynamic>(
+        path,
         options: Options(sendTimeout: Duration.zero, receiveTimeout: const Duration(minutes: 2)),
       );
     });
@@ -103,6 +114,7 @@ class _ImageSectionState extends ConsumerState<ImageSection> {
   Uint8List? _bytes;
   bool _loading = true;
   bool _failed = false;
+  bool _deleting = false;
   CancelToken? _token;
 
   @override
@@ -178,6 +190,47 @@ class _ImageSectionState extends ConsumerState<ImageSection> {
     if (mounted) await _load();
   }
 
+  Future<void> _delete() async {
+    if (_deleting) return;
+
+    setState(() {
+      _deleting = true;
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    final api = ref.read(imageApiProvider);
+    final path = widget.path;
+    final title = widget.title;
+    try {
+      final shouldDelete = await confirmDelete(context, null);
+      if (shouldDelete != true || !mounted) return;
+
+      final result = await api.delete(path);
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+        });
+      }
+      // On failure the error was already shown: keep the dialog open so the user can retry.
+      if (!result.isSuccess) return;
+
+      setState(() {
+        _bytes = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+        });
+      }
+    }
+
+    // Thumbnails elsewhere (search list) load this same URL; drop their cached copy.
+    await NetworkImage(path).evict();
+
+    messenger.showSnackBar(SnackBar(content: Text('$title deleted')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -196,7 +249,11 @@ class _ImageSectionState extends ConsumerState<ImageSection> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (_bytes != null) Image.memory(_bytes!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (context, error, stack) => placeholder) else placeholder,
+          if (_bytes != null)
+            Image.memory(_bytes!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (context, error, stack) => placeholder)
+          else
+            placeholder,
+
           if (_loading)
             const ColoredBox(
               color: Colors.black38,
@@ -222,6 +279,16 @@ class _ImageSectionState extends ConsumerState<ImageSection> {
               label: Text(_bytes == null ? 'Add $name' : 'Change $name'),
             ),
             if (_failed) TextButton(onPressed: _loading ? null : _load, child: const Text('Retry')),
+            if (_bytes != null)
+              FilledButton.tonalIcon(
+                onPressed: _deleting ? null : _delete,
+                icon: const Icon(Icons.delete_forever),
+                label: Text(_bytes == null ? 'Add $name' : 'Change $name'),
+                style: ButtonStyle(
+                  backgroundColor: WidgetStatePropertyAll(theme.colorScheme.error),
+                  foregroundColor: WidgetStatePropertyAll(theme.colorScheme.onError),
+                ),
+              ),
           ],
         ),
       ],
