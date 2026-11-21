@@ -96,16 +96,20 @@ Future<ApiCallResult<T>> apiCall<T>(Future<Response> Function() request, {T Func
   try {
     final response = await (defaultMessage == null ? request() : runZoned(request, zoneValues: {ApiErrorResolver.zoneKey: defaultMessage}));
 
-    talker.debug(
-      'api call, '
-      'method: ${response.requestOptions.method}, '
-      'path: ${response.requestOptions.path}, '
-      'base url: ${response.requestOptions.baseUrl} '
-      'query parameters: ${response.requestOptions.queryParameters} '
-      'data json: ${_describeBody(response.requestOptions.data)} '
-      'data: ',
-    );
-    talker.debug(response.data);
+    try {
+      talker.log(
+        'api call, '
+        'method: ${response.requestOptions.method}, '
+        'path: ${response.requestOptions.path}, '
+        'base url: ${response.requestOptions.baseUrl} '
+        'query parameters: ${response.requestOptions.queryParameters} '
+        'data json: ${_describeBody(response.requestOptions.data)} '
+        'data: ',
+      );
+      talker.log(response.data);
+    } catch (_) {
+      talker.log('failed to log api response in apiCall function');
+    }
 
     final status = response.statusCode;
     final isSuccessStatus = status != null && status >= 200 && status < 300;
