@@ -78,7 +78,7 @@ class _SelfManagedPagedListView<T> extends ConsumerState<SelfManagedPagedListVie
           isLoadingNextPage: false,
           items: [..._resolveState().items, ...(items ?? [])],
           hasMore: items == null ? true : items.isEmpty || (items.isNotEmpty && items.length == kQueuePageSize),
-          lastLoadedPage: page + 1,
+          lastLoadedPage: page,
         ),
       );
     } catch (err) {
@@ -101,7 +101,7 @@ class _SelfManagedPagedListView<T> extends ConsumerState<SelfManagedPagedListVie
       },
       onRetryNext: () => _onLoadPage((_resolveState().lastLoadedPage ?? kFirstPageNumber) + 1),
       onReload: () async {
-        _onLoadPage((_resolveState().lastLoadedPage ?? kFirstPageNumber) + 1);
+        _onLoadPage((_resolveState().lastLoadedPage ?? kFirstPageNumber));
       },
       itemBuilder: (context, item) => widget.itemBuilder(context, item, ref),
     );
