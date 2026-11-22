@@ -514,7 +514,7 @@ router.get('/', auth, async (req, res) => {
 
         const audioRepository = new AudioRepository();
 
-        let items: Audio[]
+        let items: Audio[] = []
         if (search) {
             log.info('search in meilisearch')
 
@@ -524,8 +524,10 @@ router.get('/', auth, async (req, res) => {
 
             const ids = hits.map(m => m._id)
 
-            log.info('fetch from audioRepository')
-            items = await runWithLogger(log, () => audioRepository.getMany(ids))
+            if (ids && ids.length > 0) {
+                log.info('fetch from audioRepository')
+                items = await runWithLogger(log, () => audioRepository.getMany(ids))
+            }
         } else {
             log.info('fetch from audioRepository')
 
