@@ -111,8 +111,9 @@ class _ArtistTopTracks extends ConsumerState<ArtistTopTracks> {
   }
 
   Widget _buildTopTrackWeightField(Audio audio) => RelativeBox(
-    width: 80,
+    width: 120,
     child: DebouncedNumberField(
+      allowDecimal: true,
       hintText: 'Weight',
       initialValue: audio.topTrackWeight,
       disableWhileSaving: true,

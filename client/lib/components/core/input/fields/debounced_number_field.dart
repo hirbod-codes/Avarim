@@ -37,7 +37,7 @@ class DebouncedNumberField extends StatefulWidget {
     super.key,
     required this.onValueChanged,
     this.onError,
-    this.debounce = const Duration(milliseconds: 500),
+    this.debounce = const Duration(milliseconds: 2000),
     this.controller,
     this.focusNode,
     this.initialValue,
