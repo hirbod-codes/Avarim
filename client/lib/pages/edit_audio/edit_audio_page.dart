@@ -36,6 +36,7 @@ import 'package:avarim/pages/edit_audio/cover_art_section.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_form.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_notifier.dart';
 import 'package:avarim/pages/edit_audio/edit_audio_state.dart';
+import 'package:avarim/pages/search/ui/popups/entity_popups.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -155,22 +156,32 @@ class _EditAudioPageState extends ConsumerState<EditAudioPage> {
 class _StartStep extends ConsumerWidget {
   const _StartStep();
 
-  Future<void> _openDialog(BuildContext context, WidgetRef ref) async {
-    // Not dismissible by tapping outside: that would drop the result of an upload still in flight.
-    final result = await showDialog<dynamic>(context: context, barrierDismissible: false, builder: (_) => const AudioUploadDialog());
-    if (!context.mounted) return;
-    if (result == null) {
+  Future<void> _onUploadFinish(WidgetRef ref, dynamic data) async {
+    if (data == null) {
       NotificationService.showError(message: 'Id not found');
       return;
     }
 
     // The dialog pops with the response's `data`, i.e. `{ id }`.
-    final id = result is Map ? result['id'] : null;
+    final id = data is Map ? data['id'] : null;
     if (id is! String || id.isEmpty) {
       NotificationService.showError(message: 'The upload was accepted, but the server did not return a id');
       return;
     }
     ref.read(audioUploadProvider.notifier).startProcessing(id);
+  }
+
+  Future<void> _openDialog(BuildContext context, WidgetRef ref) async {
+    showEntityPopup(
+      child: AudioUploadDialog(
+        onFinish: (data) {
+          if (!context.mounted) return;
+          _onUploadFinish(ref, data);
+        },
+      ),
+    );
+    // Not dismissible by tapping outside: that would drop the result of an upload still in flight.
+    // final result = await showDialog<dynamic>(context: context, barrierDismissible: false, builder: (_) => const AudioUploadDialog());
   }
 
   /// Pick several files and upload them one after the other.

@@ -448,7 +448,7 @@ router.delete('/:albumId', auth, isAdminIfAuthenticated, async (req, res) => {
             } while (audios.length !== 0);
         }
 
-        await runWithLogger(log, () => new AlbumController().delete(albumId, albumRepository));
+        await runWithLogger(log, () => new AlbumController().delete(albumId, shouldDeleteAudios === true, albumRepository));
 
         await db.commitTransaction()
 

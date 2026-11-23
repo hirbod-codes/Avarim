@@ -11,7 +11,9 @@ import 'package:media_kit/media_kit.dart';
 import 'package:file_picker/file_picker.dart';
 
 class AudioUploadDialog extends ConsumerStatefulWidget {
-  const AudioUploadDialog({super.key});
+  const AudioUploadDialog({super.key, this.onFinish});
+
+  final void Function(dynamic data)? onFinish;
 
   @override
   ConsumerState<AudioUploadDialog> createState() => _AudioUploadDialogState();
@@ -89,7 +91,11 @@ class _AudioUploadDialogState extends ConsumerState<AudioUploadDialog> {
       if (!mounted) return;
       if (result.isFailure || result.dataOrNull == null) return;
 
-      Navigator.pop(context, result.dataOrNull);
+      if (widget.onFinish != null) {
+        widget.onFinish!(result.dataOrNull);
+      } else {
+        Navigator.pop(context, result.dataOrNull);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

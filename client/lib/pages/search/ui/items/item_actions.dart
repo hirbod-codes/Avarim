@@ -28,8 +28,10 @@ Future<void> onDeleteArtist(BuildContext context, WidgetRef ref, Artist artist, 
   if (wasDeleted) onDeleted?.call(artist.id);
 }
 
-Future<void> onDeleteAlbum(BuildContext context, WidgetRef ref, Album album, {bool deleteAllAudio = true, Function(String id)? onDeleted}) async {
+Future<void> onDeleteAlbum(BuildContext context, WidgetRef ref, Album album, {Function(String id)? onDeleted}) async {
   if (!await confirmDelete(context, album)) return;
+  if (!context.mounted) return;
+  final bool deleteAllAudio = await showDeleteAllAudiosOfAlbumDialog(album: album);
   if (!context.mounted) return;
 
   final api = ref.read(musicSearchApiProvider);
@@ -52,7 +54,7 @@ Future<void> onDeletePlaylist(BuildContext context, WidgetRef ref, Playlist play
 /// True if the user may go on: no confirmation is configured ([kShouldConfirmBeforeDelete]) or they confirmed.
 Future<bool> confirmDelete(BuildContext context, WithId? item) async {
   if (!kShouldConfirmBeforeDelete) return true;
-  return showDeleteConfirmationDialog(context, item: item);
+  return showDeleteConfirmationDialog(item: item);
 }
 
 /// Puts the audios from [fetchAudioIds] in the player queue (see AudioPlayerService):

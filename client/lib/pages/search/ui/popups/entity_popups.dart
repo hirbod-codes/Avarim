@@ -54,24 +54,29 @@ Future<void> showPlaylistAudiosPopup(
   );
 }
 
-/// Shows [child] in a [Popup] on the root overlay (above the whole app). The popup removes itself when closed.
-void showEntityPopup({required List<Widget> leadings, required Widget child, BoxConstraints? constraints, Function? onClose}) {
+void showEntity({required WidgetBuilder Function(Function onCLose) builder, Function? onClose}) {
   final overlay = rootNavigatorKey.currentState?.overlay;
   if (overlay == null) return;
 
   late final OverlayEntry entry;
-  entry = OverlayEntry(
-    builder: (context) => Popup(
-      constraints: constraints ?? const BoxConstraints(maxWidth: 1000),
-      leadings: leadings,
-      onClose: () {
-        entry.remove();
-        onClose?.call();
-      },
-      child: child,
-    ),
-  );
+  entry = OverlayEntry(builder: builder(() => entry.remove()));
   overlay.insert(entry);
+}
+
+/// Shows [child] in a [Popup] on the root overlay (above the whole app). The popup removes itself when closed.
+void showEntityPopup({List<Widget>? leadings, required Widget child, BoxConstraints? constraints, Function? onClose}) {
+  showEntity(
+    builder: (onEntityClose) =>
+        (context) => Popup(
+          constraints: constraints ?? const BoxConstraints(maxWidth: 1000),
+          leadings: leadings,
+          onClose: () {
+            onEntityClose();
+            onClose?.call();
+          },
+          child: child,
+        ),
+  );
 }
 
 /// Opens the edit page of an audio / artist / album in a popup. Does nothing for other kinds of items.

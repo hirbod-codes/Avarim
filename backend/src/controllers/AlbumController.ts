@@ -20,7 +20,7 @@ export class AlbumController {
      * create album in db
      * create album in meilisearch
      */
-    async create(name: string, avatarKey?:string, albumRepository?: AlbumRepository): Promise<string> {
+    async create(name: string, avatarKey?: string, albumRepository?: AlbumRepository): Promise<string> {
         let log = getLogger().child({ class: 'AlbumController', method: 'createAlbum' });
 
         albumRepository ??= new AlbumRepository()
@@ -53,9 +53,9 @@ export class AlbumController {
      * deletes album avatar in s3 storage
      * deletes album record in db
      */
-    delete(album: WithId<Album>, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
-    delete(albumId: string, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
-    async delete(arg: WithId<Album> | string, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void> {
+    delete(album: WithId<Album>, shouldDeleteArtistAlbumAudioDocuments?: boolean, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    delete(albumId: string, shouldDeleteArtistAlbumAudioDocuments?: boolean, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void>
+    async delete(arg: WithId<Album> | string, shouldDeleteArtistAlbumAudioDocuments: boolean = true, albumRepository?: AlbumRepository, artistAlbumAudioRepository?: ArtistAlbumAudioRepository): Promise<void> {
         let log = getLogger().child({ class: 'controller', method: 'delete' });
 
         log.info('deleting album');
@@ -96,11 +96,20 @@ export class AlbumController {
         log.info('Deleted album record in Meilisearch album collection')
 
         // a cron job will handle dangling audios
-        const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ albumId }))
-        log.debug({ artistAlbumAudioDeleteResult })
-        if (!artistAlbumAudioDeleteResult?.acknowledged) {
-            log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio records from db');
-            throw new MeiliAlbumDeleteError()
+        if (shouldDeleteArtistAlbumAudioDocuments) {
+            const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.deleteBy({ albumId }))
+            log.debug({ artistAlbumAudioDeleteResult })
+            if (!artistAlbumAudioDeleteResult?.acknowledged) {
+                log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio records from db');
+                throw new MeiliAlbumDeleteError()
+            }
+        } else {
+            const artistAlbumAudioDeleteResult = await runWithLogger(log, () => artistAlbumAudioRepository.updateBy({ albumId }, { albumId: undefined }))
+            log.debug({ artistAlbumAudioDeleteResult })
+            if (!artistAlbumAudioDeleteResult?.acknowledged) {
+                log.error({ artistAlbumAudioDeleteResult }, 'Failed to delete artistAlbumAudio records from db');
+                throw new MeiliAlbumDeleteError()
+            }
         }
 
         const promises = []

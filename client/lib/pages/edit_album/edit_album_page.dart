@@ -20,7 +20,6 @@ import 'dart:async';
 
 import 'package:avarim/api/models/album.dart';
 import 'package:avarim/pages/common/image_section.dart';
-import 'package:avarim/pages/edit_album/delete_album_audios_section.dart';
 import 'package:avarim/pages/edit_album/delete_album_section.dart';
 import 'package:avarim/pages/edit_album/edit_album_api.dart';
 import 'package:avarim/pages/edit_album/edit_album_form.dart';
@@ -34,10 +33,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 class EditAlbumPage extends ConsumerStatefulWidget {
-  const EditAlbumPage({super.key, this.albumId});
+  const EditAlbumPage({super.key, this.albumId, this.onDeleted});
 
   /// The `albumId` query parameter. Without one there is nothing to edit.
   final String? albumId;
+  final Function? onDeleted;
 
   @override
   ConsumerState<EditAlbumPage> createState() => _EditAlbumPageState();
@@ -88,9 +88,7 @@ class _EditAlbumPageState extends ConsumerState<EditAlbumPage> {
             const SizedBox(height: 24),
             EditAlbumForm(key: ValueKey(s.revision), album: s.album!, isSaving: s.isSaving),
             const SizedBox(height: 32),
-            DeleteAlbumAudiosSection(albumId: s.id!, albumName: '${s.album!['name'] ?? ''}'),
-            const SizedBox(height: 32),
-            DeleteAlbumSection(album: Album.fromJson(s.album!)),
+            DeleteAlbumSection(album: Album.fromJson(s.album!), onDeleted: () => widget.onDeleted?.call()),
           ],
         ),
       };
