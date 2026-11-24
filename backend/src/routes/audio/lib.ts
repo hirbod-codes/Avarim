@@ -160,7 +160,7 @@ export async function streamAudioFile(audioId: string, userId: string, req: Requ
     });
 
     res.status(rangeValidation ? 206 : 200);
-    res.setHeader('Content-Type', isWeb ? 'audio/m4a' : (audio.contentType?.mimeType ?? 'audio/m4a'));
+    res.setHeader('Content-Type', isWeb ? 'audio/mp4' : (audio.contentType?.mimeType ?? 'audio/mp4'));
     res.setHeader('Accept-Ranges', 'bytes');
     if (result.contentRange) res.setHeader('Content-Range', result.contentRange);
     if (result.contentLength) res.setHeader('Content-Length', result.contentLength);

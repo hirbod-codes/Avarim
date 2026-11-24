@@ -278,14 +278,14 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             }
         } catch (err) {
             if (err instanceof UploadTooLargeError) {
-                // if (!res.headersSent) res.status(402).json({ status: 'error', error: err.message });
+                if (!res.headersSent) res.status(402).json({ status: 'error', error_code: 'UPLOAD_TOO_LARGE' });
                 return;
             } else if (err instanceof InvalidMediaError) {
-                // if (!res.headersSent) res.status(400).json({ status: 'error', error: err.message });
+                if (!res.headersSent) res.status(400).json({ status: 'error', error_code: 'INVALID_CONTENT_TYPE' });
                 return;
             } else {
                 log.error({ err }, 'Audio upload failed');
-                // if (!res.headersSent) res.status(500).json({ status: 'error', error: 'Upload failed' });
+                if (!res.headersSent) res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
                 return;
             }
         } finally {
@@ -296,7 +296,7 @@ router.post('/', auth, isAdminIfAuthenticated, async (req, res) => {
             }
         }
 
-        // res.status(201).json({ status: 'success', data: temporaryAudio });
+        if (!res.headersSent) res.status(500).json({ status: 'error', error_code: 'INTERNAL_ERROR' });
     } catch (err) {
         runWithLogger(log, () => handleError(res, err))
     }
