@@ -46,9 +46,8 @@ class Popup extends StatelessWidget {
 
     return constraints == null
         ? container
-        : Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [ConstrainedBox(constraints: constraints!, child: container)],
+        : Center(
+            child: ConstrainedBox(constraints: constraints!, child: container),
           );
   }
 }
